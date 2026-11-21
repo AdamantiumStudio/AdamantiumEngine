@@ -76,6 +76,23 @@ public sealed partial class PhysicsSimulation : IDisposable
         }
     }
 
+    /// <summary>Has <paramref name="hook"/> act at every step from the next, before the step is solved, on the thread
+    /// that steps; added again, it acts once a step still.</summary>
+    public void AddStepHook(IStepHook hook)
+    {
+        ArgumentNullException.ThrowIfNull(hook);
+        ThrowIfDisposed();
+        _commands.Add(new SimulationCommand { Kind = SimulationCommandKind.AddStepHook, StepHook = hook });
+    }
+
+    /// <summary>Has <paramref name="hook"/> act no more, from the next step.</summary>
+    public void RemoveStepHook(IStepHook hook)
+    {
+        ArgumentNullException.ThrowIfNull(hook);
+        ThrowIfDisposed();
+        _commands.Add(new SimulationCommand { Kind = SimulationCommandKind.RemoveStepHook, StepHook = hook });
+    }
+
     /// <summary>Does what was asked since the last step, then moves the bodies by one step of
     /// <see cref="StepSeconds"/>; what the callers read is then this step's. Only while it does not step on its own
     /// thread.</summary>

@@ -48,8 +48,8 @@ All packages share one version.
   each value once; `Join` meets each body with the items of a span by key - the touches told, say; `Skip` and `Take`
   keep a stretch, the skipped held apart from the caller's buffer. Conditions come before `Skip` and `Take`. `Layer`
   orders by its index.
-- The game's work with the physics goes through `IPhysicsService` alone, by entities - `World.Physics()`
-  (`EntityWorldPhysics`) gives a world's. Besides its pushes and readings, it now reads a body's mass and sleep, sets a
+- The game's work with the physics goes through `IPhysicsService` alone, by entities. Besides its pushes and readings,
+  it now reads a body's mass and sleep, sets a
   torque, spins with an angular impulse, moves a kinematic body to a pose (`MoveKinematic`), wakes a body or an area and
   sets off an explosion (`ApplyRadialImpulse`). Its rays, casts and overlaps meet entities and the colliders they struck
   (`EntityRayHit`, `EntityShapeHit`, `EntityQueryFilter`), none while no game plays, and `Contacts` tells each frame's
@@ -57,7 +57,20 @@ All packages share one version.
   `Body(entity)` (`EntityBodyActions`), `Query()` (`EntityQuery`) and `World()` (`PhysicsWorldActions`); layers come
   to them with the project's own. Each collider
   is a part of its body of its own now, so a hit or a touch tells which; the bodies step as fast as before. Nothing is
-  allocated by a query or by the contacts told.
+  allocated by a query or by the contacts told. `Find()` searches the bodies as the simulation's search does, only
+  reading - each body's entity by `body.Entity` (`BodyViewEntity`); an entity found is acted on through `Body(entity)`.
+- The game's physics is a system of the entity-component system, in `Adamantium.ECS` (`Adamantium.ECS.Physics`, moved
+  from `Adamantium.Engine.Physics`): `PhysicsService` owns the simulation and answers the game, and hosts processors. Its
+  main processor (`PhysicsProcessor`, `MainProcessor`) lays the scene out in the simulation and stands the entities; one
+  derived from it may take its place while no game plays - a paid one, say - doing more when the game starts and stops
+  and before and after each frame's steps (`OnStarted`, `BeforeSteps`, `AfterSteps`, `OnStopped`), finding an entity's
+  body with `FindBody`. Processors attached to the service run after it, reading what the frame left.
+- Step hooks: `PhysicsSimulation.AddStepHook` has an `IStepHook` act at every step, before the step is solved, on the
+  thread that steps - forces that change from step to step, a wheel's suspension; `RemoveStepHook` ends it. It reads the
+  bodies and pushes them in that step alone through `StepActions`: poses, centers of mass, velocities, masses, gravity,
+  forces, torques, impulses and velocities set; a body the simulation no longer holds is refused (`Contains` tells).
+- `BodyFinder.AsReadOnly()`: the same search, refusing its actions - for bodies another keeps.
+- `TriangleMeshCollisionShape.Indices`: the triangles kept, as they are wound.
 - `PdfStandardSecurityHandler.KeyBits`: how long an encrypted PDF's key is - 40 to 128 bits for RC4, 128 or 256 for
   AES - what a viewer says of the file's encryption. `PdfDocument.IsOpenedWithPassword` tells whether a password
   opened the file - typed, carried to the file saved again, or in the read options - not the empty one a file that
@@ -1170,6 +1183,7 @@ All packages share one version.
 
 ### Removed
 
+- The engine's tests no longer see the physics core's insides: only DarkMatter's own tests do.
 - `Collider.Transform(ref scale, ref rotation, ref translation)`, both: nothing called them, and a collider is placed
   by `Position`, `Rotation` and `Scale`.
 - `EntityIcons.ShowsLights` and `EntityIcons.ShowsCameras`: use `EntityIcons.Shows`.

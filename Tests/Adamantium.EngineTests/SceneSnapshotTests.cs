@@ -187,7 +187,7 @@ public class SceneSnapshotTests
         var crateBody = crate.GetComponent<RigidBody>();
         crateBody.Mass = 9;
         plain.AddComponent(new RigidBody());
-        Adamantium.Engine.Physics.PhysicsParts.SetCollider(plain, ColliderKind.Sphere);
+        Adamantium.ECS.Physics.PhysicsParts.SetCollider(plain, ColliderKind.Sphere);
         _group.AddComponent(new RigidBody());
         _world.ForceUpdate();
 

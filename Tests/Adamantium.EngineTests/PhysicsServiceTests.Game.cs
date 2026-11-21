@@ -4,7 +4,7 @@ using Adamantium.DarkMatter;
 using Adamantium.DarkMatter.Shapes;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
-using Adamantium.Engine.Physics;
+using Adamantium.ECS.Physics;
 using Adamantium.Mathematics;
 using NUnit.Framework;
 
@@ -14,14 +14,6 @@ namespace Adamantium.EngineTests;
 /// colliders, and the chains of a body and of the world.</summary>
 public partial class PhysicsServiceTests
 {
-    [Test]
-    public void TheWorldsPhysics_IsItsService()
-    {
-        UseSteppedPhysics();
-
-        Assert.That(_world.Physics(), Is.SameAs(_physics));
-    }
-
     // A box on the ground, a ray from above: the box first, then the ground past it.
     [Test]
     public void ARay_MeetsTheEntityAndItsCollider_AndPassesTheOneExcepted()
@@ -256,7 +248,90 @@ public partial class PhysicsServiceTests
             Assert.That(met, Is.False);
             Assert.That(_physics.Contacts.IsEmpty, Is.True);
             Assert.Throws<InvalidOperationException>(() => _physics.World().ApplyRadialImpulse(WorldPosition.Zero, 1, 1));
+            Assert.Throws<InvalidOperationException>(() => _physics.Find());
         });
+    }
+
+    // Two boxes on the ground: a search near one tells its entity, by a loop and by the query syntax, and acts on none.
+    [Test]
+    public void AFind_TellsTheEntitiesFound_AndOnlyReads()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new WorldPosition(0, -0.5, 0), 0.5);
+        AddBox("Far", new WorldPosition(10, -0.5, 0), 0.5);
+        Play();
+        Frame(FrameSeconds);
+        var near = new BoundingSphere<double>(new Vector3<double>(0, -0.5, 0), 2);
+
+        var found = new List<Entity>();
+        foreach (var body in _physics.Find().Dynamic().Within(near))
+        {
+            found.Add(body.Entity);
+        }
+
+        var selected = new List<Entity>();
+        foreach (var entity in from body in _physics.Find().Within(near) where body.Kind == BodyKind.Dynamic
+                 select body.Entity)
+        {
+            selected.Add(entity);
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(found, Is.EqualTo((Entity[])[box]));
+            Assert.That(selected, Is.EqualTo((Entity[])[box]));
+            Assert.Throws<InvalidOperationException>(() => _physics.Find().RemoveBodies());
+            Assert.That(_physics.Moves(box), Is.True);
+        });
+    }
+
+    // A main processor in the base one's place, holding a box still at every step through a step hook: the box hangs
+    // in the air, the processor told of the game's start, frames and stop - and it cannot be changed during the game.
+    [Test]
+    public void AMainProcessorInTheBasesPlace_LaysOutAndHooksTheSteps()
+    {
+        var service = new PhysicsService(_world, stepsOnOwnThread: false);
+        var box = MakeBox("Box", new WorldPosition(0, -3, 0), 0.5);
+        var hovering = new HoveringProcessor(box);
+        service.MainProcessor = hovering;
+        _physics = service;
+        _world.AddService(service);
+        _world.EntityManager.AddEntity(box, _world.MainScene);
+        Settle();
+        Play();
+        Frames(1);
+
+        var height = box.Transform.Position.Y;
+        var refused = Assert.Throws<InvalidOperationException>(() => service.MainProcessor = new PhysicsProcessor());
+        _run.Stop();
+        _run = null;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(height, Is.EqualTo(-3).Within(1e-3), "held up, not fallen");
+            Assert.That(hovering.Starts, Is.EqualTo(1));
+            Assert.That(hovering.Frames, Is.EqualTo(60));
+            Assert.That(hovering.Stops, Is.EqualTo(1));
+            Assert.That(refused, Is.Not.Null);
+        });
+    }
+
+    // A processor attached beside the main one reads the frame the main one left: the box where it was stood.
+    [Test]
+    public void AProcessorAttached_ReadsAfterTheMainOne()
+    {
+        UseSteppedPhysics();
+        AddGround();
+        var box = AddBox("Box", new WorldPosition(0, -3, 0), 0.5);
+        var reading = new PlaceReadingProcessor(box);
+        ((PhysicsService)_physics).AttachProcessor(reading);
+        Play();
+
+        Frames(0.3);
+
+        Assert.That(reading.LastHeight, Is.EqualTo(box.Transform.Position.Y));
+        Assert.That(reading.LastHeight, Is.GreaterThan(-3), "the box fell this far, read in the same frame");
     }
 
     [Test]

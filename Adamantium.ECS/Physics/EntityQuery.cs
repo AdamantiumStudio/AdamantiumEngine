@@ -1,10 +1,9 @@
 using System;
 using Adamantium.DarkMatter;
 using Adamantium.DarkMatter.Shapes;
-using Adamantium.ECS;
 using Adamantium.Mathematics;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>A query of the game's physics told link by link on the caller's stack: its <see cref="EntityQueryFilter"/>
 /// gathered, then answered by the service's own ray, cast or overlap.</summary>

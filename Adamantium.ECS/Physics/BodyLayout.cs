@@ -1,7 +1,7 @@
 using Adamantium.DarkMatter;
 using Adamantium.Mathematics;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>The body a rigid body and its colliders ask for, as the service read them: compared with what it read
 /// before to see what changed.</summary>

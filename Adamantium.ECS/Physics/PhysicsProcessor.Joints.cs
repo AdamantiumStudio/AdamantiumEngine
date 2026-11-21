@@ -1,16 +1,15 @@
 using System;
 using System.Collections.Generic;
 using Adamantium.DarkMatter;
-using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Mathematics;
 using Serilog;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 // Joints: the game's joint components asked of the simulation once their bodies are there, and asked anew when they
 // change - a body of theirs made anew among the changes.
-public sealed partial class PhysicsService
+public partial class PhysicsProcessor
 {
     private readonly Dictionary<Joint, JointLink> _jointLinks = new();
     private readonly List<Joint> _jointsGone = [];
@@ -21,7 +20,7 @@ public sealed partial class PhysicsService
     // one gone, or waiting for a body, is taken out.
     private void FollowJoints()
     {
-        foreach (var joint in Each<Joint>())
+        foreach (var joint in _scene.Components.Of<Joint>())
         {
             var request = joint.IsEnabled ? Describe(joint) : null;
             if (!_jointLinks.TryGetValue(joint, out var link))

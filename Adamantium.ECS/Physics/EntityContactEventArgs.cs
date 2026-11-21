@@ -1,9 +1,8 @@
 using Adamantium.DarkMatter;
-using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Mathematics;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>What is told of two colliders of two entities that began or stopped touching: a trigger entered or left
 /// among them.</summary>
@@ -23,11 +22,13 @@ public readonly struct EntityContactEventArgs
         ApproachSpeed = told.ApproachSpeed;
     }
 
-    /// <summary>The entities with the rigid bodies that touched.</summary>
+    /// <summary>The entities with the rigid bodies that touched; null for a body the main processor made of its own.
+    /// </summary>
     public Entity First { get; }
     public Entity Second { get; }
 
-    /// <summary>Each body's collider that touched, on its entity or on one below it.</summary>
+    /// <summary>Each body's collider that touched, on its entity or on one below it; null for a part not made of one.
+    /// </summary>
     public Collider FirstCollider { get; }
     public Collider SecondCollider { get; }
 
@@ -49,7 +50,8 @@ public readonly struct EntityContactEventArgs
     /// <summary>Whether <paramref name="entity"/> is one of the two, and which is the other.</summary>
     public bool Involves(Entity entity, out Entity other)
     {
-        other = entity == First ? Second : entity == Second ? First : null;
-        return other != null;
+        var involved = entity != null && (entity == First || entity == Second);
+        other = !involved ? null : entity == First ? Second : First;
+        return involved;
     }
 }

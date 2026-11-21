@@ -1,6 +1,6 @@
 using Adamantium.DarkMatter;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>A joint the physics holds, as the service keeps it: the request last sent for it and its joint in the
 /// simulation.</summary>

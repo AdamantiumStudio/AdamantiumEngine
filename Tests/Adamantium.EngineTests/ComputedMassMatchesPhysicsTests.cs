@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
-using Adamantium.Engine.Physics;
+using Adamantium.ECS.Physics;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;

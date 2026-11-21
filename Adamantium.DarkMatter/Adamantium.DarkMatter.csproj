@@ -17,7 +17,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Adamantium.DarkMatter.Tests" />
-    <InternalsVisibleTo Include="Adamantium.EngineTests" />
   </ItemGroup>
 
 </Project>

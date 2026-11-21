@@ -135,6 +135,33 @@ public class FindTests
         });
     }
 
+    // A search only reading answers as any, a stretch kept, and refuses every action.
+    [Test]
+    public void ASearchOnlyReading_AnswersButRefusesActions()
+    {
+        var reading = _simulation.Find().Dynamic().AsReadOnly();
+        var count = reading.Count();
+        var nearest = _simulation.Find().Dynamic().AsReadOnly().NearestTo(new WorldPosition(-10, 0, 0)).First();
+        var firstTwo = _simulation.Find().Dynamic().Take(2).AsReadOnly().Count();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(count, Is.EqualTo(3));
+            Assert.That(nearest, Is.EqualTo(_light));
+            Assert.That(firstTwo, Is.EqualTo(2));
+            Assert.Throws<InvalidOperationException>(() => _simulation.Find().AsReadOnly().WakeUp());
+            Assert.Throws<InvalidOperationException>(() => _simulation.Find().AsReadOnly().ApplyImpulse(Vector3F.UnitY));
+            Assert.Throws<InvalidOperationException>(() => _simulation.Find().AsReadOnly().SetLinearVelocity(Vector3F.UnitY));
+            Assert.Throws<InvalidOperationException>(() => _simulation.Find().AsReadOnly().SetAngularVelocity(Vector3F.UnitY));
+            Assert.Throws<InvalidOperationException>(() => _simulation.Find().AsReadOnly().SetLayer(_debris));
+            Assert.Throws<InvalidOperationException>(() =>
+                _simulation.Find().AsReadOnly().SetMaterial(PhysicsMaterial.Default));
+            Assert.Throws<InvalidOperationException>(() =>
+                _simulation.Find().AsReadOnly().Where(new HeavierThan(5)).RemoveBodies());
+        });
+        Assert.That(_simulation.Find().Count(), Is.EqualTo(5), "nothing taken out");
+    }
+
     [Test]
     public void FoundBodies_AreTakenOutTogether_AndAWalkTakingThemOutMissesNone()
     {

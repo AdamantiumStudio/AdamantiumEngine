@@ -28,5 +28,7 @@ internal enum SimulationCommandKind
     AddJoint,
     RemoveJoint,
     SetLimits,
-    SetMotor
+    SetMotor,
+    AddStepHook,
+    RemoveStepHook
 }

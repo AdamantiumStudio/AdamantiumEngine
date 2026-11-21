@@ -7,12 +7,12 @@ using System.Threading.Tasks;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.ECS.Components.Extensions;
+using Adamantium.ECS.Physics;
 using Adamantium.ECS.Templates;
 using Adamantium.Graphics;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
-using Adamantium.Engine.Physics;
 using Adamantium.Mathematics;
 using Serilog;
 

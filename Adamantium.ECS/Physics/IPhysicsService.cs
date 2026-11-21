@@ -1,10 +1,9 @@
 using System;
 using Adamantium.DarkMatter;
 using Adamantium.DarkMatter.Shapes;
-using Adamantium.ECS;
 using Adamantium.Mathematics;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>The physics of a game: moves the entities with a <see cref="ECS.Components.RigidBody"/> while it plays, on a
 /// thread of its own, and takes the game's pushes, queries and readings - the one way the game's code works with the
@@ -37,6 +36,11 @@ public interface IPhysicsService : IGameService
 
     /// <summary>The physics world's own actions as one chain.</summary>
     PhysicsWorldActions World() => new(this);
+
+    /// <summary>The bodies the last step read, found by what they are and where they stand, each's entity by
+    /// <c>body.Entity</c> (<see cref="BodyViewEntity"/>). The search only reads: an entity found is acted on through
+    /// <see cref="Body"/>. Refused while no game plays.</summary>
+    BodyFinder<AnyBody> Find();
 
     /// <summary>The velocity of <paramref name="entity"/>'s body as the last step left it, in meters per second.</summary>
     Vector3F GetLinearVelocity(Entity entity);

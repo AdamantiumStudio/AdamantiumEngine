@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using Adamantium.DarkMatter;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
-using Adamantium.Engine.Physics;
+using Adamantium.ECS.Physics;
 using Adamantium.Engine.Scenes;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;

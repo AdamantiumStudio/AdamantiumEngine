@@ -238,9 +238,15 @@ public readonly ref struct BodyFinder<TFilter>
         return count > 0 ? sum / count : double.NaN;
     }
 
+    /// <summary>The same search, only reading: its actions are refused - for bodies another keeps, such as a game's
+    /// physics that keeps them as its entities ask.</summary>
+    public BodyFinder<TFilter> AsReadOnly() =>
+        new(_simulation, _conditions with { IsReadOnly = true }, _filter, _skip, _take);
+
     /// <summary>Wakes every body found, and what sleeps with each.</summary>
     public BodyFinder<TFilter> WakeUp()
     {
+        RequireActions();
         foreach (var body in this)
             _simulation.WakeUp(body.Id);
 
@@ -250,6 +256,7 @@ public readonly ref struct BodyFinder<TFilter>
     /// <summary>Strikes every dynamic body found at its center of mass; the others take no impulse.</summary>
     public BodyFinder<TFilter> ApplyImpulse(Vector3F impulse)
     {
+        RequireActions();
         foreach (var body in this)
         {
             if (body.KindAsked == BodyKind.Dynamic)
@@ -262,6 +269,7 @@ public readonly ref struct BodyFinder<TFilter>
     /// <summary>Sets the velocity of every body found that moves; a static one keeps still.</summary>
     public BodyFinder<TFilter> SetLinearVelocity(Vector3F velocity)
     {
+        RequireActions();
         foreach (var body in this)
         {
             if (body.KindAsked != BodyKind.Static)
@@ -274,6 +282,7 @@ public readonly ref struct BodyFinder<TFilter>
     /// <summary>Sets the spin of every body found that moves; a static one keeps still.</summary>
     public BodyFinder<TFilter> SetAngularVelocity(Vector3F velocity)
     {
+        RequireActions();
         foreach (var body in this)
         {
             if (body.KindAsked != BodyKind.Static)
@@ -285,6 +294,7 @@ public readonly ref struct BodyFinder<TFilter>
 
     public BodyFinder<TFilter> SetLayer(Layer layer)
     {
+        RequireActions();
         foreach (var body in this)
             _simulation.SetLayer(body.Id, layer);
 
@@ -293,6 +303,7 @@ public readonly ref struct BodyFinder<TFilter>
 
     public BodyFinder<TFilter> SetMaterial(in PhysicsMaterial material)
     {
+        RequireActions();
         foreach (var body in this)
             _simulation.SetMaterial(body.Id, material);
 
@@ -302,8 +313,15 @@ public readonly ref struct BodyFinder<TFilter>
     /// <summary>Takes every body found out, their joints with them; the chain ends here.</summary>
     public void RemoveBodies()
     {
+        RequireActions();
         foreach (var body in this)
             _simulation.RemoveBody(body.Id);
+    }
+
+    private void RequireActions()
+    {
+        if (_conditions.IsReadOnly)
+            throw new InvalidOperationException("This search only reads; its bodies are acted on by their owner.");
     }
 
     /// <summary>Skips added on, held at the most an int holds.</summary>

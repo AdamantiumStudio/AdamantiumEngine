@@ -1,7 +1,7 @@
 using Adamantium.DarkMatter;
 using Adamantium.Mathematics;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>A joint as the game asks the physics for it: its bodies, and its points and axis on each body from the
 /// body's origin, scaled as the body was made - so it is right wherever the bodies stand once the simulation takes it.

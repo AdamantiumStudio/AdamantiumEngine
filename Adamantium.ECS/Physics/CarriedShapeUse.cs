@@ -1,6 +1,6 @@
 using Adamantium.DarkMatter.Shapes;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>A shape of the game made from a hull or a mesh, and how many bodies use it.</summary>
 internal sealed class CarriedShapeUse

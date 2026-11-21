@@ -1,9 +1,8 @@
 using Adamantium.DarkMatter;
-using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Mathematics;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>Where a moving shape met an entity the physics moves.</summary>
 public readonly struct EntityShapeHit
@@ -17,10 +16,10 @@ public readonly struct EntityShapeHit
         Distance = distance;
     }
 
-    /// <summary>The entity with the rigid body met.</summary>
+    /// <summary>The entity with the rigid body met; null for a body the main processor made of its own.</summary>
     public Entity Entity { get; }
 
-    /// <summary>Which of its colliders, on it or on an entity below it.</summary>
+    /// <summary>Which of its colliders, on it or on an entity below it; null for a part not made of one.</summary>
     public Collider Collider { get; }
 
     /// <summary>The point of the collider met.</summary>

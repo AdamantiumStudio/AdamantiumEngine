@@ -41,4 +41,5 @@ internal struct SimulationCommand
     public JointSettings Joint;
     public JointLimits? Limits;
     public JointMotor? Motor;
+    public IStepHook StepHook;
 }

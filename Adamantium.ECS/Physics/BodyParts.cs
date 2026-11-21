@@ -1,8 +1,7 @@
 using System.Collections.Generic;
 using Adamantium.DarkMatter;
-using Adamantium.ECS;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>What a body is made of: its entities - its own first, then those it watches - with their change counts when
 /// the body was made, so a change to any of them is seen, and the hull and mesh shapes it took.</summary>

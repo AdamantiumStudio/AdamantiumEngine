@@ -1,6 +1,4 @@
-using Adamantium.ECS;
-
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>What a query of the game's physics passes by.</summary>
 public readonly struct EntityQueryFilter

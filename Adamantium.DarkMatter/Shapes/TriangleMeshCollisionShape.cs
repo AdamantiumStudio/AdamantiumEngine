@@ -85,6 +85,9 @@ public sealed class TriangleMeshCollisionShape : SurfaceCollisionShape
     /// <summary>The corners, those that stood at one place made one.</summary>
     public IReadOnlyList<Vector3F> Vertices => _vertices;
 
+    /// <summary>The triangles kept, three indices of <see cref="Vertices"/> each, wound as given.</summary>
+    public IReadOnlyList<int> Indices => _corners;
+
     public override CollisionShapeKind Kind => CollisionShapeKind.TriangleMesh;
 
     public override float BoundingRadius => _boundingRadius;

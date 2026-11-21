@@ -16,6 +16,9 @@ internal readonly struct FindConditions
     public BodyId Except { get; init; }
     public bool HasLeastMass { get; init; }
     public float LeastMass { get; init; }
+
+    /// <summary>Whether the search only reads: its actions are refused.</summary>
+    public bool IsReadOnly { get; init; }
     private readonly BoundingBox<double> _box;
     private readonly BoundingSphere<double> _sphere;
 

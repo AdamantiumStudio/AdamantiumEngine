@@ -1,5 +1,5 @@
 using Adamantium.ECS.Components;
-using Adamantium.Engine.Physics;
+using Adamantium.ECS.Physics;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 using NUnit.Framework;

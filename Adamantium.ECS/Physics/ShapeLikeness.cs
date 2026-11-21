@@ -2,7 +2,7 @@ using System;
 using Adamantium.DarkMatter;
 using Adamantium.DarkMatter.Shapes;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>Whether two shapes made for a body are the same shape: of one kind and size, or one hull shape shared. Sizes
 /// and places read back from a turned entity's matrix differ in their last digits, so they count as alike that close.

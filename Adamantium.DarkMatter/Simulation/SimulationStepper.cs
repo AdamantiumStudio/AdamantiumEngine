@@ -15,6 +15,7 @@ internal sealed partial class SimulationStepper
     private const int NoSlot = -1;
 
     private readonly PhysicsWorld _world;
+    private readonly List<IStepHook> _stepHooks = [];
     // Woken, a body's time at rest starts again and grows by a step a step: it sleeps again within the step only if
     // TimeToSleep is no longer than one, and only then must a sleeper be read again.
     private readonly bool _skipsSleepers;
@@ -50,6 +51,7 @@ internal sealed partial class SimulationStepper
         for (var step = 0; step < steps; step++)
         {
             PushBodies();
+            RunStepHooks();
             _world.Step();
             TakeContactEvents();
             StepNumber++;
@@ -78,6 +80,14 @@ internal sealed partial class SimulationStepper
             case SimulationCommandKind.SetLayersCollide:
                 _world.SetLayersCollide(command.Layer, command.OtherLayer, command.Collides);
                 break;
+            case SimulationCommandKind.AddStepHook:
+                if (!_stepHooks.Contains(command.StepHook))
+                    _stepHooks.Add(command.StepHook);
+
+                break;
+            case SimulationCommandKind.RemoveStepHook:
+                _stepHooks.Remove(command.StepHook);
+                break;
             case SimulationCommandKind.AddJoint:
             case SimulationCommandKind.RemoveJoint:
             case SimulationCommandKind.SetLimits:
@@ -87,6 +97,39 @@ internal sealed partial class SimulationStepper
             default:
                 DoBodyCommand(command);
                 break;
+        }
+    }
+
+    /// <summary>Whether the core holds <paramref name="body"/> now.</summary>
+    public bool HasBody(BodyId body) =>
+        body.Index >= 0 && body.Index < _bodies.Count && _bodies[body.Index].Generation == body.Generation
+        && _bodies[body.Index].Handle.IsValid;
+
+    /// <summary>The core's handle of <paramref name="body"/>; refused for one the core does not hold now.</summary>
+    public BodyHandle FindHandle(BodyId body) =>
+        HasBody(body)
+            ? _bodies[body.Index].Handle
+            : throw new ArgumentException($"{body} is not in the simulation now.", nameof(body));
+
+    /// <summary>Sets <paramref name="body"/>'s velocity from a step hook, kept as a velocity command keeps it.</summary>
+    public void SetLinearVelocity(BodyId body, BodyHandle handle, Vector3F velocity)
+    {
+        _world.SetLinearVelocity(handle, velocity);
+        _bodies[body.Index].StopsMoving = false;
+    }
+
+    /// <summary>Sets <paramref name="body"/>'s spin from a step hook, kept as a spin command keeps it.</summary>
+    public void SetAngularVelocity(BodyId body, BodyHandle handle, Vector3F velocity)
+    {
+        _world.SetAngularVelocity(handle, velocity);
+        _bodies[body.Index].StopsTurning = false;
+    }
+
+    private void RunStepHooks()
+    {
+        foreach (var hook in _stepHooks)
+        {
+            hook.OnStep(new StepActions(this));
         }
     }
 
