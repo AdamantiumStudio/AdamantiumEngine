@@ -694,6 +694,9 @@ All packages share one version.
 - `PdfDocument.Authenticate` keeps what was read when the key stays the same - the owner's password after the user's
   opens with the user's key: only the rights change, nothing is read anew. After the owner's password another is only
   checked: the owner's access stays, and the owner's password is the one a copy and the file saved again take.
+- `PdfStandardSecurityHandler.Permissions` of a revision 2 file gives the rights of bits 9 to 12, which revision 2 does
+  not define, with the low ones they go with: filling forms with annotating, assembling with modifying, extracting
+  for accessibility with copying, printing well with printing.
 - DarkMatter's core is internal: `PhysicsWorld`, `IPhysicsWorld`, `BodyHandle`, `JointHandle`, `BodyDescription`,
   `JointDescription`, `StepClock`, `ContactPoint`, `WorldRayHit` and `WorldShapeHit`. Physics is worked with through
   `PhysicsSimulation`; the engine no longer uses the core.

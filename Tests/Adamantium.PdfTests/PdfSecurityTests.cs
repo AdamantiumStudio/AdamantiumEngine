@@ -261,6 +261,33 @@ public class PdfSecurityTests
         });
     }
 
+    // Revision 2 defines only the low bits: the rights of bits 9 to 12 go with them, whatever those bits say; from
+    // revision 3 the bits are read as written.
+    [Test]
+    public void Revision2_GivesTheHighRightsWithTheLowOnes()
+    {
+        const PdfPermissions printAndCopy = PdfPermissions.Print | PdfPermissions.CopyContent;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Handler(2, (int)printAndCopy).Permissions,
+                Is.EqualTo(printAndCopy | PdfPermissions.PrintHighQuality | PdfPermissions.ExtractForAccessibility));
+            Assert.That(Handler(3, (int)printAndCopy).Permissions, Is.EqualTo(printAndCopy));
+        });
+    }
+
+    private static PdfStandardSecurityHandler Handler(int revision, int permissions)
+    {
+        var encrypt = new Adamantium.Pdf.Objects.PdfDictionary();
+        encrypt.Set("Filter", new Adamantium.Pdf.Objects.PdfName("Standard"));
+        encrypt.Set("V", new Adamantium.Pdf.Objects.PdfInteger(revision == 2 ? 1 : 2));
+        encrypt.Set("R", new Adamantium.Pdf.Objects.PdfInteger(revision));
+        encrypt.Set("O", new Adamantium.Pdf.Objects.PdfString(new byte[32]));
+        encrypt.Set("U", new Adamantium.Pdf.Objects.PdfString(new byte[32]));
+        encrypt.Set("P", new Adamantium.Pdf.Objects.PdfInteger(permissions));
+        return new PdfStandardSecurityHandler(encrypt, null);
+    }
+
     // The owner's access, once given, stays: the user's password after it is only checked, and the owner's is what a copy
     // and the file saved again take.
     [TestCase(3)]

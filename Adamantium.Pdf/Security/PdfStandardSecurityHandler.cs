@@ -99,7 +99,28 @@ public sealed class PdfStandardSecurityHandler
     public bool IsOwner { get; private set; }
 
     public PdfPermissions Permissions =>
-        IsOwner ? PdfPermissions.All : (PdfPermissions)_permissions & PdfPermissions.All;
+        IsOwner ? PdfPermissions.All : Revision < 3 ? Revision2Permissions() : (PdfPermissions)_permissions & PdfPermissions.All;
+
+    // Revision 2 defines only bits 3 to 6 (ISO 32000-2, Table 22): filling forms goes with annotating, assembling with
+    // modifying, extracting for accessibility with copying, printing well with printing.
+    private PdfPermissions Revision2Permissions()
+    {
+        var granted = (PdfPermissions)_permissions &
+                      (PdfPermissions.Print | PdfPermissions.Modify | PdfPermissions.CopyContent | PdfPermissions.Annotate);
+        Grant(PdfPermissions.Annotate, PdfPermissions.FillForms);
+        Grant(PdfPermissions.Modify, PdfPermissions.Assemble);
+        Grant(PdfPermissions.CopyContent, PdfPermissions.ExtractForAccessibility);
+        Grant(PdfPermissions.Print, PdfPermissions.PrintHighQuality);
+        return granted;
+
+        void Grant(PdfPermissions by, PdfPermissions right)
+        {
+            if (granted.HasFlag(by))
+            {
+                granted |= right;
+            }
+        }
+    }
 
     /// <summary>Tries <paramref name="password"/> as the owner password, then as the user password. The empty string
     /// opens files that only restrict permissions. A password that fails leaves an earlier one's access as it was, and
