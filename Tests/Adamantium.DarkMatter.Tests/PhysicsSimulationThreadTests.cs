@@ -1,5 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
+using System.Linq;
+using System.Reflection;
 using System.Threading;
 using Adamantium.DarkMatter.Shapes;
 using Adamantium.Mathematics;
@@ -275,6 +278,35 @@ public class PhysicsSimulationThreadTests
         });
     }
 
+    // TEMPORARY diagnostic: every list's capacity and array's length reachable from the simulation's own fields.
+    private static Dictionary<string, int> TempCapacities(object root, string path = "sim", int depth = 0,
+        Dictionary<string, int> into = null)
+    {
+        into ??= new Dictionary<string, int>();
+        if (root == null || depth > 4)
+            return into;
+
+        const BindingFlags fields = BindingFlags.Instance | BindingFlags.NonPublic | BindingFlags.Public
+                                    | BindingFlags.DeclaredOnly;
+        for (var type = root.GetType(); type != null && type != typeof(object); type = type.BaseType)
+        {
+            foreach (var field in type.GetFields(fields))
+            {
+                var value = field.GetValue(root);
+                var name = $"{path}.{field.Name}";
+                if (value is Array array)
+                    into[name] = array.Length;
+                else if (value is System.Collections.ICollection && value.GetType().GetProperty("Capacity") is { } capacity)
+                    into[name] = (int)capacity.GetValue(value);
+                else if (value != null && !value.GetType().IsValueType
+                                       && value.GetType().Namespace?.StartsWith("Adamantium") == true)
+                    TempCapacities(value, name, depth + 1, into);
+            }
+        }
+
+        return into;
+    }
+
     // While it runs, the caller's side asks and reads without allocating.
     [Test]
     public void WhileItRuns_UpdateAndActions_DoNotAllocate()
@@ -294,13 +326,26 @@ public class PhysicsSimulationThreadTests
         }
 
         simulation.Start();
+        // TEMPORARY diagnostic for a Windows CI failure, to take out: the caller's bytes by call.
+        var parts = new long[4];
+        var events = 0;
         void Frame()
         {
+            var a = GC.GetAllocatedBytesForCurrentThread();
             simulation.ApplyImpulse(crates[0], new Vector3F(0, 0.01f, 0));
             simulation.SetForce(crates[1], new Vector3F(0, 1, 0));
+            var b = GC.GetAllocatedBytesForCurrentThread();
             simulation.Update();
+            var c = GC.GetAllocatedBytesForCurrentThread();
             simulation.InterpolatedPoseOf(crates[2]);
+            var d = GC.GetAllocatedBytesForCurrentThread();
             simulation.RayCast(new WorldPosition(0, 10, 0), -Vector3F.UnitY, 20, out _);
+            var e = GC.GetAllocatedBytesForCurrentThread();
+            parts[0] += b - a;
+            parts[1] += c - b;
+            parts[2] += d - c;
+            parts[3] += e - d;
+            events += simulation.Contacts.Length;
         }
 
         // A frame slow enough for every run the thread may leave unread to pile up.
@@ -338,6 +383,9 @@ public class PhysicsSimulationThreadTests
 
         SlowFrame();
         SlowFrame();
+        Array.Clear(parts);
+        events = 0;
+        var capacitiesBefore = TempCapacities(simulation);
         var before = GC.GetAllocatedBytesForCurrentThread();
         var beforeOnThread = simulation.ThreadAllocatedBytes;
         for (var frame = 0; frame < 200; frame++)
@@ -349,9 +397,14 @@ public class PhysicsSimulationThreadTests
         SlowFrame();
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         var allocatedOnThread = simulation.ThreadAllocatedBytes - beforeOnThread;
+        var capacitiesAfter = TempCapacities(simulation);
         simulation.Stop();
+        var grown = string.Join("; ", capacitiesAfter.Where(pair => !capacitiesBefore.TryGetValue(pair.Key, out var old)
+                                                                    || old != pair.Value)
+            .Select(pair => $"{pair.Key} {(capacitiesBefore.TryGetValue(pair.Key, out var old) ? old : -1)}->{pair.Value}"));
 
-        Assert.That(allocated, Is.Zero, "the caller's thread");
+        Assert.That(allocated, Is.Zero,
+            $"the caller's thread: actions {parts[0]}, Update {parts[1]}, pose {parts[2]}, ray {parts[3]}; touches told {events}; grown: {grown}");
         Assert.That(allocatedOnThread, Is.Zero, "the simulation's thread");
     }
 
