@@ -5,8 +5,10 @@ namespace Adamantium.DarkMatter;
 /// <summary>
 /// A search of a <see cref="PhysicsSimulation"/>'s bodies, told link by link on the caller's stack: ready conditions,
 /// then any <c>Where</c>, each keeping fewer. It walks the bodies the last step read, as they stood then, and ends in
-/// an answer - <see cref="Into"/>, <see cref="Count"/>, <see cref="Any"/>, <see cref="First"/>, a <c>foreach</c> - or in
-/// actions on every body found, each the simulation's own. Nothing is allocated, but by a lambda's closure.
+/// an answer - <see cref="Into"/>, <see cref="Count"/>, <see cref="Any"/>, <see cref="First"/>, an aggregate, a
+/// <c>foreach</c> - in actions on every body found, each the simulation's own, or goes on as an order, a grouping, a
+/// projection or a join. Nothing is allocated, but by a lambda's closure. It walks in no order kept; an order is told by
+/// <see cref="OrderBy{TKey}"/> or <see cref="NearestTo"/>.
 /// </summary>
 public readonly ref struct BodyFinder<TFilter>
     where TFilter : IBodyFilter
@@ -14,17 +16,17 @@ public readonly ref struct BodyFinder<TFilter>
     private readonly PhysicsSimulation _simulation;
     private readonly FindConditions _conditions;
     private readonly TFilter _filter;
-    private readonly bool _isNearestFirst;
-    private readonly WorldPosition _nearestTo;
+    private readonly int _skip;
+    private readonly int _take;
 
-    internal BodyFinder(PhysicsSimulation simulation, FindConditions conditions, TFilter filter,
-        bool isNearestFirst = false, WorldPosition nearestTo = default)
+    internal BodyFinder(PhysicsSimulation simulation, FindConditions conditions, TFilter filter, int skip = 0,
+        int take = int.MaxValue)
     {
         _simulation = simulation;
         _conditions = conditions;
         _filter = filter;
-        _isNearestFirst = isNearestFirst;
-        _nearestTo = nearestTo;
+        _skip = skip;
+        _take = take;
     }
 
     /// <summary>Keeps dynamic bodies; told with another kind, either.</summary>
@@ -73,8 +75,12 @@ public readonly ref struct BodyFinder<TFilter>
 
     /// <summary>Keeps bodies <paramref name="filter"/> keeps: a struct of the caller's own, called straight.</summary>
     public BodyFinder<BothFilters<TFilter, TNext>> Where<TNext>(TNext filter)
-        where TNext : IBodyFilter =>
-        new(_simulation, _conditions, new BothFilters<TFilter, TNext>(_filter, filter), _isNearestFirst, _nearestTo);
+        where TNext : IBodyFilter
+    {
+        RequireNoStretch();
+        return new BodyFinder<BothFilters<TFilter, TNext>>(_simulation, _conditions,
+            new BothFilters<TFilter, TNext>(_filter, filter));
+    }
 
     /// <summary>Keeps bodies <paramref name="predicate"/> keeps, looking at <paramref name="data"/>: a static lambda,
     /// with no closure.</summary>
@@ -86,60 +92,74 @@ public readonly ref struct BodyFinder<TFilter>
     public BodyFinder<BothFilters<TFilter, DelegateFilter>> Where(Func<BodyView, bool> predicate) =>
         Where(new DelegateFilter(predicate));
 
-    /// <summary>Makes <see cref="Into"/> and <see cref="First"/> answer nearest to <paramref name="point"/> first, by the
-    /// center of mass; a <c>foreach</c>, <see cref="Count"/> and the actions walk in no order.</summary>
-    public BodyFinder<TFilter> NearestTo(WorldPosition point)
+    /// <summary>Passes by the first <paramref name="count"/> bodies found; told again, past those too. Conditions come
+    /// before it.</summary>
+    public BodyFinder<TFilter> Skip(int count)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        return new BodyFinder<TFilter>(_simulation, _conditions, _filter, AddStretch(_skip, count),
+            _take == int.MaxValue ? int.MaxValue : Math.Max(0, _take - count));
+    }
+
+    /// <summary>Keeps at most <paramref name="count"/> bodies found; told again, the fewer. Conditions come before it.
+    /// </summary>
+    public BodyFinder<TFilter> Take(int count)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+        return new BodyFinder<TFilter>(_simulation, _conditions, _filter, _skip, Math.Min(_take, count));
+    }
+
+    /// <summary>Answers nearest to <paramref name="point"/> first, by the center of mass.</summary>
+    public OrderedBodies<TFilter, NearestOrder> NearestTo(WorldPosition point)
     {
         if (!point.IsFinite)
             throw new ArgumentOutOfRangeException(nameof(point), point, "The point must be finite.");
 
-        return new BodyFinder<TFilter>(_simulation, _conditions, _filter, true, point);
+        return Ordered(new NearestOrder(point));
     }
 
-    public Enumerator GetEnumerator() => new(_simulation, _conditions, _filter);
+    /// <summary>Answers by a key of each body, the least first: <c>orderby</c> of the query syntax.</summary>
+    public OrderedBodies<TFilter, KeyOrder<TKey>> OrderBy<TKey>(Func<BodyView, TKey> key) =>
+        Ordered(new KeyOrder<TKey>(key, false));
 
-    /// <summary>Writes the bodies found into <paramref name="bodies"/> - nearest first, the nearest as many as fit, when
-    /// told - and gives how many it wrote.</summary>
+    /// <summary>Answers by a key of each body, the greatest first: <c>orderby … descending</c>.</summary>
+    public OrderedBodies<TFilter, KeyOrder<TKey>> OrderByDescending<TKey>(Func<BodyView, TKey> key) =>
+        Ordered(new KeyOrder<TKey>(key, true));
+
+    /// <summary>Answers in an order of the caller's own: a struct, called straight.</summary>
+    public OrderedBodies<TFilter, TOrder> OrderBy<TOrder>(TOrder order)
+        where TOrder : IBodyOrder =>
+        Ordered(order);
+
+    /// <summary>Groups the bodies found by a key of each: <c>group … by</c> of the query syntax, the groups slices of
+    /// a buffer, in the order their first body comes.</summary>
+    public BodyGroups<TFilter, NoOrder, TKey> GroupBy<TKey>(Func<BodyView, TKey> key) => new(this, default, key);
+
+    /// <summary>What each body found gives: <c>select</c> of the query syntax.</summary>
+    public BodySelection<TFilter, TResult> Select<TResult>(Func<BodyView, TResult> selector) => new(this, selector);
+
+    /// <summary>Each body found met with each item of <paramref name="inner"/> whose key is its own: <c>join … on …
+    /// equals …</c> of the query syntax - the touches told, say.</summary>
+    public BodyJoin<TFilter, TInner, TKey, TResult> Join<TInner, TKey, TResult>(ReadOnlySpan<TInner> inner,
+        Func<BodyView, TKey> bodyKey, Func<TInner, TKey> innerKey, Func<BodyView, TInner, TResult> result) =>
+        new(this, inner, bodyKey, innerKey, result);
+
+    public Enumerator GetEnumerator() => new(_simulation, _conditions, _filter, _skip, _take);
+
+    /// <summary>Writes the bodies found into <paramref name="bodies"/>, as many as fit, and gives how many it wrote.
+    /// </summary>
     public int Into(Span<BodyId> bodies)
     {
-        if (!_isNearestFirst)
-        {
-            var written = 0;
-            foreach (var body in this)
-            {
-                if (written == bodies.Length)
-                    break;
-
-                bodies[written++] = body.Id;
-            }
-
-            return written;
-        }
-
-        // Kept nearest first as they come; a kept body's distance is read again rather than held, so a buffer of any
-        // size needs nothing more.
-        var count = 0;
-        if (bodies.IsEmpty)
-            return 0;
-
+        var written = 0;
         foreach (var body in this)
         {
-            var distance = DistanceOf(body.CenterOfMass);
-            if (count == bodies.Length && distance >= DistanceOf(bodies[count - 1]))
-                continue;
+            if (written == bodies.Length)
+                break;
 
-            var at = Math.Min(count, bodies.Length - 1);
-            while (at > 0 && DistanceOf(bodies[at - 1]) > distance)
-            {
-                bodies[at] = bodies[at - 1];
-                at--;
-            }
-
-            bodies[at] = body.Id;
-            count = Math.Min(count + 1, bodies.Length);
+            bodies[written++] = body.Id;
         }
 
-        return count;
+        return written;
     }
 
     public int Count()
@@ -159,11 +179,61 @@ public readonly ref struct BodyFinder<TFilter>
         return false;
     }
 
-    /// <summary>The body found - the nearest, when told; none when nothing is found.</summary>
+    /// <summary>Whether <paramref name="predicate"/> keeps every body found; true for none found.</summary>
+    public bool All(Func<BodyView, bool> predicate)
+    {
+        ArgumentNullException.ThrowIfNull(predicate);
+        foreach (var body in this)
+        {
+            if (!predicate(body))
+                return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>A body found; none when nothing is found.</summary>
     public BodyId First()
     {
-        Span<BodyId> first = stackalloc BodyId[1];
-        return Into(first) == 1 ? first[0] : BodyId.None;
+        foreach (var body in this)
+            return body.Id;
+
+        return BodyId.None;
+    }
+
+    /// <summary>What <paramref name="value"/> gives of the bodies found, added; zero for none found.</summary>
+    public double Sum(Func<BodyView, double> value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        var sum = 0.0;
+        foreach (var body in this)
+            sum += value(body);
+
+        return sum;
+    }
+
+    /// <summary>The least <paramref name="value"/> gives of the bodies found - not a number if any gives one; not a
+    /// number for none found.</summary>
+    public double Min(Func<BodyView, double> value) => Aggregate(value, true);
+
+    /// <summary>The greatest <paramref name="value"/> gives of the bodies found, past those that give not a number; not
+    /// a number for none found.</summary>
+    public double Max(Func<BodyView, double> value) => Aggregate(value, false);
+
+    /// <summary>What <paramref name="value"/> gives of the bodies found, on average; not a number for none found.
+    /// </summary>
+    public double Average(Func<BodyView, double> value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        var sum = 0.0;
+        var count = 0;
+        foreach (var body in this)
+        {
+            sum += value(body);
+            count++;
+        }
+
+        return count > 0 ? sum / count : double.NaN;
     }
 
     /// <summary>Wakes every body found, and what sleeps with each.</summary>
@@ -234,13 +304,53 @@ public readonly ref struct BodyFinder<TFilter>
             _simulation.RemoveBody(body.Id);
     }
 
-    private double DistanceOf(WorldPosition center) => (center - _nearestTo).LengthSquared();
+    internal PhysicsSimulation Simulation => _simulation;
 
-    // A kept body's, read from the centers side by side.
-    private double DistanceOf(BodyId kept) => DistanceOf(_simulation.CenterOfSlot(kept.Index));
+    private OrderedBodies<TFilter, TOrder> Ordered<TOrder>(TOrder order)
+        where TOrder : IBodyOrder =>
+        new(this, order, 0, int.MaxValue);
 
-    private BodyFinder<TFilter> With(FindConditions conditions) =>
-        new(_simulation, conditions, _filter, _isNearestFirst, _nearestTo);
+    // As LINQ's: a value not a number is the least of all, and the greatest only of nothing else.
+    private double Aggregate(Func<BodyView, double> value, bool takesLeast)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        var kept = double.NaN;
+        var isFound = false;
+        foreach (var body in this)
+        {
+            var next = value(body);
+            if (double.IsNaN(next))
+            {
+                if (takesLeast)
+                    return double.NaN;
+
+                continue;
+            }
+
+            if (!isFound || (takesLeast ? next < kept : next > kept))
+                kept = next;
+
+            isFound = true;
+        }
+
+        return kept;
+    }
+
+    private BodyFinder<TFilter> With(FindConditions conditions)
+    {
+        RequireNoStretch();
+        return new BodyFinder<TFilter>(_simulation, conditions, _filter);
+    }
+
+    // A condition told after Skip or Take would be read before them, as LINQ does not.
+    private void RequireNoStretch()
+    {
+        if (_skip != 0 || _take != int.MaxValue)
+            throw new InvalidOperationException("Conditions come before Skip and Take.");
+    }
+
+    // Skips added on, held at the most an int holds.
+    internal static int AddStretch(int skip, int count) => (int)Math.Min((long)skip + count, int.MaxValue);
 
     /// <summary>Walks the bodies found, from the last added, each once: a body taken out on the way, the one walked or
     /// another, leaves the rest walked; a body added on the way is not walked.</summary>
@@ -251,13 +361,18 @@ public readonly ref struct BodyFinder<TFilter>
         private readonly TFilter _filter;
         private readonly long _walk;
         private int _index;
+        private int _skip;
+        private int _take;
 
-        internal Enumerator(PhysicsSimulation simulation, FindConditions conditions, TFilter filter)
+        internal Enumerator(PhysicsSimulation simulation, FindConditions conditions, TFilter filter, int skip,
+            int take)
         {
             simulation.ThrowIfDisposed();
             _simulation = simulation;
             _conditions = conditions;
             _filter = filter;
+            _skip = skip;
+            _take = take;
             _walk = simulation.StartWalk();
             _index = simulation.LiveBodyCount;
             Current = default;
@@ -267,6 +382,9 @@ public readonly ref struct BodyFinder<TFilter>
 
         public bool MoveNext()
         {
+            if (_take == 0)
+                return false;
+
             _index = Math.Min(_index, _simulation.LiveBodyCount);
             while (--_index >= 0)
             {
@@ -275,6 +393,13 @@ public readonly ref struct BodyFinder<TFilter>
                     || !_filter.Matches(body) || !body.TakeIntoWalk(_walk))
                     continue;
 
+                if (_skip > 0)
+                {
+                    _skip--;
+                    continue;
+                }
+
+                _take--;
                 Current = body;
                 return true;
             }

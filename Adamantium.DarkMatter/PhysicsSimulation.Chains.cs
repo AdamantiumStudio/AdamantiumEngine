@@ -33,7 +33,19 @@ public sealed partial class PhysicsSimulation
     // A number of its own for each walk of a search, so a body given by it is given once.
     internal long StartWalk() => ++_walks;
 
-    internal WorldPosition CenterOfSlot(int slot) => _centers[slot];
+    // A body a search wrote into a caller's buffer, as the last step left it.
+    internal BodyView ViewOf(BodyId body) => new(body, _bodySlots[body.Index]);
+
+    // A body a search wrote into a caller's buffer, walked again later: refused once it was taken out.
+    internal BodyView ViewOfKept(BodyId body)
+    {
+        ThrowIfDisposed();
+        var record = _bodySlots[body.Index];
+        if (record.Generation != body.Generation || record.Status == PhysicsStatus.Removed)
+            throw new InvalidOperationException($"{body} was taken out since it was grouped.");
+
+        return new BodyView(body, record);
+    }
 
     // The live body at index, when it is within the conditions' area - looked at by its center alone - and the
     // simulation took it.

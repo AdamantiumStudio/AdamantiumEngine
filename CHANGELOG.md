@@ -34,9 +34,16 @@ All packages share one version.
   conditions - `Dynamic`, `Kinematic`, `Static`, `Awake`, `Asleep`, `OnLayers`, `Except`, `Heavier`, `Within` a box or a
   sphere by the center of mass - and by `Where`: a filter struct of the caller's own (`IBodyFilter`), called straight;
   a static lambda with its data; or any lambda, as `where` of the query syntax gives it (`BodyView` is what they see).
-  It answers by `foreach`, `Into` - nearest first after `NearestTo` - `Count`, `Any`, `First`, or acts on every body
-  found that can take it: `WakeUp`, `ApplyImpulse`, `SetLinearVelocity`, `SetAngularVelocity`, `SetLayer`,
+  It answers by `foreach`, `Into`, `Count`, `Any`, `First`, `All`, `Sum`, `Min`, `Max`, `Average`, or acts on every
+  body found that can take it: `WakeUp`, `ApplyImpulse`, `SetLinearVelocity`, `SetAngularVelocity`, `SetLayer`,
   `SetMaterial`, `RemoveBodies`. Nothing is allocated but by a lambda's closure.
+- The search's own LINQ operators, which the query syntax reads: `OrderBy`, `OrderByDescending`, `ThenBy`,
+  `ThenByDescending` (by a key, or an `IBodyOrder` struct of the caller's own) and `NearestTo` answer into the caller's
+  buffer in their order (`OrderedBodies`), the first as many as fit; `GroupBy` writes the bodies group after group into
+  it, as LINQ groups, each group a slice (`BodyGroups`, `BodyGrouping`); `Select` gives what each body gives, `Distinct`
+  each value once; `Join` meets each body with the items of a span by key - the touches told, say; `Skip` and `Take`
+  keep a stretch, the skipped held apart from the caller's buffer. Conditions come before `Skip` and `Take`. `Layer`
+  orders by its index.
 - `PdfStandardSecurityHandler.KeyBits`: how long an encrypted PDF's key is - 40 to 128 bits for RC4, 128 or 256 for
   AES - what a viewer says of the file's encryption. `PdfDocument.IsOpenedWithPassword` tells whether a password
   opened the file - typed, carried to the file saved again, or in the read options - not the empty one a file that
