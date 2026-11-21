@@ -104,6 +104,8 @@ internal sealed partial class SimulationStepper
                     break;
                 case SimulationCommandKind.SetShape:
                     _world.SetShape(body.Handle, command.Shape, command.PartTraits);
+                    TakeContactEvents();
+                    body.PartData = command.PartData;
                     Tell(new SimulationNews
                     {
                         Kind = NewsKind.ShapeTaken, Slot = command.Slot, Generation = body.Generation,
@@ -164,6 +166,7 @@ internal sealed partial class SimulationStepper
         var body = _bodies[slot];
         body.Generation = generation;
         body.Handle = default;
+        body.PartData = partData;
         body.Force = Vector3F.Zero;
         body.Torque = Vector3F.Zero;
         body.StopsMoving = false;
@@ -215,6 +218,7 @@ internal sealed partial class SimulationStepper
         _world.SetAngularVelocity(handle, angular);
         body.StopsMoving = true;
         body.StopsTurning = true;
+        Follow(slot, body);
         if (body.IsMovedToPose)
             return;
 

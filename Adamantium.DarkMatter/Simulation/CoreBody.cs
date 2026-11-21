@@ -7,6 +7,10 @@ internal sealed class CoreBody
     public int Generation;
     public BodyHandle Handle;
 
+    /// <summary>The caller's own of each of its parts as the core has them now: what its touches are told with.
+    /// </summary>
+    public object[] PartData = [];
+
     /// <summary>What pushes and turns it at every step until set again.</summary>
     public Vector3F Force;
     public Vector3F Torque;

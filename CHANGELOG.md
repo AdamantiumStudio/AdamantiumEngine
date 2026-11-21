@@ -48,6 +48,16 @@ All packages share one version.
   each value once; `Join` meets each body with the items of a span by key - the touches told, say; `Skip` and `Take`
   keep a stretch, the skipped held apart from the caller's buffer. Conditions come before `Skip` and `Take`. `Layer`
   orders by its index.
+- The game's work with the physics goes through `IPhysicsService` alone, by entities - `World.Physics()`
+  (`EntityWorldPhysics`) gives a world's. Besides its pushes and readings, it now reads a body's mass and sleep, sets a
+  torque, spins with an angular impulse, moves a kinematic body to a pose (`MoveKinematic`), wakes a body or an area and
+  sets off an explosion (`ApplyRadialImpulse`). Its rays, casts and overlaps meet entities and the colliders they struck
+  (`EntityRayHit`, `EntityShapeHit`, `EntityQueryFilter`), none while no game plays, and `Contacts` tells each frame's
+  touches by their entities and colliders (`EntityContactEventArgs`). The chains are the simulation's three, by entity:
+  `Body(entity)` (`EntityBodyActions`), `Query()` (`EntityQuery`) and `World()` (`PhysicsWorldActions`); layers come
+  to them with the project's own. Each collider
+  is a part of its body of its own now, so a hit or a touch tells which; the bodies step as fast as before. Nothing is
+  allocated by a query or by the contacts told.
 - `PdfStandardSecurityHandler.KeyBits`: how long an encrypted PDF's key is - 40 to 128 bits for RC4, 128 or 256 for
   AES - what a viewer says of the file's encryption. `PdfDocument.IsOpenedWithPassword` tells whether a password
   opened the file - typed, carried to the file saved again, or in the read options - not the empty one a file that
@@ -931,6 +941,11 @@ All packages share one version.
 
 ### Fixed
 
+- A kinematic body moved to a pose in a frame of several steps is read there: it arrived in the first step and fell
+  asleep in the next, and a body asleep before and after a run was not read again, so the caller saw it where it was.
+- A touch ended by a body's new shape is told with the old part's own (`ContactEventArgs.FirstPartData`): it was told
+  only by the old part's place, which `DataOf(body, part)` read among the new parts - another part's, or past them, it
+  threw.
 - A `PhysicsSimulation` on its own thread allocates only when a step gathers more actions than any step before: each of
   the batches that take actions to the thread grew by what it happened to carry, so a busy step long after the warm-up
   could still grow one of them. A batch now grows at once to the caller's list of actions.

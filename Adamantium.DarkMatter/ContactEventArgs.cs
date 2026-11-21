@@ -4,12 +4,15 @@ namespace Adamantium.DarkMatter;
 /// them.</summary>
 public readonly struct ContactEventArgs
 {
-    internal ContactEventArgs(BodyId first, BodyId second, in WorldContactEventArgs told)
+    internal ContactEventArgs(BodyId first, BodyId second, object firstPartData, object secondPartData,
+        in WorldContactEventArgs told)
     {
         First = first;
         Second = second;
         FirstPart = told.FirstPart;
         SecondPart = told.SecondPart;
+        FirstPartData = firstPartData;
+        SecondPartData = secondPartData;
         Change = told.Change;
         IsTrigger = told.IsTrigger;
         Point = told.Point;
@@ -23,6 +26,11 @@ public readonly struct ContactEventArgs
     /// <summary>Each body's part that touched, by its place among the body's parts; 0 for a body of one shape.</summary>
     public int FirstPart { get; }
     public int SecondPart { get; }
+
+    /// <summary>The caller's own of each part that touched (<see cref="BodyPart.Data"/>), as the body had its parts
+    /// then: told so for a part the body no longer has, its shape changed since.</summary>
+    public object FirstPartData { get; }
+    public object SecondPartData { get; }
 
     public ContactChange Change { get; }
 

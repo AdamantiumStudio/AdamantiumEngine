@@ -302,6 +302,25 @@ public class PhysicsSimulationTests
         });
     }
 
+    // Moved in a frame of several steps, a kinematic body arrives in the first and rests asleep for the rest: it is
+    // read there all the same.
+    [Test]
+    public void AKinematicBodyMovedInAFrameOfSeveralSteps_IsReadWhereItWasSent()
+    {
+        using var simulation = new PhysicsSimulation();
+        var platform = simulation.AddBody(new BodySettings
+        {
+            Kind = BodyKind.Kinematic, Shape = Crate, Position = new WorldPosition(9, -3, 0)
+        });
+        simulation.Advance(2 * simulation.StepSeconds);
+
+        simulation.MoveKinematic(platform, new Pose(new WorldPosition(9, -4, 0)));
+        var steps = simulation.Advance(2.5 * simulation.StepSeconds);
+
+        Assert.That(steps, Is.GreaterThanOrEqualTo(2));
+        Assert.That(simulation.PoseOf(platform).Position.Y, Is.EqualTo(-4).Within(1e-4));
+    }
+
     // Moved and then given a velocity in the same frame, a kinematic body keeps that velocity after the step.
     [Test]
     public void AVelocitySetAfterAKinematicMove_IsKept()

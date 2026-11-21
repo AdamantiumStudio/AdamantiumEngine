@@ -31,12 +31,13 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     private readonly HashSet<UInt128> _toldOfDynamicMesh = [];
     // Likewise the skewed entities whose round colliders were said to be left out.
     private readonly HashSet<UInt128> _toldOfSkewedRound = [];
-    private readonly List<CompoundPart> _shapeParts = [];
+    private readonly List<BodyPart> _shapeParts = [];
     private readonly CarriedShapeCache _carriedShapes = new();
     private readonly List<int> _freeKeys = [];
     // Rigid bodies the physics could not make, tried again once what they are made of changes.
     private readonly Dictionary<Entity, BodyParts> _refused = new();
     private readonly List<Entity> _gone = [];
+    private readonly List<EntityContactEventArgs> _contacts = [];
 
     private PhysicsSettings _settings = new();
     private Vector3F _gravity = new(0, 9.81f, 0);
@@ -95,6 +96,12 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     public Vector3F GetAngularVelocity(Entity entity) => _simulation.AngularVelocityOf(_links[FindKey(entity)].Id);
 
     /// <inheritdoc/>
+    public float GetMass(Entity entity) => _simulation.MassOf(_links[FindKey(entity)].Id);
+
+    /// <inheritdoc/>
+    public bool IsSleeping(Entity entity) => _simulation.IsSleeping(_links[FindKey(entity)].Id);
+
+    /// <inheritdoc/>
     public void SetLinearVelocity(Entity entity, Vector3F velocity)
     {
         RequireFinite(velocity, nameof(velocity));
@@ -133,6 +140,40 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     }
 
     /// <inheritdoc/>
+    public void SetTorque(Entity entity, Vector3F torque)
+    {
+        RequireFinite(torque, nameof(torque));
+        _simulation.SetTorque(_links[FindDynamicKey(entity)].Id, torque);
+    }
+
+    /// <inheritdoc/>
+    public void ApplyAngularImpulse(Entity entity, Vector3F impulse)
+    {
+        RequireFinite(impulse, nameof(impulse));
+        _simulation.ApplyAngularImpulse(_links[FindDynamicKey(entity)].Id, impulse);
+    }
+
+    /// <inheritdoc/>
+    public void MoveKinematic(Entity entity, in Pose pose)
+    {
+        var key = FindKey(entity);
+        if (_links[key].Kind != BodyKind.Kinematic)
+            throw new InvalidOperationException($"Only a kinematic body is moved so; {entity.Name} is {_links[key].Kind}.");
+
+        _simulation.MoveKinematic(_links[key].Id, pose);
+    }
+
+    /// <inheritdoc/>
+    public void WakeUp(Entity entity) => _simulation.WakeUp(_links[FindKey(entity)].Id);
+
+    /// <inheritdoc/>
+    public void WakeUp(in BoundingBox<double> area) => RequireGame().WakeUp(area);
+
+    /// <inheritdoc/>
+    public void ApplyRadialImpulse(WorldPosition center, float radius, float strength) =>
+        RequireGame().ApplyRadialImpulse(center, radius, strength);
+
+    /// <inheritdoc/>
     public override void Update(AppTime appTime)
     {
         base.Update(appTime);
@@ -145,6 +186,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         else
             _simulation.Advance(appTime.FrameTime);
 
+        TellContacts();
         MoveEntities();
     }
 
@@ -200,6 +242,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         _carriedShapes.Clear();
         _freeKeys.Clear();
         _refused.Clear();
+        _contacts.Clear();
         ForgetJoints();
     }
 
@@ -413,7 +456,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         parts.CarriedShapes.AddRange(link.Parts.CarriedShapes);
         link.Parts.CarriedShapes.Clear();
         parts.ShapeParts = link.Parts.ShapeParts;
-        layout.Shape = link.Made.Shape;
+        layout.Parts = link.Made.Parts;
     }
 
     // Only a body that moves is stood where the simulation draws it.
@@ -504,7 +547,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
             _simulation.SetKind(id, layout.Kind);
 
         if (changesShape)
-            _simulation.SetShape(id, layout.Shape);
+            _simulation.SetParts(id, layout.Parts);
 
         if (changesSettings)
         {
@@ -552,7 +595,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         link.Id = _simulation.AddBody(new BodySettings
         {
             Kind = layout.Kind,
-            Shape = layout.Shape,
+            Parts = layout.Parts,
             Position = layout.Position,
             Rotation = layout.Rotation,
             Mass = layout.Mass,
@@ -634,8 +677,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         }
 
         var translation = world.TranslationVector;
-        var shape = CreateShape(entity, body.Kind, translation, rotation, scale, parts);
-        if (shape == null)
+        if (!LayOutParts(entity, body.Kind, translation, rotation, scale, parts))
         {
             Log.Logger.Warning("{Entity} has a rigid body but no collider on it or below it; the physics leaves it",
                 entity.Name);
@@ -645,7 +687,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         return new BodyLayout
         {
             Kind = body.Kind,
-            Shape = shape,
+            Parts = parts.ShapeParts,
             Position = new WorldPosition(translation),
             Rotation = rotation,
             Mass = body.Mass,
@@ -659,11 +701,12 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         };
     }
 
-    /// <summary>The shape of the colliders on <paramref name="entity"/> and on the entities below it that have no rigid
-    /// body of their own, around the body's origin at <paramref name="origin"/> turned by <paramref name="rotation"/>,
-    /// the entity scaled by <paramref name="scale"/>, for a body of <paramref name="kind"/>; null when there are none.
-    /// The entities below it it looks at, and the hull and mesh shapes it takes, go in <paramref name="parts"/>.</summary>
-    private CollisionShape CreateShape(Entity entity, BodyKind kind, Vector3<double> origin, QuaternionF rotation,
+    /// <summary>Lays out in <paramref name="parts"/> a part for each collider on <paramref name="entity"/> and on the
+    /// entities below it that have no rigid body of their own, around the body's origin at <paramref name="origin"/>
+    /// turned by <paramref name="rotation"/>, the entity scaled by <paramref name="scale"/>, for a body of
+    /// <paramref name="kind"/>; false when there are none. The entities below it it looks at, and the hull and mesh
+    /// shapes it takes, go in <paramref name="parts"/> too.</summary>
+    private bool LayOutParts(Entity entity, BodyKind kind, Vector3<double> origin, QuaternionF rotation,
         Vector3F scale, BodyParts parts)
     {
         _shapeParts.Clear();
@@ -696,14 +739,10 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         });
 
         if (_shapeParts.Count == 0)
-            return null;
+            return false;
 
         parts.ShapeParts = [.. _shapeParts];
-        var only = _shapeParts[0];
-        if (_shapeParts.Count == 1 && only.Pose.Position == Vector3F.Zero && only.Pose.Rotation == QuaternionF.Identity)
-            return only.Shape;
-
-        return new CompoundCollisionShape(_shapeParts);
+        return true;
     }
 
     private void AddColliders(Entity body, BodyKind kind, Entity entity, Vector3<double> origin, QuaternionF unturn,
@@ -777,13 +816,20 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
 
             if (entity == body)
             {
-                _shapeParts.Add(new CompoundPart(shape.Shape, new LocalPose(shape.Offset, shape.Turn)));
+                _shapeParts.Add(new BodyPart
+                {
+                    Shape = shape.Shape, Pose = new LocalPose(shape.Offset, shape.Turn), Data = collider
+                });
                 continue;
             }
 
             var center = fromBody + Vector3F.Transform(shape.Offset, turn);
-            _shapeParts.Add(new CompoundPart(shape.Shape,
-                new LocalPose(Vector3F.Transform(center, unturn), unturn * turn * shape.Turn)));
+            _shapeParts.Add(new BodyPart
+            {
+                Shape = shape.Shape,
+                Pose = new LocalPose(Vector3F.Transform(center, unturn), unturn * turn * shape.Turn),
+                Data = collider
+            });
         }
     }
 
@@ -803,7 +849,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
                 return;
             }
 
-            _shapeParts.Add(new CompoundPart(shape, new LocalPose(position)));
+            _shapeParts.Add(new BodyPart { Shape = shape, Pose = new LocalPose(position), Data = collider });
         }
         catch (ArgumentException exception)
         {
