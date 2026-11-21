@@ -1,8 +1,7 @@
 using Adamantium.DarkMatter;
-using Adamantium.ECS;
 using Adamantium.Mathematics;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>An entity's body in the game's physics as a chain: each action is the service's own, asked at once, in
 /// order, and gives the chain back for the next; readings are as the last step left the body.</summary>

@@ -3,23 +3,19 @@ using System.Collections.Generic;
 using Adamantium.Core;
 using Adamantium.DarkMatter;
 using Adamantium.DarkMatter.Shapes;
-using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Mathematics;
 using Serilog;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
-/// <summary>The physics of a game: the scene's rigid bodies laid out as bodies of a <see cref="PhysicsSimulation"/>
-/// stepping on a thread of its own, the entities stood where it draws them each frame, the game's pushes asked of it.
-/// </summary>
-public sealed partial class PhysicsService : GameService, IPhysicsService
+/// <summary>The work of a game's physics, done for its <see cref="PhysicsService"/> - the service's main processor: the
+/// scene's rigid bodies, colliders and joints laid out as bodies and joints of the service's simulation and followed as
+/// the scene changes, and the entities stood where it draws them each frame. Another may take its place - one derived
+/// from it, doing more in <see cref="OnStarted"/>, <see cref="BeforeSteps"/>, <see cref="AfterSteps"/> and
+/// <see cref="OnStopped"/>.</summary>
+public partial class PhysicsProcessor
 {
-    /// <summary>The service's <see cref="EntityService.Priority"/>: before the others, so the entities it stands are
-    /// placed by the transforms in the same frame.</summary>
-    public const int UpdatePriority = -1;
-
-    private readonly bool _stepsOnOwnThread;
     private readonly List<PhysicsBodyLink> _links = [];
     private readonly Dictionary<Entity, int> _keys = new();
     // The links of bodies that move: their entities are stood where the simulation draws them.
@@ -37,213 +33,122 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     // Rigid bodies the physics could not make, tried again once what they are made of changes.
     private readonly Dictionary<Entity, BodyParts> _refused = new();
     private readonly List<Entity> _gone = [];
-    private readonly List<EntityContactEventArgs> _contacts = [];
 
-    private PhysicsSettings _settings = new();
-    private Vector3F _gravity = new(0, 9.81f, 0);
-    private PhysicsSettings _settingsBeforeGame;
-    private Vector3F _gravityBeforeGame;
     private PhysicsSimulation _simulation;
+    private Scene _scene;
     private long _frameNumber;
     private long _lookNumber;
 
-    public PhysicsService(EntityWorld world) : this(world, true)
-    {
-    }
+    /// <summary>The simulation of the game playing; null while none plays.</summary>
+    protected PhysicsSimulation Simulation => _simulation;
 
-    /// <summary>A service stepping on the world's thread, in its frames, when <paramref name="stepsOnOwnThread"/> is
-    /// false: for tests that step by hand.</summary>
-    internal PhysicsService(EntityWorld world, bool stepsOnOwnThread) : base(world)
-    {
-        _stepsOnOwnThread = stepsOnOwnThread;
-        Priority = UpdatePriority;
-    }
+    /// <summary>The scene of the game playing; null while none plays.</summary>
+    protected Scene Scene => _scene;
 
-    /// <inheritdoc/>
-    public PhysicsSettings Settings
-    {
-        get => _settings;
-        set
-        {
-            ArgumentNullException.ThrowIfNull(value);
-            _settings = value;
-        }
-    }
+    /// <summary>The body of <paramref name="entity"/>; one given a rigid body this frame is made now, so the game can
+    /// push it at once. Throws for one the physics does not move. A body made anew - disabled and enabled, refused and
+    /// taken - has a new id: found again each frame, in <see cref="BeforeSteps"/>, not kept from the start.</summary>
+    protected internal BodyId FindBody(Entity entity) => _links[FindKey(entity)].Id;
 
-    /// <inheritdoc/>
-    public Vector3F Gravity
-    {
-        get => _gravity;
-        set
-        {
-            RequireFinite(value, nameof(value));
-            _gravity = value;
-            if (_simulation != null)
-                _simulation.Gravity = value;
-        }
-    }
-
-    /// <inheritdoc/>
-    public StepStatistics LastStep => _simulation?.LastStep ?? default;
-
-    /// <inheritdoc/>
-    public bool Moves(Entity entity) => entity != null && TryFindKey(entity, out _);
-
-    /// <inheritdoc/>
-    public Vector3F GetLinearVelocity(Entity entity) => _simulation.LinearVelocityOf(_links[FindKey(entity)].Id);
-
-    /// <inheritdoc/>
-    public Vector3F GetAngularVelocity(Entity entity) => _simulation.AngularVelocityOf(_links[FindKey(entity)].Id);
-
-    /// <inheritdoc/>
-    public float GetMass(Entity entity) => _simulation.MassOf(_links[FindKey(entity)].Id);
-
-    /// <inheritdoc/>
-    public bool IsSleeping(Entity entity) => _simulation.IsSleeping(_links[FindKey(entity)].Id);
-
-    /// <inheritdoc/>
-    public void SetLinearVelocity(Entity entity, Vector3F velocity)
-    {
-        RequireFinite(velocity, nameof(velocity));
-        _simulation.SetLinearVelocity(_links[FindMovingKey(entity)].Id, velocity);
-    }
-
-    /// <inheritdoc/>
-    public void SetAngularVelocity(Entity entity, Vector3F velocity)
-    {
-        RequireFinite(velocity, nameof(velocity));
-        _simulation.SetAngularVelocity(_links[FindMovingKey(entity)].Id, velocity);
-    }
-
-    /// <inheritdoc/>
-    public void SetForce(Entity entity, Vector3F force)
-    {
-        RequireFinite(force, nameof(force));
-        _simulation.SetForce(_links[FindDynamicKey(entity)].Id, force);
-    }
-
-    /// <inheritdoc/>
-    public void ApplyImpulse(Entity entity, Vector3F impulse)
-    {
-        RequireFinite(impulse, nameof(impulse));
-        _simulation.ApplyImpulse(_links[FindDynamicKey(entity)].Id, impulse);
-    }
-
-    /// <inheritdoc/>
-    public void ApplyImpulse(Entity entity, Vector3F impulse, WorldPosition point)
-    {
-        RequireFinite(impulse, nameof(impulse));
-        if (!point.IsFinite)
-            throw new ArgumentOutOfRangeException(nameof(point), point, "The point must be finite.");
-
-        _simulation.ApplyImpulse(_links[FindDynamicKey(entity)].Id, impulse, point);
-    }
-
-    /// <inheritdoc/>
-    public void SetTorque(Entity entity, Vector3F torque)
-    {
-        RequireFinite(torque, nameof(torque));
-        _simulation.SetTorque(_links[FindDynamicKey(entity)].Id, torque);
-    }
-
-    /// <inheritdoc/>
-    public void ApplyAngularImpulse(Entity entity, Vector3F impulse)
-    {
-        RequireFinite(impulse, nameof(impulse));
-        _simulation.ApplyAngularImpulse(_links[FindDynamicKey(entity)].Id, impulse);
-    }
-
-    /// <inheritdoc/>
-    public void MoveKinematic(Entity entity, in Pose pose)
+    /// <summary>The body of <paramref name="entity"/>, which must be dynamic or kinematic.</summary>
+    protected internal BodyId FindMovingBody(Entity entity)
     {
         var key = FindKey(entity);
-        if (_links[key].Kind != BodyKind.Kinematic)
-            throw new InvalidOperationException($"Only a kinematic body is moved so; {entity.Name} is {_links[key].Kind}.");
+        if (_links[key].Kind == BodyKind.Static)
+            throw new InvalidOperationException($"{entity.Name} is static; the physics does not move it.");
 
-        _simulation.MoveKinematic(_links[key].Id, pose);
+        return _links[key].Id;
     }
 
-    /// <inheritdoc/>
-    public void WakeUp(Entity entity) => _simulation.WakeUp(_links[FindKey(entity)].Id);
+    /// <summary>The body of <paramref name="entity"/>, which must be dynamic.</summary>
+    protected internal BodyId FindDynamicBody(Entity entity) => FindBodyOfKind(entity, BodyKind.Dynamic, "pushed");
 
-    /// <inheritdoc/>
-    public void WakeUp(in BoundingBox<double> area) => RequireGame().WakeUp(area);
+    /// <summary>The body of <paramref name="entity"/>, which must be kinematic.</summary>
+    protected internal BodyId FindKinematicBody(Entity entity) =>
+        FindBodyOfKind(entity, BodyKind.Kinematic, "moved so");
 
-    /// <inheritdoc/>
-    public void ApplyRadialImpulse(WorldPosition center, float radius, float strength) =>
-        RequireGame().ApplyRadialImpulse(center, radius, strength);
-
-    /// <inheritdoc/>
-    public override void Update(AppTime appTime)
+    /// <summary>Whether the physics moves <paramref name="entity"/>, and its body; see <see cref="FindBody"/>.</summary>
+    protected internal bool TryFindBody(Entity entity, out BodyId body)
     {
-        base.Update(appTime);
+        body = entity != null && TryFindKey(entity, out var key) ? _links[key].Id : BodyId.None;
+        return !body.IsNone;
+    }
+
+    /// <summary>The body the physics made of <paramref name="entity"/> by the last look; none for none - nothing is
+    /// made, as a query asks it.</summary>
+    internal BodyId FindMadeBody(Entity entity) =>
+        entity != null && _keys.TryGetValue(entity, out var key) ? _links[key].Id : BodyId.None;
+
+    /// <summary>Lays <paramref name="scene"/> out in <paramref name="simulation"/> as a game starts.</summary>
+    internal void Start(Scene scene, PhysicsSimulation simulation)
+    {
+        _scene = scene;
+        _simulation = simulation;
+        FollowBodies();
+        OnStarted();
+    }
+
+    /// <summary>Brings the bodies up to the scene before the frame's steps.</summary>
+    internal void BeginFrame()
+    {
+        FollowBodies();
+        BeforeSteps();
+    }
+
+    /// <summary>Stands the entities where the frame's steps left their bodies.</summary>
+    internal void EndFrame()
+    {
+        MoveEntities();
+        AfterSteps();
+    }
+
+    /// <summary>Lets the game's bodies go as it stops, before its simulation ends.</summary>
+    internal void Stop()
+    {
         if (_simulation == null)
             return;
 
-        FollowBodies();
-        if (_stepsOnOwnThread)
-            _simulation.Update();
-        else
-            _simulation.Advance(appTime.FrameTime);
-
-        TellContacts();
-        MoveEntities();
+        try
+        {
+            OnStopped();
+        }
+        finally
+        {
+            _simulation = null;
+            _scene = null;
+            _links.Clear();
+            _keys.Clear();
+            _movers.Clear();
+            _placing.Clear();
+            _toldOfRefusal.Clear();
+            _toldOfDynamicMesh.Clear();
+            _toldOfSkewedRound.Clear();
+            _carriedShapes.Clear();
+            _freeKeys.Clear();
+            _refused.Clear();
+            ForgetJoints();
+        }
     }
 
-    /// <summary>Stops the game's physics too when the service leaves its world while a game plays.</summary>
-    public override void UnloadContent()
+    /// <summary>The scene laid out as the game starts: what a processor derived from this one adds to it - step hooks,
+    /// bodies of its own.</summary>
+    protected virtual void OnStarted()
     {
-        EndGame();
-        base.UnloadContent();
     }
 
-    protected override void OnStart()
+    /// <summary>The scene followed, before the frame's steps: forces to set, bodies of its own to bring up.</summary>
+    protected virtual void BeforeSteps()
     {
-        _settingsBeforeGame = _settings;
-        _gravityBeforeGame = _gravity;
-        _simulation = new PhysicsSimulation(Settings) { Gravity = _gravity };
-        FollowBodies();
-        if (_stepsOnOwnThread)
-            _simulation.Start();
     }
 
-    // The game's own settings and gravity go with it.
-    protected override void OnStop()
+    /// <summary>The entities stood, after the frame's steps: what the steps left to read.</summary>
+    protected virtual void AfterSteps()
     {
-        EndGame();
-        if (_settingsBeforeGame == null)
-            return;
-
-        _settings = _settingsBeforeGame;
-        _gravity = _gravityBeforeGame;
-        _settingsBeforeGame = null;
     }
 
-    // Paused, nothing moves; going on, the time paused is not stepped.
-    protected override void OnPause() => _simulation?.Pause();
-
-    protected override void OnResume()
+    /// <summary>The game stopping, its simulation still there: what to let go of.</summary>
+    protected virtual void OnStopped()
     {
-        if (_stepsOnOwnThread)
-            _simulation?.Start();
-    }
-
-    private void EndGame()
-    {
-        _simulation?.Dispose();
-        _simulation = null;
-        _links.Clear();
-        _keys.Clear();
-        _movers.Clear();
-        _placing.Clear();
-        _toldOfRefusal.Clear();
-        _toldOfDynamicMesh.Clear();
-        _toldOfSkewedRound.Clear();
-        _carriedShapes.Clear();
-        _freeKeys.Clear();
-        _refused.Clear();
-        _contacts.Clear();
-        ForgetJoints();
     }
 
     // Brings the bodies up to the scene: a rigid body new to it, or on an entity enabled again, is made; one whose
@@ -251,7 +156,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     private void FollowBodies()
     {
         _lookNumber++;
-        foreach (var body in Each<RigidBody>())
+        foreach (var body in _scene.Components.Of<RigidBody>())
         {
             var entity = body.Owner;
             if (_keys.TryGetValue(entity, out var key))
@@ -1004,22 +909,14 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
         return true;
     }
 
-    private int FindMovingKey(Entity entity)
+    private BodyId FindBodyOfKind(Entity entity, BodyKind kind, string action)
     {
         var key = FindKey(entity);
-        if (_links[key].Kind == BodyKind.Static)
-            throw new InvalidOperationException($"{entity.Name} is static; the physics does not move it.");
+        if (_links[key].Kind != kind)
+            throw new InvalidOperationException(
+                $"Only a {kind.ToString().ToLowerInvariant()} body is {action}; {entity.Name} is {_links[key].Kind}.");
 
-        return key;
-    }
-
-    private int FindDynamicKey(Entity entity)
-    {
-        var key = FindKey(entity);
-        if (_links[key].Kind != BodyKind.Dynamic)
-            throw new InvalidOperationException($"Only a dynamic body is pushed; {entity.Name} is {_links[key].Kind}.");
-
-        return key;
+        return _links[key].Id;
     }
 
     // Whether the physics can stand entity: a body that moves needs a turn and an even scale above it and no mirror,
@@ -1070,13 +967,4 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     }
 
     private static int CompareDepths(PhysicsBodyLink first, PhysicsBodyLink second) => first.Depth.CompareTo(second.Depth);
-
-    private static void RequireFinite(Vector3F vector, string parameterName)
-    {
-        if (!IsFinite(vector))
-            throw new ArgumentOutOfRangeException(parameterName, vector, "The vector must be finite.");
-    }
-
-    private static bool IsFinite(Vector3F vector) =>
-        float.IsFinite(vector.X) && float.IsFinite(vector.Y) && float.IsFinite(vector.Z);
 }

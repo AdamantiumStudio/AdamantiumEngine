@@ -1,12 +1,11 @@
 using System;
 using System.Collections.Generic;
-using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 using Serilog;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>An entity's collider and rigid body as a model's edits and a scene's entries keep them: a kind of collider,
 /// fitted to the mesh, and a body's settings - put on an entity, and read back from one.</summary>

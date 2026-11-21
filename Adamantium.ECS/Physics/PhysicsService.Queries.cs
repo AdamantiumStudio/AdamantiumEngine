@@ -3,11 +3,10 @@ using System.Buffers;
 using System.Runtime.InteropServices;
 using Adamantium.DarkMatter;
 using Adamantium.DarkMatter.Shapes;
-using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Mathematics;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 public sealed partial class PhysicsService
 {
@@ -15,6 +14,9 @@ public sealed partial class PhysicsService
 
     /// <inheritdoc/>
     public ReadOnlySpan<EntityContactEventArgs> Contacts => CollectionsMarshal.AsSpan(_contacts);
+
+    /// <inheritdoc/>
+    public BodyFinder<AnyBody> Find() => RequireGame().Find().AsReadOnly();
 
     /// <inheritdoc/>
     public bool RayCast(WorldPosition origin, Vector3F direction, float maxDistance, out EntityRayHit hit,
@@ -102,20 +104,20 @@ public sealed partial class PhysicsService
         _contacts.Clear();
         foreach (ref readonly var contact in _simulation.Contacts)
         {
-            _contacts.Add(new EntityContactEventArgs(EntityOf(contact.First), (Collider)contact.FirstPartData,
-                EntityOf(contact.Second), (Collider)contact.SecondPartData, contact));
+            _contacts.Add(new EntityContactEventArgs(EntityOf(contact.First), contact.FirstPartData as Collider,
+                EntityOf(contact.Second), contact.SecondPartData as Collider, contact));
         }
     }
 
     private QueryFilter ToQueryFilter(in EntityQueryFilter filter) => new()
     {
-        Except = filter.Except != null && _keys.TryGetValue(filter.Except, out var key) ? _links[key].Id : BodyId.None,
+        Except = _mainProcessor.FindMadeBody(filter.Except),
         MeetsTriggers = filter.MeetsTriggers
     };
 
-    private Entity EntityOf(BodyId body) => (Entity)_simulation.DataOf(body);
+    private Entity EntityOf(BodyId body) => _simulation.DataOf(body) as Entity;
 
-    private Collider ColliderOf(BodyId body, int part) => (Collider)_simulation.DataOf(body, part);
+    private Collider ColliderOf(BodyId body, int part) => _simulation.DataOf(body, part) as Collider;
 
     private PhysicsSimulation RequireGame() =>
         _simulation ?? throw new InvalidOperationException("No game plays: the physics moves nothing.");

@@ -1,9 +1,9 @@
 using Adamantium.Core.DependencyInjection;
 using Adamantium.ECS.Components;
+using Adamantium.ECS.Physics;
 using Adamantium.Engine;
 using Adamantium.Engine.EntityServices;
 using Adamantium.Engine.Managers;
-using Adamantium.Engine.Physics;
 using Adamantium.Engine.Scenes;
 using Adamantium.Multiverse;
 using Adamantium.Multiverse.Events;

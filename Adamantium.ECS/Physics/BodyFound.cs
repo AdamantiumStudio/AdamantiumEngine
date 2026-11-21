@@ -1,4 +1,4 @@
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>Whether an entity's body - its own, or the one above it - is one the physics holds.</summary>
 internal enum BodyFound

@@ -1,9 +1,8 @@
 using Adamantium.DarkMatter;
-using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Mathematics;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>An entity the physics moves, as the service keeps it: its body in the simulation, what the body was made
 /// from, and where the entity was last stood.</summary>

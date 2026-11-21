@@ -1,7 +1,7 @@
 using Adamantium.DarkMatter;
 using Adamantium.Mathematics;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>The game's physics world as a chain: each action is the service's own, asked at once, in order, and gives
 /// the chain back for the next.</summary>

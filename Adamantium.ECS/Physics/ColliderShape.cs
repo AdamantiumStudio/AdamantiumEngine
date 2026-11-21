@@ -4,7 +4,7 @@ using Adamantium.DarkMatter.Shapes;
 using Adamantium.ECS.Components;
 using Adamantium.Mathematics;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>The physics shape of an entity's collider, scaled as the entity is, and where it stands on the entity.
 /// </summary>

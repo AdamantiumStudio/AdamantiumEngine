@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Adamantium.Engine.Physics;
+using Adamantium.ECS.Physics;
 using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
@@ -11,22 +11,27 @@ namespace Adamantium.EngineTests;
 [TestFixture]
 public class MeshShapeTests
 {
-    // A ridge along Z: two slopes meeting at a crest a body catches on, mirrored or not.
+    // A ridge along Z, mirrored or not: wound back after a mirror, its triangles keep facing up, so the crest stays an
+    // edge between two faces a body catches on, not a fold.
     [TestCase(1f)]
     [TestCase(-1f)]
-    public void ARidgesCrest_StaysAnEdgeToCatchOn_WhenTheMeshIsMirrored(float mirror)
+    public void ARidgesTriangles_KeepFacingUp_WhenTheMeshIsMirrored(float mirror)
     {
         var shape = new CarriedShapeCache().Take(Ridge(), Matrix4x4.CreateScale<float>(mirror, 1, 1),
             new List<CarriedShapeKey>());
 
-        var active = 0;
-        for (var triangle = 0; triangle < shape.TriangleCount; triangle++)
+        var vertices = shape.Vertices;
+        var indices = shape.Indices;
+        var facings = new List<float>();
+        for (var index = 0; index < indices.Count; index += 3)
         {
-            active += Count(shape.GetActiveEdges(triangle));
+            var first = vertices[indices[index]];
+            var normal = Vector3F.Cross(vertices[indices[index + 1]] - first, vertices[indices[index + 2]] - first);
+            facings.Add(normal.Y);
         }
 
-        // Each slope's rim is three edges; the crest, seen from both slopes, two more.
-        Assert.That(active, Is.EqualTo(2 * 3 + 2));
+        Assert.That(facings, Has.Count.EqualTo(4));
+        Assert.That(facings, Has.All.GreaterThan(0));
     }
 
     [Test]
@@ -47,8 +52,6 @@ public class MeshShapeTests
             Assert.That(changed, Is.Not.SameAs(first));
         });
     }
-
-    private static int Count(int edges) => (edges & 1) + ((edges >> 1) & 1) + ((edges >> 2) & 1);
 
     private static Mesh Ridge()
     {

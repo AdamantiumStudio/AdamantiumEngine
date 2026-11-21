@@ -4,7 +4,7 @@ using Adamantium.DarkMatter.Shapes;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Mathematics;
 
-namespace Adamantium.Engine.Physics;
+namespace Adamantium.ECS.Physics;
 
 /// <summary>The shapes of a game's bodies made from hulls and meshes, one for each hull or mesh and carry they share,
 /// kept while a body uses it.</summary>

@@ -2,7 +2,7 @@ using System;
 using System.Collections.Generic;
 using Adamantium.DarkMatter.Shapes;
 using Adamantium.ECS.Components;
-using Adamantium.Engine.Physics;
+using Adamantium.ECS.Physics;
 using Adamantium.Mathematics;
 using NUnit.Framework;
 
