@@ -4,11 +4,12 @@ using Adamantium.DarkMatter.Shapes;
 namespace Adamantium.DarkMatter;
 
 /// <summary>A body told link by link on the caller's stack - its <see cref="BodySettings"/> gathered, nothing kept -
-/// and added by <see cref="Add"/>, as <see cref="PhysicsSimulation.AddBody"/> adds it.</summary>
-public ref struct BodyBuilder
+/// and added by <see cref="Add"/>, as <see cref="PhysicsSimulation.AddBody"/> adds it. Each link gives a new builder
+/// and leaves the one it was told on as it was.</summary>
+public readonly ref struct BodyBuilder
 {
     private readonly PhysicsSimulation _simulation;
-    private BodySettings _settings;
+    private readonly BodySettings _settings;
 
     internal BodyBuilder(PhysicsSimulation simulation, BodySettings settings)
     {
@@ -63,9 +64,5 @@ public ref struct BodyBuilder
     /// <summary>Adds the body as told and gives its id.</summary>
     public BodyId Add() => _simulation.AddBody(_settings);
 
-    private BodyBuilder With(BodySettings settings)
-    {
-        _settings = settings;
-        return this;
-    }
+    private BodyBuilder With(BodySettings settings) => new(_simulation, settings);
 }

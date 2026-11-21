@@ -78,6 +78,29 @@ public class ChainTests
         });
     }
 
+    // Two bodies told from one builder: a link of one leaves the builder, and the other, as they were.
+    [Test]
+    public void ABuildersLinks_LeaveTheBuilderAsItWas()
+    {
+        using var simulation = new PhysicsSimulation();
+        var crate = simulation.NewBody().WithShape(Crate).WithMass(20);
+        var wall = crate.Static().At(new WorldPosition(5, 0, 0)).Add();
+        var box = crate.At(new WorldPosition(-5, 0, 0)).Add();
+        var joint = simulation.NewJoint().Between(box).At(new WorldPosition(-5, 0.5, 0));
+        var rod = joint.Distance().To(new WorldPosition(-5, 3.5, 0)).Add();
+        var ball = joint.Add();
+        simulation.Step();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(simulation.KindOf(wall), Is.EqualTo(BodyKind.Static));
+            Assert.That(simulation.KindOf(box), Is.EqualTo(BodyKind.Dynamic), "the other branch not made static");
+            Assert.That(simulation.MassOf(box), Is.EqualTo(20).Within(1e-4f));
+            Assert.That(simulation.PositionOf(rod), Is.EqualTo(3).Within(0.05f), "a rod three meters long");
+            Assert.That(simulation.PositionOf(ball), Is.Zero, "a ball, not made a rod by the other branch");
+        });
+    }
+
     [Test]
     public void AJointToldLinkByLink_HoldsAsToldInSettings()
     {
