@@ -117,7 +117,7 @@ internal sealed partial class PhysicsWorld
     }
 
     private WorldRayHit WithPartIndex(in WorldRayHit hit) =>
-        new(hit.Body, PartIndexOf(hit.Part), hit.Position, hit.Normal, hit.Distance);
+        new(hit.Body, _parts[hit.Part].Index, hit.Position, hit.Normal, hit.Distance);
 
     // The hits kept nearest first, one for each body - its nearest part - as many as fit; gives how many there are.
     private static int KeepNearestPerBody(Span<WorldRayHit> hits, int count, in WorldRayHit hit)
@@ -152,18 +152,6 @@ internal sealed partial class PhysicsWorld
 
     // The world's own index of the body a query passes by; none for a default handle.
     private int IndexOfExcept(BodyHandle except) => except.IsValid ? Resolve(except) : NoBody;
-
-    // Where a part stands among its body's parts: its place among a compound's, 0 for a body of one shape.
-    private int PartIndexOf(int slot)
-    {
-        var index = 0;
-        for (var part = _bodies[_parts[slot].Body].FirstPart; part != slot; part = _parts[part].Next)
-        {
-            index++;
-        }
-
-        return index;
-    }
 
     /// <inheritdoc/>
     public void Overlap(CollisionShape shape, in Pose pose, ICollection<BodyHandle> into, BodyHandle except = default,
@@ -283,7 +271,7 @@ internal sealed partial class PhysicsWorld
     }
 
     private WorldShapeHit WithPartIndex(in WorldShapeHit hit) =>
-        new(hit.Body, PartIndexOf(hit.Part), hit.Position, hit.Normal, hit.Distance);
+        new(hit.Body, _parts[hit.Part].Index, hit.Position, hit.Normal, hit.Distance);
 
     // Each body part in the box the shape sweeps up to the nearest meeting yet.
     private void CastPart(CollisionShape shape, in LocalPose pose, ref ShapeCast cast)

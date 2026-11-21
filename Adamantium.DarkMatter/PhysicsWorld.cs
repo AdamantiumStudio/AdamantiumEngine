@@ -24,6 +24,9 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
     private readonly Dictionary<ulong, Contact> _contactsByKey = new(PairKeyComparer.Instance);
     private readonly List<Contact> _contacts = [];
     private readonly List<Contact> _pieces = [];
+    // The pairs with a trigger: apart, so the solver, the islands, the waking and the contact points never see them. A
+    // trigger's pieces with a surface are kept by their pair alone.
+    private readonly List<Contact> _triggerContacts = [];
     private readonly List<int> _triangles = [];
     private readonly TriangleCollisionShape _triangle = new();
     private readonly List<ManifoldBuffer> _groups = [];
@@ -343,10 +346,6 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
     {
         foreach (var contact in contacts)
         {
-            // A trigger's overlap pushes nothing: no contact point.
-            if (contact.IsTrigger)
-                continue;
-
             var first = GetHandle(contact.First);
             var second = GetHandle(contact.Second);
             for (var index = 0; index < contact.PointCount; index++)
@@ -509,10 +508,18 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
 
     private void UpdateContacts(float stepSeconds)
     {
+        UpdatePairs(_contacts, stepSeconds, true);
+        UpdatePairs(_triggerContacts, stepSeconds, false);
+    }
+
+    // The pairs met anew where they moved. A pair that pushes is met ahead, by how fast it closes, and wakes what it
+    // touches; a trigger is entered where they overlap, and wakes nothing.
+    private void UpdatePairs(List<Contact> pairs, float stepSeconds, bool pushes)
+    {
         var contactIndex = 0;
-        while (contactIndex < _contacts.Count)
+        while (contactIndex < pairs.Count)
         {
-            var contact = _contacts[contactIndex];
+            var contact = pairs[contactIndex];
             ref var first = ref _bodies[contact.First];
             ref var second = ref _bodies[contact.Second];
             if (!first.IsMoving && !second.IsMoving && first.Marks == BodyMarks.None && second.Marks == BodyMarks.None)
@@ -541,16 +548,15 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
                             + otherPart.Shape.BoundingRadius;
                 var surfaceSpeed = relativeSpeed + surfaceBody.AngularVelocity.Length() * reach
                                    + MeasureSweepSpeed(otherBody, otherPart);
-                CollideWithSurface(contact,
-                    contact.IsTrigger ? 0 : Settings.SpeculativeDistance + surfaceSpeed * stepSeconds);
+                CollideWithSurface(contact, pushes ? Settings.SpeculativeDistance + surfaceSpeed * stepSeconds : 0,
+                    pushes);
                 _metThisStep.Add(contact);
                 contactIndex++;
                 continue;
             }
 
-            // A trigger is entered where they overlap, not where they are about to.
             var closingSpeed = relativeSpeed + MeasureSweepSpeed(first, firstPart) + MeasureSweepSpeed(second, secondPart);
-            var speculativeDistance = contact.IsTrigger ? 0 : Settings.SpeculativeDistance + closingSpeed * stepSeconds;
+            var speculativeDistance = pushes ? Settings.SpeculativeDistance + closingSpeed * stepSeconds : 0;
 
             // In the first body's frame, in float: the pair stands side by side wherever it is in the world.
             var origin = first.Position;
@@ -565,17 +571,18 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
                 contact.PointCount = 0;
             }
 
-            WakeOnTouch(contact);
+            if (pushes)
+                WakeOnTouch(contact);
+
             _metThisStep.Add(contact);
             contactIndex++;
         }
     }
 
-    // A touch wakes a sleeper when the other body moves, or was put there by hand after the sleeper was; a trigger's
-    // wakes nothing.
+    // A touch wakes a sleeper when the other body moves, or was put there by hand after the sleeper was.
     private void WakeOnTouch(Contact contact)
     {
-        if (!contact.Pushes)
+        if (!contact.IsTouching)
             return;
 
         ref var first = ref _bodies[contact.First];
@@ -591,7 +598,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
     // the surface is the triangle's, so a body sliding over a seam does not catch on it. The points of triangles facing
     // the same way are one contact, kept from step to step while it touches: a box on flat ground has four points, not
     // four for every triangle under it.
-    private void CollideWithSurface(Contact holder, float speculativeDistance)
+    private void CollideWithSurface(Contact holder, float speculativeDistance, bool pushes)
     {
         ref var first = ref _bodies[holder.First];
         ref var second = ref _bodies[holder.Second];
@@ -653,7 +660,8 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
             contact.IsSeen = true;
             contact.SurfaceNormal = surfaceNormal;
             RefreshPoints(contact, group, origin);
-            WakeOnTouch(contact);
+            if (pushes)
+                WakeOnTouch(contact);
         }
 
         pieces = holder.Pieces;
@@ -767,8 +775,13 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         holder.Pieces ??= [];
         piece.PieceIndex = holder.Pieces.Count;
         holder.Pieces.Add(piece);
-        piece.ListIndex = _pieces.Count;
-        _pieces.Add(piece);
+        var list = FindListOf(piece);
+        if (list != null)
+        {
+            piece.ListIndex = list.Count;
+            list.Add(piece);
+        }
+
         LinkContact(piece, piece.First);
         LinkContact(piece, piece.Second);
         return piece;
@@ -785,7 +798,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
 
             for (var contact = _bodies[index].Contacts; contact != null; contact = contact.GetNext(index))
             {
-                if (contact.Pushes && _bodies[contact.GetOther(index)].IsDynamic)
+                if (contact.IsTouching && _bodies[contact.GetOther(index)].IsDynamic)
                     WakeIsland(contact.GetOther(index));
             }
         }
@@ -1004,9 +1017,6 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         var points = 0;
         foreach (var contact in _contacts)
         {
-            if (contact.IsTrigger)
-                continue;
-
             var pairPoints = contact.PointCount;
             if (contact.Pieces != null)
             {
@@ -1023,7 +1033,8 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
             points += pairPoints;
         }
 
-        LastStep = new StepStatistics(awake, _contacts.Count, touching, points,
+        // Pairs with a trigger are tested too; they touch nothing that pushes.
+        LastStep = new StepStatistics(awake, _contacts.Count + _triggerContacts.Count, touching, points,
             Stopwatch.GetElapsedTime(startedAt).TotalMilliseconds);
     }
 
@@ -1115,7 +1126,8 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         }
     }
 
-    // Lets go of every contact the body has, waking it, what it touched and the new sleepers near it.
+    // Lets go of every contact the body has, waking it, what it touched and the new sleepers near it; its triggers' go
+    // too, waking nothing.
     private void TearOffContacts(int index)
     {
         WakeIsland(index);
@@ -1123,10 +1135,15 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         while (state.Contacts != null)
         {
             var contact = state.Contacts;
-            if (contact.Pushes)
+            if (contact.IsTouching)
                 WakeIsland(contact.GetOther(index));
 
             DestroyContact(contact);
+        }
+
+        while (state.Triggers != null)
+        {
+            DestroyContact(state.Triggers);
         }
 
         WakeNewSleepersNear(index);
@@ -1136,7 +1153,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
     {
         for (var contact = _bodies[index].Contacts; contact != null; contact = contact.GetNext(index))
         {
-            if (contact.Pushes)
+            if (contact.IsTouching)
                 WakeIsland(contact.GetOther(index));
         }
     }
@@ -1155,8 +1172,9 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         contact.IsTrigger = _parts[firstPart].IsTrigger || _parts[secondPart].IsTrigger;
         contact.IsToldTouching = false;
         CombineMaterials(contact);
-        contact.ListIndex = _contacts.Count;
-        _contacts.Add(contact);
+        var list = FindListOf(contact);
+        contact.ListIndex = list.Count;
+        list.Add(contact);
         _contactsByKey.Add(key, contact);
         LinkContact(contact, first);
         LinkContact(contact, second);
@@ -1190,11 +1208,14 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         UnlinkContact(contact, contact.First);
         UnlinkContact(contact, contact.Second);
         var holder = contact.Holder;
-        var list = holder != null ? _pieces : _contacts;
-        var last = list[^1];
-        list[contact.ListIndex] = last;
-        last.ListIndex = contact.ListIndex;
-        list.RemoveAt(list.Count - 1);
+        var list = FindListOf(contact);
+        if (list != null)
+        {
+            var last = list[^1];
+            list[contact.ListIndex] = last;
+            last.ListIndex = contact.ListIndex;
+            list.RemoveAt(list.Count - 1);
+        }
         if (holder != null)
         {
             var lastPiece = holder.Pieces[^1];
@@ -1211,14 +1232,25 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         _spareContacts.Push(contact);
     }
 
+    // The world's list a contact stands in: the pairs that push or their pieces, or the triggers; null for a trigger's
+    // piece, which only its pair keeps.
+    private List<Contact> FindListOf(Contact contact) =>
+        contact.IsTrigger
+            ? contact.Holder != null ? null : _triggerContacts
+            : contact.Holder != null ? _pieces : _contacts;
+
+    // The first of the body's contacts of the contact's kind: those that push, or those with a trigger.
+    private ref Contact FindFirstOf(Contact contact, int body) =>
+        ref contact.IsTrigger ? ref _bodies[body].Triggers : ref _bodies[body].Contacts;
+
     private void LinkContact(Contact contact, int body)
     {
-        ref var state = ref _bodies[body];
-        var head = state.Contacts;
+        ref var first = ref FindFirstOf(contact, body);
+        var head = first;
         contact.SetPrevious(body, null);
         contact.SetNext(body, head);
         head?.SetPrevious(body, contact);
-        state.Contacts = contact;
+        first = contact;
     }
 
     private void UnlinkContact(Contact contact, int body)
@@ -1228,7 +1260,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         if (previous != null)
             previous.SetNext(body, next);
         else
-            _bodies[body].Contacts = next;
+            FindFirstOf(contact, body) = next;
 
         next?.SetPrevious(body, previous);
         contact.SetPrevious(body, null);
@@ -1279,7 +1311,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         var center = _bodies[body].CenterOfMass;
         if (shape is not CompoundCollisionShape compound)
         {
-            AddPart(body, shape, new LocalPose(-center), default);
+            AddPart(body, 0, shape, new LocalPose(-center), default);
             return;
         }
 
@@ -1288,17 +1320,18 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         for (var index = parts.Count - 1; index >= 0; index--)
         {
             var pose = parts[index].Pose;
-            AddPart(body, parts[index].Shape, new LocalPose(pose.Position - center, pose.Rotation),
+            AddPart(body, index, parts[index].Shape, new LocalPose(pose.Position - center, pose.Rotation),
                 partTraits != null ? partTraits[index] : default);
         }
     }
 
-    private void AddPart(int body, CollisionShape shape, in LocalPose pose, in PartTraits traits)
+    private void AddPart(int body, int index, CollisionShape shape, in LocalPose pose, in PartTraits traits)
     {
         var part = TakePartSlot();
         ref var state = ref _bodies[body];
         ref var slot = ref _parts[part];
         slot.Body = body;
+        slot.Index = index;
         slot.Shape = shape;
         slot.Pose = pose;
         slot.HasOwnMaterial = traits.Material.HasValue;

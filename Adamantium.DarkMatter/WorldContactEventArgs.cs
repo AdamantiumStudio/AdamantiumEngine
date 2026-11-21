@@ -1,8 +1,8 @@
 namespace Adamantium.DarkMatter;
 
-/// <summary>A touch of two parts begun or ended, as the world tells it: by its own handles, the parts by their index in
-/// their bodies.</summary>
-internal readonly struct WorldContactEvent
+/// <summary>What the world tells of a touch of two parts begun or ended: by its own handles, the parts by their index
+/// in their bodies.</summary>
+internal readonly struct WorldContactEventArgs
 {
     public BodyHandle First { get; init; }
     public BodyHandle Second { get; init; }

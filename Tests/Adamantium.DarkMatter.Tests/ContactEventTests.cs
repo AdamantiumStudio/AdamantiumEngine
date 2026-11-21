@@ -126,6 +126,112 @@ public class ContactEventTests
         });
     }
 
+    // A crate resting in a zone on the floor, taken out: it leaves the zone and the floor, and the steps go on clean.
+    [Test]
+    public void ABodyTakenOutInATrigger_LeavesIt()
+    {
+        using var simulation = new PhysicsSimulation();
+        AddFloor(simulation);
+        var zone = AddZone(simulation, 1);
+        var crate = AddCrate(simulation, 0.5);
+        var told = new List<ContactEvent>();
+        StepFor(simulation, 1, told);
+        var entered = told.Count(touch => touch.IsTrigger && touch.Change == ContactChange.Began);
+
+        simulation.RemoveBody(crate);
+        simulation.Step();
+        var atRemoval = simulation.Contacts.ToArray();
+        var after = new List<ContactEvent>();
+        StepFor(simulation, 0.5f, after);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(entered, Is.EqualTo(1));
+            Assert.That(atRemoval.Count(touch => touch.IsTrigger && touch.Change == ContactChange.Ended
+                                                 && touch.Involves(zone, out var other) && other == crate), Is.EqualTo(1));
+            Assert.That(atRemoval.Count(touch => !touch.IsTrigger && touch.Change == ContactChange.Ended), Is.EqualTo(1));
+            Assert.That(after, Is.Empty);
+        });
+    }
+
+    // A kinematic zone swept across a floor of triangles, half sunk in it: it enters the floor and leaves it once, its
+    // touches of triangles kept by the pair alone.
+    [Test]
+    public void ATriggerSweptOverAMesh_EntersAndLeavesItOnce()
+    {
+        using var simulation = new PhysicsSimulation();
+        Vector3F[] corners = [new(-10, 0, -10), new(-10, 0, 10), new(10, 0, 10), new(10, 0, -10)];
+        var floor = simulation.AddBody(new BodySettings
+        {
+            Kind = BodyKind.Static, Shape = new TriangleMeshCollisionShape(corners, [0, 1, 2, 0, 2, 3])
+        });
+        simulation.AddBody(new BodySettings
+        {
+            Kind = BodyKind.Kinematic, Position = new WorldPosition(-15, 0, 0), LinearVelocity = new Vector3F(10, 0, 0),
+            Parts = [new BodyPart { Shape = Crate, IsTrigger = true }]
+        });
+        var told = new List<ContactEvent>();
+
+        StepFor(simulation, 3, told);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(told.Select(touch => touch.Change), Is.EqualTo(new[] { ContactChange.Began, ContactChange.Ended }));
+            Assert.That(told.All(touch => touch.IsTrigger && touch.Involves(floor, out _)), Is.True);
+        });
+    }
+
+    // A crate resting in a zone: the zone's layer and the crate's made not to collide - by the layers, or by the crate
+    // put on another - it leaves the zone, and stays on the floor.
+    [TestCase(false)]
+    [TestCase(true)]
+    public void ATriggerAndABodyThatStopColliding_EndTheirTouch(bool byTheBodysLayer)
+    {
+        using var simulation = new PhysicsSimulation();
+        var zones = simulation.Layers.Define("Zones");
+        var hidden = simulation.Layers.Define("Hidden");
+        simulation.Layers.SetCollides(zones, hidden, false);
+        AddFloor(simulation);
+        simulation.AddBody(new BodySettings
+        {
+            Kind = BodyKind.Static, Position = new WorldPosition(0, 1, 0), Layer = zones,
+            Parts = [new BodyPart { Shape = Zone, IsTrigger = true }]
+        });
+        var crate = AddCrate(simulation, 0.5);
+        StepFor(simulation, 0.5f);
+
+        if (byTheBodysLayer)
+            simulation.SetLayer(crate, hidden);
+        else
+            simulation.Layers.SetCollides(zones, simulation.Layers.Default, false);
+
+        var told = new List<ContactEvent>();
+        StepFor(simulation, 0.5f, told);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(told.Select(touch => (touch.Change, touch.IsTrigger)),
+                Is.EqualTo(new[] { (ContactChange.Ended, true) }));
+            Assert.That(simulation.PoseOf(crate).Position.Y, Is.EqualTo(0.5).Within(0.05), "on the floor still");
+        });
+    }
+
+    // A kinematic crate standing in a zone, made static: two static bodies make no pair, so it leaves the zone.
+    [Test]
+    public void AKinematicBodyMadeStaticInATrigger_LeavesIt()
+    {
+        using var simulation = new PhysicsSimulation();
+        AddZone(simulation, 0);
+        var crate = simulation.AddBody(new BodySettings { Kind = BodyKind.Kinematic, Shape = Crate });
+        var told = new List<ContactEvent>();
+        StepFor(simulation, 0.1f, told);
+
+        simulation.SetKind(crate, BodyKind.Static);
+        StepFor(simulation, 0.1f, told);
+
+        Assert.That(told.Select(touch => touch.Change), Is.EqualTo(new[] { ContactChange.Began, ContactChange.Ended }));
+    }
+
     // A crate dropped through a zone above the floor: it enters and leaves the zone, unslowed, then lands.
     [Test]
     public void ACrateFallingThroughATrigger_EntersAndLeavesIt_AndIsNotSlowed()

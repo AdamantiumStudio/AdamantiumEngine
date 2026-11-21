@@ -24,7 +24,7 @@ All packages share one version.
   out begins none after, even from steps run before its removal reached the simulation's thread. A part made a trigger
   (`BodyPart.IsTrigger`) pushes nothing, weighs nothing and wakes nothing: it only tells what enters and leaves it,
   where they overlap - a kinematic body too. Two triggers tell nothing of each other, and queries pass triggers by
-  unless `QueryFilter.MeetsTriggers`. Contact points and step statistics leave triggers out.
+  unless `QueryFilter.MeetsTriggers`. Contact points, and the touches step statistics count, leave triggers out.
 - `PdfStandardSecurityHandler.KeyBits`: how long an encrypted PDF's key is - 40 to 128 bits for RC4, 128 or 256 for
   AES - what a viewer says of the file's encryption. `PdfDocument.IsOpenedWithPassword` tells whether a password
   opened the file - typed, carried to the file saved again, or in the read options - not the empty one a file that

@@ -6,6 +6,9 @@ namespace Adamantium.DarkMatter.Dynamics;
 internal struct PartState
 {
     public int Body;
+
+    /// <summary>Its place among its body's parts: its index in the compound, 0 for a body of one shape.</summary>
+    public int Index;
     public CollisionShape Shape;
 
     /// <summary>Where the shape stands against the body's center of mass, in the body's own axes.</summary>

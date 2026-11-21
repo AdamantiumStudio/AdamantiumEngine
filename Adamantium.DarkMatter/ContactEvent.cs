@@ -3,7 +3,7 @@ namespace Adamantium.DarkMatter;
 /// <summary>Two parts of two bodies began or stopped touching: a trigger entered or left among them.</summary>
 public readonly struct ContactEvent
 {
-    internal ContactEvent(BodyId first, BodyId second, in WorldContactEvent told)
+    internal ContactEvent(BodyId first, BodyId second, in WorldContactEventArgs told)
     {
         First = first;
         Second = second;

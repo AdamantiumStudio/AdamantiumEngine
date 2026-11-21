@@ -11,12 +11,12 @@ namespace Adamantium.DarkMatter;
 // with how fast they closed before it, an end - a pair parted, or let go of - when it happens.
 internal sealed partial class PhysicsWorld
 {
-    private readonly List<WorldContactEvent> _contactEvents = [];
+    private readonly List<WorldContactEventArgs> _contactEvents = [];
     // The pairs met in this step, looked at once it is solved.
     private readonly List<Contact> _metThisStep = [];
 
     /// <inheritdoc/>
-    public ReadOnlySpan<WorldContactEvent> ContactEvents => CollectionsMarshal.AsSpan(_contactEvents);
+    public ReadOnlySpan<WorldContactEventArgs> ContactEvents => CollectionsMarshal.AsSpan(_contactEvents);
 
     /// <inheritdoc/>
     public void ForgetContactEvents() => _contactEvents.Clear();
@@ -52,13 +52,13 @@ internal sealed partial class PhysicsWorld
         _contactEvents.Add(Describe(contact, ContactChange.Ended));
     }
 
-    private WorldContactEvent Describe(Contact contact, ContactChange change) =>
+    private WorldContactEventArgs Describe(Contact contact, ContactChange change) =>
         new()
         {
             First = GetHandle(contact.First),
             Second = GetHandle(contact.Second),
-            FirstPart = PartIndexOf(contact.FirstPart),
-            SecondPart = PartIndexOf(contact.SecondPart),
+            FirstPart = _parts[contact.FirstPart].Index,
+            SecondPart = _parts[contact.SecondPart].Index,
             Change = change,
             IsTrigger = contact.IsTrigger
         };

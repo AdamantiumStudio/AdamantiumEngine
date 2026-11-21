@@ -38,7 +38,8 @@ internal sealed class Contact
     public int PointCount;
     public readonly ContactPointState[] Points;
 
-    /// <summary>Whether one of the parts is a trigger: met only where they overlap, and pushing nothing.</summary>
+    /// <summary>Whether one of the parts is a trigger: met only where they overlap, and kept in the world's lists of
+    /// triggers, apart from the pairs that push.</summary>
     public bool IsTrigger;
 
     /// <summary>Whether the pair was last told as touching: its touch told begun, and not yet ended.</summary>
@@ -55,9 +56,6 @@ internal sealed class Contact
     }
 
     public bool IsTouching => PointCount > 0;
-
-    /// <summary>Whether it touches and pushes the bodies apart: touching, and no trigger.</summary>
-    public bool Pushes => PointCount > 0 && !IsTrigger;
 
     /// <summary>The key of the pair of part slots, the lesser first.</summary>
     public static ulong MakeKey(int first, int second) =>

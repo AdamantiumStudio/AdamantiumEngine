@@ -265,7 +265,13 @@ internal sealed partial class PhysicsWorld
     // The pairs its new kind makes no longer: two bodies neither of which is dynamic, but for a kinematic in a trigger.
     private void DropUnpairedContacts(int index)
     {
-        var contact = _bodies[index].Contacts;
+        DropUnpairedContacts(_bodies[index].Contacts, index);
+        DropUnpairedContacts(_bodies[index].Triggers, index);
+    }
+
+    private void DropUnpairedContacts(Contact first, int index)
+    {
+        var contact = first;
         while (contact != null)
         {
             var next = contact.GetNext(index);

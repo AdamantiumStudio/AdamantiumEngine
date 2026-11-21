@@ -177,7 +177,7 @@ internal interface IPhysicsWorld
 
     /// <summary>The touches of two parts begun and ended - by the last step, and by changes since such as a body taken
     /// out - in order; forgotten as the next step begins, or by <see cref="ForgetContactEvents"/>.</summary>
-    ReadOnlySpan<WorldContactEvent> ContactEvents { get; }
+    ReadOnlySpan<WorldContactEventArgs> ContactEvents { get; }
 
     void ForgetContactEvents();
 

@@ -13,7 +13,12 @@ internal struct BodyState
     /// <summary>How far the body reaches from its center of mass.</summary>
     public float Reach;
     public BodyMarks Marks;
+
+    /// <summary>The first of the body's pairs that push: what solves, wakes and sleeps walks these.</summary>
     public Contact Contacts;
+
+    /// <summary>The first of the body's pairs with a trigger, apart from those that push.</summary>
+    public Contact Triggers;
 
     public WorldPosition Position;
     public QuaternionF Rotation;
