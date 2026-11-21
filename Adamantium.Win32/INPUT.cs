@@ -11,10 +11,12 @@ namespace Adamantium.Win32
         public InputType Type;
         public InputUnion Data;
 
-        /// <summary>A key going down or up, by its virtual-key code; <paramref name="extended"/> for the keys of the
-        /// extended set - arrows, Home, End, Insert, Delete, page keys, the right Ctrl and Alt - which applications
-        /// otherwise take for the numeric pad's.</summary>
-        public static INPUT Key(ushort virtualKey, bool down, bool extended = false) => new()
+        /// <summary>A key going down or up, by its virtual-key code and its scan code - applications that tell keys by
+        /// their place on the keyboard read the scan code; <paramref name="extended"/> for the keys of the extended set
+        /// - arrows, Home, End, Insert, Delete, page keys, the right Ctrl and Alt - which applications otherwise take for
+        /// the numeric pad's. <see cref="Win32Interop.MapVirtualKey"/> with <see cref="MapVirtualKeyType.VirtualKeyToScanCodeEx"/>
+        /// gives both.</summary>
+        public static INPUT Key(ushort virtualKey, ushort scanCode, bool down, bool extended) => new()
         {
             Type = InputType.Keyboard,
             Data = new InputUnion
@@ -22,6 +24,7 @@ namespace Adamantium.Win32
                 Keyboard = new KEYBDINPUT
                 {
                     VirtualKey = virtualKey,
+                    ScanCode = scanCode,
                     Flags = (down ? default : KeyEventFlags.KeyUp) | (extended ? KeyEventFlags.ExtendedKey : default),
                 },
             },
@@ -75,6 +78,18 @@ namespace Adamantium.Win32
         public KeyEventFlags Flags;
         public uint Time;
         public UIntPtr ExtraInfo;
+    }
+
+    /// <summary>What <see cref="Win32Interop.MapVirtualKey"/> translates.</summary>
+    public enum MapVirtualKeyType : uint
+    {
+        VirtualKeyToScanCode = 0,
+        ScanCodeToVirtualKey = 1,
+        VirtualKeyToCharacter = 2,
+        ScanCodeToVirtualKeyEx = 3,
+
+        /// <summary>The scan code with its prefix in the high byte: 0xE0 or 0xE1 for a key of the extended set.</summary>
+        VirtualKeyToScanCodeEx = 4,
     }
 
     [Flags]

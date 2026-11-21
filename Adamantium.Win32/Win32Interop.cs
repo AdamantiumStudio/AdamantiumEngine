@@ -333,6 +333,11 @@ namespace Adamantium.Win32
         [DllImport("user32.dll", SetLastError = true)]
         public static extern uint SendInput(uint inputCount, INPUT[] inputs, int inputSize);
 
+        /// <summary>Translates between virtual-key codes, scan codes and characters by the current keyboard layout;
+        /// 0 when there is no translation.</summary>
+        [DllImport("user32.dll", EntryPoint = "MapVirtualKeyW")]
+        public static extern uint MapVirtualKey(uint code, MapVirtualKeyType type);
+
         [DllImport("user32.dll")]
         public static extern IntPtr GetForegroundWindow();
 
