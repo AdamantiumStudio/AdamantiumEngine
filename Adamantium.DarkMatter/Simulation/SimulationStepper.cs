@@ -73,6 +73,9 @@ internal sealed partial class SimulationStepper
             case SimulationCommandKind.SetGravity:
                 _world.Gravity = command.Vector;
                 break;
+            case SimulationCommandKind.SetLayersCollide:
+                _world.SetLayersCollide(command.Layer, command.OtherLayer, command.Collides);
+                break;
             case SimulationCommandKind.AddJoint:
             case SimulationCommandKind.RemoveJoint:
             case SimulationCommandKind.SetLimits:

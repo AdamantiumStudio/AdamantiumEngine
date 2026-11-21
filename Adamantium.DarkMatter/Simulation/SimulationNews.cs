@@ -16,6 +16,10 @@ internal struct SimulationNews
     /// <summary>A shape taken - a body's new one, or its first - and its parts' own.</summary>
     public CollisionShape Shape;
     public object[] PartData;
+    public PartTraits[] PartTraits;
+
+    /// <summary>A body's layer taken.</summary>
+    public Layer Layer;
 
     /// <summary>The kind a body settled at, and which of the kinds asked of it that was.</summary>
     public BodyKind BodyKind;

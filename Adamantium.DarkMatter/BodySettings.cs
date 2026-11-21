@@ -41,6 +41,10 @@ public ref struct BodySettings
     /// <summary>How the body rubs and bounces.</summary>
     public PhysicsMaterial Material { get; init; } = PhysicsMaterial.Default;
 
+    /// <summary>The layer the body collides and is met by queries on, and its parts with none of their own; the
+    /// default unless told.</summary>
+    public Layer Layer { get; init; }
+
     /// <summary>How fast its velocity fades by itself, per second.</summary>
     public float LinearDamping { get; init; }
 

@@ -126,6 +126,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         state.StartPosition = state.Position;
         state.StartRotation = state.Rotation;
         state.Material = description.Material;
+        state.Layer = description.Layer.Index;
         state.LinearDamping = description.LinearDamping;
         state.AngularDamping = description.AngularDamping;
         state.GravityScale = description.GravityScale;
@@ -150,7 +151,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
                 state.IslandHead = index;
         }
 
-        AddParts(index, description.Shape, description.PartMaterials);
+        AddParts(index, description.Shape, description.PartTraits);
         var marks = BodyMarks.Moved | BodyMarks.New;
         if (state.IsDynamic && !state.IsAwake)
             _newSleepers++;
@@ -469,7 +470,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
                     if (otherBody.IsMoved && otherPart < part)
                         continue;
 
-                    if (!body.IsDynamic && !otherBody.IsDynamic)
+                    if (!body.IsDynamic && !otherBody.IsDynamic || !PartsCollide(part, otherPart))
                         continue;
 
                     var key = Contact.MakeKey(part, otherPart);
@@ -1230,13 +1231,13 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         return _slotCount++;
     }
 
-    // A compound's parts each with its own material from partMaterials, or none for the body's.
-    private void AddParts(int body, CollisionShape shape, PhysicsMaterial?[] partMaterials)
+    // A compound's parts each with what partTraits give it of its own, the body's for the rest.
+    private void AddParts(int body, CollisionShape shape, PartTraits[] partTraits)
     {
         var center = _bodies[body].CenterOfMass;
         if (shape is not CompoundCollisionShape compound)
         {
-            AddPart(body, shape, new LocalPose(-center), null);
+            AddPart(body, shape, new LocalPose(-center), default);
             return;
         }
 
@@ -1246,11 +1247,11 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         {
             var pose = parts[index].Pose;
             AddPart(body, parts[index].Shape, new LocalPose(pose.Position - center, pose.Rotation),
-                partMaterials?[index]);
+                partTraits != null ? partTraits[index] : default);
         }
     }
 
-    private void AddPart(int body, CollisionShape shape, in LocalPose pose, PhysicsMaterial? material)
+    private void AddPart(int body, CollisionShape shape, in LocalPose pose, in PartTraits traits)
     {
         var part = TakePartSlot();
         ref var state = ref _bodies[body];
@@ -1258,8 +1259,10 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         slot.Body = body;
         slot.Shape = shape;
         slot.Pose = pose;
-        slot.HasOwnMaterial = material.HasValue;
-        slot.Material = material ?? state.Material;
+        slot.HasOwnMaterial = traits.Material.HasValue;
+        slot.Material = traits.Material ?? state.Material;
+        slot.HasOwnLayer = traits.Layer.HasValue;
+        slot.Layer = traits.Layer?.Index ?? state.Layer;
         slot.IsCentered = pose.Position == Vector3F.Zero;
         slot.HasBodyPose = slot.IsCentered && pose.Rotation == QuaternionF.Identity;
         slot.Next = state.FirstPart;
@@ -1357,27 +1360,26 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         RequireFinite(description.LinearVelocity, nameof(description));
         RequireFinite(description.AngularVelocity, nameof(description));
         PhysicsMaterial.RequireUsable(description.Material, nameof(description));
-        RequirePartMaterials(description.Shape, description.PartMaterials, nameof(description));
+        RequirePartTraits(description.Shape, description.PartTraits, nameof(description));
         RequireFiniteNotNegative(description.LinearDamping, nameof(description));
         RequireFiniteNotNegative(description.AngularDamping, nameof(description));
         if (!float.IsFinite(description.GravityScale))
             throw new ArgumentOutOfRangeException(nameof(description), "The gravity scale must be finite.");
     }
 
-    // A material for each of a compound's parts, or none for the body's; usable, every one.
-    private static void RequirePartMaterials(CollisionShape shape, PhysicsMaterial?[] partMaterials,
-        string parameterName)
+    // Traits for each of a compound's parts, or none for the body's; every material usable.
+    private static void RequirePartTraits(CollisionShape shape, PartTraits[] partTraits, string parameterName)
     {
-        if (partMaterials == null)
+        if (partTraits == null)
             return;
 
-        if (shape is not CompoundCollisionShape compound || compound.Parts.Count != partMaterials.Length)
-            throw new ArgumentException("The parts' materials must be one for each part of a compound.", parameterName);
+        if (shape is not CompoundCollisionShape compound || compound.Parts.Count != partTraits.Length)
+            throw new ArgumentException("The parts' own must be given for each part of a compound.", parameterName);
 
-        foreach (var material in partMaterials)
+        foreach (var traits in partTraits)
         {
-            if (material.HasValue)
-                PhysicsMaterial.RequireUsable(material.Value, parameterName);
+            if (traits.Material is { } material)
+                PhysicsMaterial.RequireUsable(material, parameterName);
         }
     }
 

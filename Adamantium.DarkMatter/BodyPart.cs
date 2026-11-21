@@ -19,6 +19,9 @@ public readonly struct BodyPart
     /// <summary>How the part rubs and bounces; the body's for none.</summary>
     public PhysicsMaterial? Material { get; init; }
 
+    /// <summary>The layer the part collides and is met by queries on; the body's for none.</summary>
+    public Layer? Layer { get; init; }
+
     /// <summary>The caller's own, given back by <see cref="PhysicsSimulation.DataOf(BodyId, int)"/>.</summary>
     public object Data { get; init; }
 }

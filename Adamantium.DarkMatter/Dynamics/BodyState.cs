@@ -42,6 +42,9 @@ internal struct BodyState
 
     /// <summary>The body's material, its parts' with none of their own.</summary>
     public PhysicsMaterial Material;
+
+    /// <summary>The index of the body's layer, its parts' with none of their own.</summary>
+    public int Layer;
     public float LinearDamping;
     public float AngularDamping;
     public float GravityScale;

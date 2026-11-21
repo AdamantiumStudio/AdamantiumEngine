@@ -94,8 +94,8 @@ internal interface IPhysicsWorld
 
     /// <summary>Gives <paramref name="body"/> <paramref name="shape"/> in place of its own, its origin where it stands;
     /// its contacts are found anew, and it and what touched it wake. A compound's parts each take their own material
-    /// from <paramref name="partMaterials"/>, or the body's for none or no array.</summary>
-    void SetShape(BodyHandle body, CollisionShape shape, PhysicsMaterial?[] partMaterials = null);
+    /// and layer from <paramref name="partTraits"/>, or the body's for none or no array.</summary>
+    void SetShape(BodyHandle body, CollisionShape shape, PartTraits[] partTraits = null);
 
     /// <summary>Weighs <paramref name="body"/> by <paramref name="mass"/> in kilograms, or by
     /// <paramref name="density"/> when the mass is zero, as <see cref="BodyDescription"/> does; kept, and not looked
@@ -105,6 +105,14 @@ internal interface IPhysicsWorld
     /// <summary>Sets how <paramref name="body"/> rubs and bounces, and its parts with no material of their own, its
     /// contacts at once; a change wakes it and what touches it.</summary>
     void SetMaterial(BodyHandle body, in PhysicsMaterial material);
+
+    /// <summary>Puts <paramref name="body"/>, and its parts with no layer of their own, on <paramref name="layer"/>:
+    /// its pairs that no longer collide let go at once, those that now do are found with the next step.</summary>
+    void SetLayer(BodyHandle body, Layer layer);
+
+    /// <summary>Makes bodies on <paramref name="first"/> and on <paramref name="second"/> collide, or pass through
+    /// each other: every layer collides with every other until told.</summary>
+    void SetLayersCollide(Layer first, Layer second, bool collides);
 
     /// <summary>Sets how quickly <paramref name="body"/>'s motion and spin die away by themselves.</summary>
     void SetDamping(BodyHandle body, float linearDamping, float angularDamping);
@@ -169,22 +177,24 @@ internal interface IPhysicsWorld
 
     /// <summary>Where a ray from <paramref name="origin"/> along <paramref name="direction"/> first meets a body within
     /// <paramref name="maxDistance"/> meters, <paramref name="except"/> passed by; a ray starting inside a body meets it
-    /// at once.</summary>
+    /// at once. Every query meets only parts on <paramref name="layers"/>, a bit for each: all for the default.
+    /// </summary>
     bool RayCast(WorldPosition origin, Vector3F direction, float maxDistance, out WorldRayHit hit,
-        BodyHandle except = default);
+        BodyHandle except = default, ulong layers = ulong.MaxValue);
 
     /// <summary>Writes into <paramref name="hits"/> every body the ray meets within <paramref name="maxDistance"/>,
     /// nearest first, each where it first meets it - the nearest as many as fit - and gives how many it wrote.</summary>
     int RayCast(WorldPosition origin, Vector3F direction, float maxDistance, Span<WorldRayHit> hits,
-        BodyHandle except = default);
+        BodyHandle except = default, ulong layers = ulong.MaxValue);
 
     /// <summary>Adds to <paramref name="into"/> every body but <paramref name="except"/> that shares a point with
     /// <paramref name="shape"/> standing at <paramref name="pose"/>.</summary>
-    void Overlap(CollisionShape shape, in Pose pose, ICollection<BodyHandle> into, BodyHandle except = default);
+    void Overlap(CollisionShape shape, in Pose pose, ICollection<BodyHandle> into, BodyHandle except = default,
+        ulong layers = ulong.MaxValue);
 
     /// <summary>The first body but <paramref name="except"/> <paramref name="shape"/> meets moved by
     /// <paramref name="translation"/> without turning - within half a millimeter - and where it stopped, first within a
     /// millimeter of it; meshes and fields cannot be cast.</summary>
     bool CastShape(CollisionShape shape, in Pose pose, Vector3F translation, out WorldShapeHit hit,
-        BodyHandle except = default);
+        BodyHandle except = default, ulong layers = ulong.MaxValue);
 }

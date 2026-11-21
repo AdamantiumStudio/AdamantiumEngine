@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Adamantium.DarkMatter.CollisionDetection;
+using Adamantium.DarkMatter.Dynamics;
 using Adamantium.DarkMatter.Shapes;
 
 namespace Adamantium.DarkMatter;
@@ -17,7 +18,7 @@ internal sealed partial class PhysicsWorld
 
     /// <inheritdoc/>
     public bool RayCast(WorldPosition origin, Vector3F direction, float maxDistance, out WorldRayHit hit,
-        BodyHandle except = default)
+        BodyHandle except = default, ulong layers = ulong.MaxValue)
     {
         hit = default;
         if (!TryStartRay(origin, direction, maxDistance, except, out var way, out var skipped))
@@ -30,7 +31,7 @@ internal sealed partial class PhysicsWorld
             if (candidate.Entry > nearest)
                 break;
 
-            if (!TryMeetPart(candidate.Item, skipped, origin, way, nearest, out var met))
+            if (!TryMeetPart(candidate.Item, skipped, layers, origin, way, nearest, out var met))
                 continue;
 
             nearest = met.Distance;
@@ -46,7 +47,7 @@ internal sealed partial class PhysicsWorld
 
     /// <inheritdoc/>
     public int RayCast(WorldPosition origin, Vector3F direction, float maxDistance, Span<WorldRayHit> hits,
-        BodyHandle except = default)
+        BodyHandle except = default, ulong layers = ulong.MaxValue)
     {
         if (hits.IsEmpty || !TryStartRay(origin, direction, maxDistance, except, out var way, out var skipped))
             return 0;
@@ -59,7 +60,7 @@ internal sealed partial class PhysicsWorld
             if (count == hits.Length && candidate.Entry > farthest)
                 break;
 
-            if (!TryMeetPart(candidate.Item, skipped, origin, way, maxDistance, out var met))
+            if (!TryMeetPart(candidate.Item, skipped, layers, origin, way, maxDistance, out var met))
                 continue;
 
             count = KeepNearestPerBody(hits, count, met);
@@ -93,13 +94,14 @@ internal sealed partial class PhysicsWorld
         return true;
     }
 
-    // Where the ray meets the part within reach, unless its body is the one passed by; the hit tells the part by its
-    // slot, made its index once kept.
-    private bool TryMeetPart(int slot, int skipped, WorldPosition origin, Vector3F way, float reach, out WorldRayHit hit)
+    // Where the ray meets the part within reach, unless its body is the one passed by or it is on none of the layers;
+    // the hit tells the part by its slot, made its index once kept.
+    private bool TryMeetPart(int slot, int skipped, ulong layers, WorldPosition origin, Vector3F way, float reach,
+        out WorldRayHit hit)
     {
         hit = default;
         ref var part = ref _parts[slot];
-        if (part.Body == skipped)
+        if (part.Body == skipped || !IsOn(part, layers))
             return false;
 
         var pose = PlacePart(_bodies[part.Body], part, origin);
@@ -149,6 +151,8 @@ internal sealed partial class PhysicsWorld
     // The world's own index of the body a query passes by; none for a default handle.
     private int IndexOfExcept(BodyHandle except) => except.IsValid ? Resolve(except) : NoBody;
 
+    private static bool IsOn(in PartState part, ulong layers) => (layers & (1UL << part.Layer)) != 0;
+
     // Where a part stands among its body's parts: its place among a compound's, 0 for a body of one shape.
     private int PartIndexOf(int slot)
     {
@@ -162,7 +166,8 @@ internal sealed partial class PhysicsWorld
     }
 
     /// <inheritdoc/>
-    public void Overlap(CollisionShape shape, in Pose pose, ICollection<BodyHandle> into, BodyHandle except = default)
+    public void Overlap(CollisionShape shape, in Pose pose, ICollection<BodyHandle> into, BodyHandle except = default,
+        ulong layers = ulong.MaxValue)
     {
         ArgumentNullException.ThrowIfNull(shape);
         ArgumentNullException.ThrowIfNull(into);
@@ -184,12 +189,12 @@ internal sealed partial class PhysicsWorld
             var parts = compound.Parts;
             for (var index = 0; index < parts.Count; index++)
             {
-                OverlapPart(parts[index].Shape, placedPose.Transform(parts[index].Pose), origin);
+                OverlapPart(parts[index].Shape, placedPose.Transform(parts[index].Pose), origin, layers);
             }
         }
         else
         {
-            OverlapPart(shape, placedPose, origin);
+            OverlapPart(shape, placedPose, origin, layers);
         }
 
         foreach (var body in _overlapped)
@@ -198,7 +203,7 @@ internal sealed partial class PhysicsWorld
         }
     }
 
-    private void OverlapPart(CollisionShape shape, in LocalPose pose, WorldPosition origin)
+    private void OverlapPart(CollisionShape shape, in LocalPose pose, WorldPosition origin, ulong layers)
     {
         _found.Clear();
         _tree.Query(Place(shape.ComputeBounds(pose), origin), _found);
@@ -206,7 +211,7 @@ internal sealed partial class PhysicsWorld
         foreach (var index in _found)
         {
             ref var part = ref _parts[index];
-            if (_overlappedBodies.Contains(part.Body))
+            if (!IsOn(part, layers) || _overlappedBodies.Contains(part.Body))
                 continue;
 
             var partPose = PlacePart(_bodies[part.Body], part, origin);
@@ -243,7 +248,7 @@ internal sealed partial class PhysicsWorld
 
     /// <inheritdoc/>
     public bool CastShape(CollisionShape shape, in Pose pose, Vector3F translation, out WorldShapeHit hit,
-        BodyHandle except = default)
+        BodyHandle except = default, ulong layers = ulong.MaxValue)
     {
         ArgumentNullException.ThrowIfNull(shape);
         if (SurfaceCollisionShape.HoldsSurface(shape))
@@ -256,7 +261,8 @@ internal sealed partial class PhysicsWorld
         var placedPose = new LocalPose(Vector3F.Zero, NormalizeRotation(pose.Rotation, nameof(pose)));
         var cast = new ShapeCast
         {
-            Origin = pose.Position, Translation = translation, Nearest = 1, Except = IndexOfExcept(except)
+            Origin = pose.Position, Translation = translation, Nearest = 1, Except = IndexOfExcept(except),
+            Layers = layers
         };
         if (shape is CompoundCollisionShape compound)
         {
@@ -287,7 +293,7 @@ internal sealed partial class PhysicsWorld
         foreach (var index in _found)
         {
             ref var part = ref _parts[index];
-            if (part.Body == cast.Except)
+            if (part.Body == cast.Except || !IsOn(part, cast.Layers))
                 continue;
 
             var partPose = PlacePart(_bodies[part.Body], part, cast.Origin);

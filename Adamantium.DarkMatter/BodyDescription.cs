@@ -36,9 +36,12 @@ internal sealed class BodyDescription
     /// <summary>How the body rubs and bounces, and its parts with none of their own.</summary>
     public PhysicsMaterial Material { get; set; } = PhysicsMaterial.Default;
 
-    /// <summary>Each part's own material, in the order of the compound's parts, none for the body's; null when no part
-    /// has one.</summary>
-    public PhysicsMaterial?[] PartMaterials { get; set; }
+    /// <summary>The layer the body collides and is met by queries on, and its parts with none of their own.</summary>
+    public Layer Layer { get; set; }
+
+    /// <summary>What each part has of its own, in the order of the compound's parts; null when no part has any.
+    /// </summary>
+    public PartTraits[] PartTraits { get; set; }
 
     /// <summary>How fast the body's velocity fades by itself, per second.</summary>
     public float LinearDamping { get; set; }

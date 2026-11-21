@@ -18,4 +18,7 @@ internal struct ShapeCast
 
     /// <summary>The world's own index of the body the cast passes by; none for -1.</summary>
     public int Except;
+
+    /// <summary>The layers whose parts it meets, a bit for each.</summary>
+    public ulong Layers;
 }

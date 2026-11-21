@@ -22,6 +22,12 @@ internal struct PartState
 
     /// <summary>Whether <see cref="Material"/> is the part's own, kept when the body's changes.</summary>
     public bool HasOwnMaterial;
+
+    /// <summary>The index of the layer it collides on: its own, or its body's.</summary>
+    public int Layer;
+
+    /// <summary>Whether <see cref="Layer"/> is the part's own, kept when the body's changes.</summary>
+    public bool HasOwnLayer;
     public int Proxy;
     public int Next;
 }

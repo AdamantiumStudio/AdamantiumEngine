@@ -39,12 +39,16 @@ public sealed partial class PhysicsSimulation : IDisposable
         Settings = _stepper.World.Settings;
         _gravity = _stepper.World.Gravity;
         _clock = new StepClock(Settings.StepRate, MaxStepsPerAdvance);
+        Layers = new PhysicsLayers(this);
         for (var batch = 0; batch < MaxBatchesHanded; batch++)
             _spareBatches.Writer.TryWrite(new CommandBatch());
     }
 
     /// <summary>How the simulation steps and solves, read once when it is made.</summary>
     public PhysicsSettings Settings { get; }
+
+    /// <summary>Its 64 layers by name, and which of them collide.</summary>
+    public PhysicsLayers Layers { get; }
 
     /// <summary>The length of one step, in seconds.</summary>
     public float StepSeconds => _stepper.World.StepSeconds;
@@ -119,6 +123,13 @@ public sealed partial class PhysicsSimulation : IDisposable
         _snapshot = null;
     }
 
+    // Asked by its layers: two layers collide, or stop, from the next step.
+    internal void AskLayersCollide(Layer first, Layer second, bool collides) =>
+        _commands.Add(new SimulationCommand
+        {
+            Kind = SimulationCommandKind.SetLayersCollide, Layer = first, OtherLayer = second, Collides = collides
+        });
+
     // Stepped by hand: the stepper runs here, and its result is read at once.
     private void RunHere(int steps)
     {
@@ -137,7 +148,7 @@ public sealed partial class PhysicsSimulation : IDisposable
             throw new InvalidOperationException("The simulation steps on its own thread; Stop it to step it by hand.");
     }
 
-    private void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_isDisposed, this);
+    internal void ThrowIfDisposed() => ObjectDisposedException.ThrowIf(_isDisposed, this);
 
     private static void RequireFinite(Vector3F vector, string parameterName)
     {

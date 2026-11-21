@@ -15,6 +15,9 @@ internal enum NewsKind
     /// <summary>A body's new shape was taken: its parts' own go with it.</summary>
     ShapeTaken,
 
+    /// <summary>A body's new layer was taken.</summary>
+    LayerTaken,
+
     /// <summary>The kind a body has once a kind asked of it was done, taken or not.</summary>
     KindSettled
 }
