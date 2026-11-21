@@ -86,7 +86,7 @@ public partial class PhysicsServiceTests
         _physics.ApplyImpulse(box, new Vector3F(5000, 0, 0));
         Frames(2);
 
-        var expected = 5.0 * 5.0 / (2 * 0.6 * 9.81);
+        var expected = 5.0 * 5.0 / (2 * PhysicsMaterial.Default.Friction * 9.81);
         Assert.That(box.Transform.Position.X, Is.EqualTo(expected).Within(0.1 * expected));
     }
 
@@ -575,7 +575,7 @@ public partial class PhysicsServiceTests
         Assert.That(box.Transform.Position.Y, Is.EqualTo(-0.5).Within(0.02));
     }
 
-    // Its friction changed while it falls, the body is made anew where it stands, moving as it moved: no step back to
+    // Its damping changed while it falls, the body is made anew where it stands, moving as it moved: no step back to
     // where the entity was last drawn.
     [Test]
     public void BodyEditedDuringTheGame_KeepsHowItMoves()
@@ -588,7 +588,7 @@ public partial class PhysicsServiceTests
         var before = box.Transform.Position.Y;
         var falling = _physics.GetLinearVelocity(box);
 
-        box.GetComponent<RigidBody>().Friction = 0.1f;
+        box.GetComponent<RigidBody>().AngularDamping = 0.1f;
         Frame(FrameSeconds);
 
         Assert.That(box.Transform.Position.Y, Is.GreaterThan(before), "on down, not back");
@@ -625,7 +625,7 @@ public partial class PhysicsServiceTests
             Is.LessThan(0.01));
     }
 
-    // The middle box's density and friction cleared while typing - weighing nothing, rubbing by no number - keep what
+    // The middle box's density and damping cleared while typing - weighing nothing, fading by no number - keep what
     // they were: the stack does not lose its support.
     [Test]
     public void StackedBoxsDensityClearedWhileTyping_LeavesTheStackStanding()
@@ -644,11 +644,11 @@ public partial class PhysicsServiceTests
         var middle = boxes[1].GetComponent<RigidBody>();
 
         middle.Density = 0;
-        middle.Friction = float.NaN;
+        middle.LinearDamping = float.NaN;
         Frames(0.5);
         Assert.That(_physics.Moves(boxes[1]), Is.True, "while typing");
         middle.Density = 800;
-        middle.Friction = 0.5f;
+        middle.LinearDamping = 0;
         Frames(1);
 
         Assert.That(_physics.Moves(boxes[1]), Is.True);

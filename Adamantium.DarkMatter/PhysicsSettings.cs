@@ -1,7 +1,8 @@
 namespace Adamantium.DarkMatter;
 
-/// <summary>How a <see cref="PhysicsSimulation"/> steps and solves; read once, when it is made.</summary>
-public sealed class PhysicsSettings
+/// <summary>How a <see cref="PhysicsSimulation"/> steps and solves; read once, when it is made. A copy with some told
+/// otherwise is made by <c>with</c>.</summary>
+public sealed record PhysicsSettings
 {
     /// <summary>The pull every dynamic body feels, in meters per second squared; down along negative Y by default.
     /// The simulation's <see cref="PhysicsSimulation.Gravity"/> starts at it and can change later.</summary>

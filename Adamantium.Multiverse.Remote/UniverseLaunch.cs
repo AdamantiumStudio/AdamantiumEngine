@@ -6,6 +6,10 @@ public sealed class UniverseLaunch
 {
     public string ScenePath { get; set; }
 
+    /// <summary>The game project's physics file (<c>.aphysics</c>): its layers, gravity and steps a second; null for the
+    /// defaults.</summary>
+    public string ProjectPhysicsPath { get; set; }
+
     public string[] ContentFolders { get; set; } = [];
 
     public string[] CodeAssemblies { get; set; } = [];

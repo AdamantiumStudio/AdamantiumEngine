@@ -12,8 +12,9 @@ namespace Adamantium.ECS.Physics;
 public static class PhysicsParts
 {
     /// <summary>Gives <paramref name="entity"/> a collider of <paramref name="kind"/>, fitted to its mesh, in place of the
-    /// ones it has; <see cref="ColliderKind.None"/> takes them off. A kind this engine does not know, or one for an entity
-    /// with no mesh to fit it to, leaves what it has - logged.</summary>
+    /// ones it has, a trigger, on a layer and of a material as the one it had; <see cref="ColliderKind.None"/> takes them
+    /// off. A kind this engine does not know, or one for an entity with no mesh to fit it to, leaves what it has - logged.
+    /// </summary>
     public static void SetCollider(Entity entity, ColliderKind kind)
     {
         ArgumentNullException.ThrowIfNull(entity);
@@ -30,7 +31,11 @@ public static class PhysicsParts
             return;
         }
 
-        PutCollider(entity, Make(kind));
+        var made = Make(kind);
+        if (made != null)
+            SetTraits(made, TraitsOf(entity.GetComponent<Collider>()));
+
+        PutCollider(entity, made);
     }
 
     /// <summary>Gives <paramref name="entity"/> <paramref name="collider"/> in place of the ones it has; null takes them
@@ -88,7 +93,7 @@ public static class PhysicsParts
         ArgumentNullException.ThrowIfNull(body);
         ArgumentNullException.ThrowIfNull(settings);
         return body.Kind == settings.Kind && body.Mass == settings.Mass && body.Density == settings.Density
-               && body.Friction == settings.Friction && body.Restitution == settings.Restitution
+               && IsSameName(body.MaterialPath, settings.MaterialPath) && IsSameName(body.Layer, settings.Layer)
                && body.LinearDamping == settings.LinearDamping && body.AngularDamping == settings.AngularDamping
                && body.GravityScale == settings.GravityScale && body.CanSleep == settings.CanSleep;
     }
@@ -124,8 +129,8 @@ public static class PhysicsParts
         target.Kind = body.Kind;
         target.Mass = body.Mass;
         target.Density = body.Density;
-        target.Friction = body.Friction;
-        target.Restitution = body.Restitution;
+        target.MaterialPath = body.MaterialPath;
+        target.Layer = body.Layer;
         target.LinearDamping = body.LinearDamping;
         target.AngularDamping = body.AngularDamping;
         target.GravityScale = body.GravityScale;
@@ -147,13 +152,39 @@ public static class PhysicsParts
             Kind = body.Kind,
             Mass = body.Mass,
             Density = body.Density,
-            Friction = body.Friction,
-            Restitution = body.Restitution,
+            MaterialPath = NullForEmpty(body.MaterialPath),
+            Layer = NullForEmpty(body.Layer),
             LinearDamping = body.LinearDamping,
             AngularDamping = body.AngularDamping,
             GravityScale = body.GravityScale,
             CanSleep = body.CanSleep
         };
+    }
+
+    /// <summary>Whether <paramref name="collider"/> is a trigger, its layer and material; null for the defaults.
+    /// </summary>
+    public static ColliderTraits TraitsOf(Collider collider)
+    {
+        if (collider == null)
+            return null;
+
+        var traits = new ColliderTraits
+        {
+            IsTrigger = collider.IsTrigger,
+            Layer = NullForEmpty(collider.Layer),
+            MaterialPath = NullForEmpty(collider.MaterialPath)
+        };
+        return traits.HoldsDefaults() ? null : traits;
+    }
+
+    /// <summary>Gives <paramref name="collider"/> <paramref name="traits"/>, as a model's edits or a scene keep them -
+    /// the defaults for null.</summary>
+    public static void SetTraits(Collider collider, ColliderTraits traits)
+    {
+        ArgumentNullException.ThrowIfNull(collider);
+        collider.IsTrigger = traits?.IsTrigger ?? false;
+        collider.Layer = traits?.Layer;
+        collider.MaterialPath = traits?.MaterialPath;
     }
 
     /// <summary>Gives <paramref name="entity"/> the joint <paramref name="joint"/> keeps, held to
@@ -318,11 +349,15 @@ public static class PhysicsParts
 
     // A kind this engine knows, and amounts that are finite and not negative; gravity may pull either way.
     private static bool IsSound(BodyEdits body) =>
-        Enum.IsDefined(body.Kind) && IsAmount(body.Mass) && IsAmount(body.Density) && IsAmount(body.Friction)
-        && IsAmount(body.Restitution) && IsAmount(body.LinearDamping) && IsAmount(body.AngularDamping)
-        && float.IsFinite(body.GravityScale);
+        Enum.IsDefined(body.Kind) && IsAmount(body.Mass) && IsAmount(body.Density) && IsAmount(body.LinearDamping)
+        && IsAmount(body.AngularDamping) && float.IsFinite(body.GravityScale);
 
     private static bool IsAmount(float value) => float.IsFinite(value) && value >= 0;
+
+    private static bool IsSameName(string first, string second) =>
+        string.IsNullOrEmpty(first) ? string.IsNullOrEmpty(second) : first == second;
+
+    private static string NullForEmpty(string name) => string.IsNullOrEmpty(name) ? null : name;
 
     // Numbers all finite, sizes not negative, an axis this engine knows and a rotation that turns.
     private static bool IsSound(ColliderShapeEdits shape) =>

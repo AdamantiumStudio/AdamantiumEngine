@@ -20,8 +20,8 @@ public class BodyEditsTests
             Assert.That(edit.Kind, Is.EqualTo(body.Kind));
             Assert.That(edit.Mass, Is.EqualTo(body.Mass));
             Assert.That(edit.Density, Is.EqualTo(body.Density));
-            Assert.That(edit.Friction, Is.EqualTo(body.Friction));
-            Assert.That(edit.Restitution, Is.EqualTo(body.Restitution));
+            Assert.That(edit.MaterialPath, Is.EqualTo(body.MaterialPath));
+            Assert.That(edit.Layer, Is.EqualTo(body.Layer));
             Assert.That(edit.LinearDamping, Is.EqualTo(body.LinearDamping));
             Assert.That(edit.AngularDamping, Is.EqualTo(body.AngularDamping));
             Assert.That(edit.GravityScale, Is.EqualTo(body.GravityScale));

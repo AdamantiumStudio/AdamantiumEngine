@@ -214,9 +214,10 @@ public static class SceneCapture
         var collider = entity.GetComponent<Collider>();
         var kind = PhysicsParts.KindOf(collider);
         var sizes = collider?.GetShape();
-        if (kind != PhysicsParts.KindOf(template) || sizes != template.GetShape())
+        var traits = PhysicsParts.TraitsOf(collider);
+        if (kind != PhysicsParts.KindOf(template) || sizes != template.GetShape() || traits != null)
         {
-            entry.Collider = new SceneCollider { Kind = kind, Shape = sizes };
+            entry.Collider = new SceneCollider { Kind = kind, Shape = sizes, Traits = traits };
         }
     }
 
