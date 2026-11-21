@@ -23,9 +23,9 @@ public sealed partial class PhysicsSimulation
         if (!Enum.IsDefined(settings.Space))
             throw new ArgumentOutOfRangeException(nameof(settings), settings.Space, "Unknown space of a joint.");
 
-        Find(settings.First);
+        FindToActOn(settings.First);
         if (!settings.Second.IsNone)
-            Find(settings.Second);
+            FindToActOn(settings.Second);
 
         if (settings.First == settings.Second)
             throw new ArgumentException("A joint holds two bodies, or one to the world.", nameof(settings));

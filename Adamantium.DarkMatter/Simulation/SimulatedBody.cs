@@ -43,6 +43,10 @@ internal sealed class SimulatedBody
     /// <summary>The Update its snapshot copy was last listed to move in, by the caller's count.</summary>
     public long SnapshotMark;
 
+    /// <summary>The last walk of a search that gave it, by the simulation's count of walks: a body taken out on the way
+    /// moves another into its place, given once all the same.</summary>
+    public long WalkedIn;
+
     /// <summary>The kind it will have once the commands sent are done, which the actions asked of it are checked by;
     /// how many kinds were asked of it, so only the last one asked settles it.</summary>
     public BodyKind KindAsked;

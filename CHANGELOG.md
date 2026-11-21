@@ -18,13 +18,25 @@ All packages share one version.
   with `LayerOf`; a part has a layer of its own with `BodyPart.Layer`, kept when the body's changes. A query meets only
   the layers of its `QueryFilter.Layers` (`LayerMask`), all unless told.
 - Physics contact events and triggers: `PhysicsSimulation.Contacts` tells the touches of two parts begun and ended
-  (`ContactEvent`, `ContactChange`) in the steps the last `Update` - or `Stop`, `Step`, `Advance` - read: which bodies
+  (`ContactEventArgs`, `ContactChange`) in the steps the last `Update` - or `Stop`, `Step`, `Advance` - read: which bodies
   and parts, and for a beginning where, along which normal and how fast they closed (`ApproachSpeed`). A pair met only
   ahead of time, passing near, does not touch. A body taken out, given a new shape or layer ends its touches; one taken
   out begins none after, even from steps run before its removal reached the simulation's thread. A part made a trigger
   (`BodyPart.IsTrigger`) pushes nothing, weighs nothing and wakes nothing: it only tells what enters and leaves it,
   where they overlap - a kinematic body too. Two triggers tell nothing of each other, and queries pass triggers by
   unless `QueryFilter.MeetsTriggers`. Contact points, and the touches step statistics count, leave triggers out.
+- Physics chains, thin structs on the caller's stack over the simulation's own methods: `Body(id)` (`BodyActions`) acts
+  on and reads one body; `NewBody()` (`BodyBuilder`) and `NewJoint()` (`JointBuilder`) tell a body or a joint link by
+  link and add it; `Query()` (`QueryBuilder`) gathers a filter for a ray, cast or overlap; `World()` (`WorldActions`)
+  sets gravity and layers, wakes an area, sets off an explosion, steps, starts, pauses and stops. New on the simulation:
+  `WakeUp(area)`, and `ApplyRadialImpulse(center, radius, strength)`, fading to none at the radius.
+- Physics searches: `PhysicsSimulation.Find()` (`BodyFinder`) walks the bodies the last step read, kept by ready
+  conditions - `Dynamic`, `Kinematic`, `Static`, `Awake`, `Asleep`, `OnLayers`, `Except`, `Heavier`, `Within` a box or a
+  sphere by the center of mass - and by `Where`: a filter struct of the caller's own (`IBodyFilter`), called straight;
+  a static lambda with its data; or any lambda, as `where` of the query syntax gives it (`BodyView` is what they see).
+  It answers by `foreach`, `Into` - nearest first after `NearestTo` - `Count`, `Any`, `First`, or acts on every body
+  found that can take it: `WakeUp`, `ApplyImpulse`, `SetLinearVelocity`, `SetAngularVelocity`, `SetLayer`,
+  `SetMaterial`, `RemoveBodies`. Nothing is allocated but by a lambda's closure.
 - `PdfStandardSecurityHandler.KeyBits`: how long an encrypted PDF's key is - 40 to 128 bits for RC4, 128 or 256 for
   AES - what a viewer says of the file's encryption. `PdfDocument.IsOpenedWithPassword` tells whether a password
   opened the file - typed, carried to the file saved again, or in the read options - not the empty one a file that

@@ -23,7 +23,7 @@ public class ContactEventTests
         using var simulation = new PhysicsSimulation();
         var floor = AddFloor(simulation);
         var crate = AddCrate(simulation, 2);
-        var told = new List<ContactEvent>();
+        var told = new List<ContactEventArgs>();
 
         StepFor(simulation, 2, told);
 
@@ -48,7 +48,7 @@ public class ContactEventTests
         AddFloor(simulation);
         var crate = AddCrate(simulation, 0.5);
         StepFor(simulation, 1);
-        var told = new List<ContactEvent>();
+        var told = new List<ContactEventArgs>();
 
         simulation.SetPose(crate, new Pose(new WorldPosition(0, 5, 0)));
         StepFor(simulation, 0.1f, told);
@@ -67,7 +67,7 @@ public class ContactEventTests
         {
             Shape = Crate, Position = new WorldPosition(-10, 0, 1.2), LinearVelocity = new Vector3F(30, 0, 0)
         });
-        var told = new List<ContactEvent>();
+        var told = new List<ContactEventArgs>();
 
         StepFor(simulation, 1, told);
 
@@ -86,7 +86,7 @@ public class ContactEventTests
             Shape = Crate, Position = new WorldPosition(0, 0.5, 0), GravityScale = 0, CanSleep = false
         });
         StepFor(simulation, 0.5f);
-        var told = new List<ContactEvent>();
+        var told = new List<ContactEventArgs>();
 
         simulation.SetPose(crate, new Pose(new WorldPosition(0, 0.55, 0)));
         StepFor(simulation, 0.1f, told);
@@ -113,7 +113,7 @@ public class ContactEventTests
         simulation.RemoveBody(crate);
         simulation.Step();
         var atRemoval = simulation.Contacts.ToArray();
-        var after = new List<ContactEvent>();
+        var after = new List<ContactEventArgs>();
         StepFor(simulation, 1, after);
 
         Assert.Multiple(() =>
@@ -134,14 +134,14 @@ public class ContactEventTests
         AddFloor(simulation);
         var zone = AddZone(simulation, 1);
         var crate = AddCrate(simulation, 0.5);
-        var told = new List<ContactEvent>();
+        var told = new List<ContactEventArgs>();
         StepFor(simulation, 1, told);
         var entered = told.Count(touch => touch.IsTrigger && touch.Change == ContactChange.Began);
 
         simulation.RemoveBody(crate);
         simulation.Step();
         var atRemoval = simulation.Contacts.ToArray();
-        var after = new List<ContactEvent>();
+        var after = new List<ContactEventArgs>();
         StepFor(simulation, 0.5f, after);
 
         Assert.Multiple(() =>
@@ -170,7 +170,7 @@ public class ContactEventTests
             Kind = BodyKind.Kinematic, Position = new WorldPosition(-15, 0, 0), LinearVelocity = new Vector3F(10, 0, 0),
             Parts = [new BodyPart { Shape = Crate, IsTrigger = true }]
         });
-        var told = new List<ContactEvent>();
+        var told = new List<ContactEventArgs>();
 
         StepFor(simulation, 3, told);
 
@@ -205,7 +205,7 @@ public class ContactEventTests
         else
             simulation.Layers.SetCollides(zones, simulation.Layers.Default, false);
 
-        var told = new List<ContactEvent>();
+        var told = new List<ContactEventArgs>();
         StepFor(simulation, 0.5f, told);
 
         Assert.Multiple(() =>
@@ -223,7 +223,7 @@ public class ContactEventTests
         using var simulation = new PhysicsSimulation();
         AddZone(simulation, 0);
         var crate = simulation.AddBody(new BodySettings { Kind = BodyKind.Kinematic, Shape = Crate });
-        var told = new List<ContactEvent>();
+        var told = new List<ContactEventArgs>();
         StepFor(simulation, 0.1f, told);
 
         simulation.SetKind(crate, BodyKind.Static);
@@ -240,7 +240,7 @@ public class ContactEventTests
         var floor = AddFloor(simulation);
         var zone = AddZone(simulation, 4);
         var crate = AddCrate(simulation, 7);
-        var told = new List<ContactEvent>();
+        var told = new List<ContactEventArgs>();
 
         StepFor(simulation, 3, told);
 
@@ -265,7 +265,7 @@ public class ContactEventTests
         AddFloor(simulation);
         AddZone(simulation, -1.01);
         AddCrate(simulation, 0.5);
-        var told = new List<ContactEvent>();
+        var told = new List<ContactEventArgs>();
 
         StepFor(simulation, 1, told);
 
@@ -302,7 +302,7 @@ public class ContactEventTests
             Kind = BodyKind.Kinematic, Position = new WorldPosition(-6, 1.05, 0), LinearVelocity = new Vector3F(6, 0, 0),
             Parts = [new BodyPart { Shape = Zone, IsTrigger = true }]
         });
-        var told = new List<ContactEvent>();
+        var told = new List<ContactEventArgs>();
         var sleptThrough = true;
 
         for (var step = 0; step < 2 * simulation.Settings.StepRate; step++)
@@ -373,7 +373,7 @@ public class ContactEventTests
         {
             Position = new WorldPosition(0, 7, 0), Parts = [new BodyPart { Shape = Crate, IsTrigger = true }]
         });
-        var told = new List<ContactEvent>();
+        var told = new List<ContactEventArgs>();
 
         StepFor(simulation, 1, told);
 
@@ -391,7 +391,7 @@ public class ContactEventTests
             Kind = BodyKind.Static, Shape = new TriangleMeshCollisionShape(corners, [0, 1, 2, 0, 2, 3])
         });
         var crate = AddCrate(simulation, 1);
-        var told = new List<ContactEvent>();
+        var told = new List<ContactEventArgs>();
         StepFor(simulation, 1, told);
 
         simulation.SetPose(crate, new Pose(new WorldPosition(0, 5, 0)));
@@ -407,7 +407,7 @@ public class ContactEventTests
         using var simulation = new PhysicsSimulation();
         AddFloor(simulation);
         AddCrate(simulation, 2);
-        var told = new List<ContactEvent>();
+        var told = new List<ContactEventArgs>();
         simulation.Start();
 
         var running = Stopwatch.StartNew();
@@ -432,7 +432,7 @@ public class ContactEventTests
             Kind = BodyKind.Kinematic, Shape = Crate, Position = new WorldPosition(-6, 0, 0),
             LinearVelocity = new Vector3F(6, 0, 0)
         });
-        var told = new List<ContactEvent>();
+        var told = new List<ContactEventArgs>();
 
         StepFor(simulation, 2, told);
 
@@ -493,7 +493,7 @@ public class ContactEventTests
         Thread.Sleep(1000);
 
         simulation.RemoveBody(crate);
-        var told = new List<ContactEvent>();
+        var told = new List<ContactEventArgs>();
         var running = Stopwatch.StartNew();
         while (running.ElapsedMilliseconds < 500)
         {
@@ -527,7 +527,7 @@ public class ContactEventTests
     private static BodyId AddCrate(PhysicsSimulation simulation, double y, double x = 0) =>
         simulation.AddBody(new BodySettings { Shape = Crate, Position = new WorldPosition(x, y, 0) });
 
-    private static void StepFor(PhysicsSimulation simulation, float seconds, List<ContactEvent> told = null)
+    private static void StepFor(PhysicsSimulation simulation, float seconds, List<ContactEventArgs> told = null)
     {
         for (var step = 0; step < seconds * simulation.Settings.StepRate; step++)
         {
