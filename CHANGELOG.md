@@ -972,7 +972,8 @@ All packages share one version.
 ### Fixed
 
 - `Shapes.Ellipse` swept whole turns either way is the whole ellipse: taken round the turn, 720 drew nothing. A sweep
-  past a turn still draws what is left over whole turns, 485 as 125.
+  past a turn still draws what is left over whole turns, 485 as 125; up to 0.00001° past whole turns is rounding,
+  the whole ellipse.
 - A kinematic body moved to a pose in a frame of several steps is read there: it arrived in the first step and fell
   asleep in the next, and a body asleep before and after a run was not read again, so the caller saw it where it was.
 - A touch ended by a body's new shape is told with the old part's own (`ContactEventArgs.FirstPartData`): it was told
