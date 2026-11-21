@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Threading;
 using Adamantium.Pdf.ColorSpaces;
 using Adamantium.Pdf.CrossReference;
 using Adamantium.Pdf.Filters;
@@ -106,6 +107,11 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
     /// only its embedded files - which then ask for one (<see cref="PdfAttachment.NeedsPassword"/>).</summary>
     public bool IsAuthenticated => _security == null || _security.IsAuthenticated || _security.AsksOnlyForEmbeddedFiles;
 
+    /// <summary>Whether a password opened it - given to <see cref="Authenticate"/>, carried by <see
+    /// cref="TakePasswordFrom"/> or in the read options - not the empty one a file that only restricts its rights opens
+    /// with, nor one its attachments asked for when the document itself opens without.</summary>
+    public bool IsOpenedWithPassword => !string.IsNullOrEmpty(_password) && _security is { AsksOnlyForEmbeddedFiles: false };
+
     /// <summary>How many bytes the file has, as it was opened.</summary>
     public long FileSize => _data.Length;
 
@@ -160,13 +166,18 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
     /// <summary>The fonts the document uses - in page resources and their graphics states, forms, tiling patterns,
     /// soft-mask groups, Type 3 fonts and annotation appearances - each once, with the pages that use it; in the order
     /// they are first met, a page's content before its annotations. Reads every page.</summary>
-    public IReadOnlyList<PdfDocumentFont> CollectFonts()
+    public IReadOnlyList<PdfDocumentFont> CollectFonts() => CollectFonts(CancellationToken.None);
+
+    /// <summary>The fonts the document uses, as <see cref="CollectFonts()"/> finds them; <paramref name="stop"/> is heard
+    /// between pages.</summary>
+    public IReadOnlyList<PdfDocumentFont> CollectFonts(CancellationToken stop)
     {
         var collector = new PdfFontCollector(this);
         var order = new List<PdfFont>();
         var pages = new Dictionary<PdfFont, List<int>>(ReferenceEqualityComparer.Instance);
         foreach (var page in Pages)
         {
+            stop.ThrowIfCancellationRequested();
             foreach (var font in collector.Collect(page))
             {
                 if (!pages.TryGetValue(font, out var on))
@@ -335,12 +346,25 @@ public sealed class PdfDocument : IPdfObjectResolver, IPdfLengthResolver
             return true;
         }
 
+        var keyBefore = _security.FileKey;
+        var ownerBefore = _security.IsOwner;
         if (!_security.Authenticate(password))
         {
             return false;
         }
 
-        _password = password;
+        // The owner's password stays the one carried to copies and the file saved again.
+        if (!ownerBefore)
+        {
+            _password = password;
+        }
+
+        // The key the same - the owner's password after the user's opens with the user's key (ISO 32000-2, 7.6.4.4):
+        // all read so far stands, only the rights change.
+        if (keyBefore != null && keyBefore.AsSpan().SequenceEqual(_security.FileKey))
+        {
+            return true;
+        }
 
         // Strings and streams plain, only embedded files encrypted: nothing read so far was, and all of it stands.
         if (_security.StringMethod != PdfCryptMethod.None || _security.StreamMethod != PdfCryptMethod.None)

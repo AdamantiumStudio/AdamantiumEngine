@@ -12,6 +12,11 @@ All packages share one version.
   0.5 and does not bounce, both averaged - before, a pair rubbed by the root of both frictions' product and bounced as
   the bouncier. A body's part has a material of its own with `BodyPart.Material`, or the body's; `SetMaterial` changes
   the body's and those of its parts with none of their own, their contacts at once.
+- `PdfStandardSecurityHandler.KeyBits`: how long an encrypted PDF's key is - 40 to 128 bits for RC4, 128 or 256 for
+  AES - what a viewer says of the file's encryption. `PdfDocument.IsOpenedWithPassword` tells whether a password
+  opened the file - typed, carried to the file saved again, or in the read options - not the empty one a file that
+  only restricts its rights opens with, nor one only its attachments asked for.
+  `PdfDocument.CollectFonts(CancellationToken)` hears its token between pages.
 - `PhysicsSimulation` steps on a thread of its own: `Start`, `Pause`, `Stop`, its `State` (`SimulationState`), and
   `Update` once a frame, which hands over the actions asked since and reads the steps done; a failure of the thread is
   thrown at the next `Update`. The two threads talk through unbounded channels, each side giving back what it read
@@ -691,6 +696,12 @@ All packages share one version.
 
 ### Changed
 
+- `PdfDocument.Authenticate` keeps what was read when the key stays the same - the owner's password after the user's
+  opens with the user's key: only the rights change, nothing is read anew. After the owner's password another is only
+  checked: the owner's access stays, and the owner's password is the one a copy and the file saved again take.
+- `PdfStandardSecurityHandler.Permissions` of a revision 2 file gives the rights of bits 9 to 12, which revision 2 does
+  not define, with the low ones they go with: filling forms with annotating, assembling with modifying, extracting
+  for accessibility with copying, printing well with printing.
 - DarkMatter's core is internal: `PhysicsWorld`, `IPhysicsWorld`, `BodyHandle`, `JointHandle`, `BodyDescription`,
   `JointDescription`, `StepClock`, `ContactPoint`, `WorldRayHit` and `WorldShapeHit`. Physics is worked with through
   `PhysicsSimulation`; the engine no longer uses the core.

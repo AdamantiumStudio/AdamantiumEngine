@@ -92,6 +92,35 @@ public class PdfSecurityTests
         });
     }
 
+    // A password typed, carried or given when opening is told; the empty one a restricted file opens with, or a wrong
+    // one, is not.
+    [TestCase(3)]
+    [TestCase(6)]
+    public void APasswordThatOpenedTheFile_IsTold(int revision)
+    {
+        var bytes = EncryptedFile(new PdfTestEncryption(revision, "user", "owner", -3904));
+        var restricted = PdfDocument.Open(EncryptedFile(new PdfTestEncryption(revision, string.Empty, "owner", -3904)));
+        var emptyTyped = PdfDocument.Open(EncryptedFile(new PdfTestEncryption(revision, string.Empty, "owner", -3904)));
+        emptyTyped.Authenticate(string.Empty);
+        var typed = PdfDocument.Open(bytes);
+        typed.Authenticate("user");
+        var wrong = PdfDocument.Open(bytes);
+        wrong.Authenticate("typo");
+        var carried = PdfDocument.Open([.. bytes, .. "\n% saved again\n"u8]);
+        carried.TakePasswordFrom(typed);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(restricted.IsAuthenticated, Is.True);
+            Assert.That(restricted.IsOpenedWithPassword, Is.False, "the empty password is told as one typed");
+            Assert.That(emptyTyped.IsOpenedWithPassword, Is.False, "the empty password, given, is told as one typed");
+            Assert.That(typed.IsOpenedWithPassword, Is.True);
+            Assert.That(wrong.IsOpenedWithPassword, Is.False, "a wrong password is told as opening the file");
+            Assert.That(carried.IsOpenedWithPassword, Is.True, "the password carried to the file saved again");
+            Assert.That(PdfDocument.Open(bytes, new PdfReadOptions { Password = "user" }).IsOpenedWithPassword, Is.True);
+        });
+    }
+
     [TestCase(3)]
     [TestCase(4)]
     [TestCase(6)]
@@ -104,6 +133,16 @@ public class PdfSecurityTests
         Assert.That(document.Permissions, Is.EqualTo(PdfPermissions.All));
     }
 
+    // How long the key is, as a viewer tells it: 128 bits for RC4 here, 128 for AES-128, 256 for AES-256.
+    [TestCase(3, 128)]
+    [TestCase(4, 128)]
+    [TestCase(6, 256)]
+    public void TheKeysLength_IsToldInBits(int revision, int bits)
+    {
+        var document = PdfDocument.Open(EncryptedFile(new PdfTestEncryption(revision, string.Empty, "owner")));
+        Assert.That(document.Security.KeyBits, Is.EqualTo(bits));
+    }
+
     [Test]
     public void AesV2TakesA128BitKeyWhateverTheLengthSays()
     {
@@ -113,6 +152,7 @@ public class PdfSecurityTests
         var document = PdfDocument.Open(Encoding.Latin1.GetBytes(shortLength));
         Assert.That(document.IsRepaired, Is.False);
         Assert.That(document.IsAuthenticated, Is.True);
+        Assert.That(document.Security.KeyBits, Is.EqualTo(128));
         Assert.That(Encoding.ASCII.GetString(document.Pages[0].GetContents().Span), Is.EqualTo("BT (secret) Tj ET"));
     }
 
@@ -178,6 +218,99 @@ public class PdfSecurityTests
             Assert.That(Encoding.ASCII.GetString(savedAgain.Attachments[0].GetData().Span), Is.EqualTo("attached secret"));
             Assert.That(notGiven.TakePasswordFrom(PdfDocument.Open(bytes)), Is.True, "the document itself is open");
             Assert.That(notGiven.Attachments[0].NeedsPassword, Is.True, "a password was carried that was never given");
+        });
+    }
+
+    // The document opens without a password: the one its attachments asked for is not told as opening it - unless the
+    // filter asks for it at the document's opening.
+    [Test]
+    public void TheAttachmentsPassword_IsNotToldAsOpeningTheDocument()
+    {
+        var encryption = new PdfTestEncryption(4, "user", "owner");
+        var asksForAttachments = PdfDocument.Open(OnlyAttachmentsEncrypted(encryption, true));
+        asksForAttachments.Authenticate("user");
+        var asksAtOpening = PdfDocument.Open(OnlyAttachmentsEncrypted(encryption, true, false));
+        asksAtOpening.Authenticate("user");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(asksForAttachments.IsOpenedWithPassword, Is.False);
+            Assert.That(asksAtOpening.IsOpenedWithPassword, Is.True);
+        });
+    }
+
+    // The owner's password after the user's opens with the same key: what was read stands, only the rights change.
+    [TestCase(3)]
+    [TestCase(4)]
+    [TestCase(6)]
+    public void TheOwnersPasswordAfterTheUsers_KeepsWhatWasRead(int revision)
+    {
+        var document = PdfDocument.Open(EncryptedFile(new PdfTestEncryption(revision, "user", "owner", -3904)));
+        document.Authenticate("user");
+        var page = document.Pages[0];
+
+        var lifted = document.Authenticate("owner");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(lifted, Is.True);
+            Assert.That(document.Security.IsOwner, Is.True);
+            Assert.That(document.Permissions, Is.EqualTo(PdfPermissions.All));
+            Assert.That(document.Pages[0], Is.SameAs(page), "what was read was let go though the key stayed");
+            Assert.That(Encoding.ASCII.GetString(document.Pages[0].GetContents().Span), Is.EqualTo("BT (secret) Tj ET"));
+        });
+    }
+
+    // Revision 2 defines only the low bits: the rights of bits 9 to 12 go with them, whatever those bits say; from
+    // revision 3 the bits are read as written.
+    [Test]
+    public void Revision2_GivesTheHighRightsWithTheLowOnes()
+    {
+        const PdfPermissions printAndCopy = PdfPermissions.Print | PdfPermissions.CopyContent;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(Handler(2, (int)printAndCopy).Permissions,
+                Is.EqualTo(printAndCopy | PdfPermissions.PrintHighQuality | PdfPermissions.ExtractForAccessibility));
+            Assert.That(Handler(3, (int)printAndCopy).Permissions, Is.EqualTo(printAndCopy));
+        });
+    }
+
+    private static PdfStandardSecurityHandler Handler(int revision, int permissions)
+    {
+        var encrypt = new Adamantium.Pdf.Objects.PdfDictionary();
+        encrypt.Set("Filter", new Adamantium.Pdf.Objects.PdfName("Standard"));
+        encrypt.Set("V", new Adamantium.Pdf.Objects.PdfInteger(revision == 2 ? 1 : 2));
+        encrypt.Set("R", new Adamantium.Pdf.Objects.PdfInteger(revision));
+        encrypt.Set("O", new Adamantium.Pdf.Objects.PdfString(new byte[32]));
+        encrypt.Set("U", new Adamantium.Pdf.Objects.PdfString(new byte[32]));
+        encrypt.Set("P", new Adamantium.Pdf.Objects.PdfInteger(permissions));
+        return new PdfStandardSecurityHandler(encrypt, null);
+    }
+
+    // The owner's access, once given, stays: the user's password after it is only checked, and the owner's is what a copy
+    // and the file saved again take.
+    [TestCase(3)]
+    [TestCase(6)]
+    public void APasswordAfterTheOwners_LowersNothing(int revision)
+    {
+        var bytes = EncryptedFile(new PdfTestEncryption(revision, "user", "owner", -3904));
+        var document = PdfDocument.Open(bytes);
+        document.Authenticate("owner");
+
+        var user = document.Authenticate("user");
+        var typo = document.Authenticate("typo");
+        var savedAgain = PdfDocument.Open([.. bytes, .. "\n% saved again\n"u8]);
+        savedAgain.TakePasswordFrom(document);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(user, Is.True, "the user's password is not told as opening the file");
+            Assert.That(typo, Is.False);
+            Assert.That(document.Security.IsOwner, Is.True, "the user's password lowered the owner's access");
+            Assert.That(document.Permissions, Is.EqualTo(PdfPermissions.All));
+            Assert.That(document.Reopen().Security.IsOwner, Is.True, "a copy took the user's password");
+            Assert.That(savedAgain.Security.IsOwner, Is.True, "the file saved again took the user's password");
         });
     }
 
