@@ -126,6 +126,39 @@ public class ContactEventTests
         });
     }
 
+    // A cart resting on two feet loses one: its touch ends, told with the foot's own, which the cart no longer has.
+    [Test]
+    public void APartTakenOff_EndsItsTouch_ToldWithItsOwn()
+    {
+        using var simulation = new PhysicsSimulation();
+        var floor = AddFloor(simulation);
+        var cart = simulation.AddBody(new BodySettings
+        {
+            Parts = (BodyPart[])
+            [
+                new BodyPart { Shape = Crate, Pose = new LocalPose(new Vector3F(-1, 0, 0)), Data = "left" },
+                new BodyPart { Shape = Crate, Pose = new LocalPose(new Vector3F(1, 0, 0)), Data = "right" }
+            ],
+            Position = new WorldPosition(0, 0.5, 0)
+        });
+        StepFor(simulation, 0.5f);
+
+        simulation.SetParts(cart, (BodyPart[])[new BodyPart { Shape = Crate, Pose = new LocalPose(new Vector3F(1, 0, 0)), Data = "right" }]);
+        simulation.Step();
+        var atChange = simulation.Contacts.ToArray();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(atChange.Count(touch => touch.Change == ContactChange.Ended), Is.GreaterThanOrEqualTo(1));
+            Assert.That(atChange.Any(touch => touch.Change == ContactChange.Ended && touch.Involves(cart, out var other)
+                                              && other == floor
+                                              && (touch.First == cart ? touch.FirstPartData : touch.SecondPartData)
+                                              is "left"), Is.True);
+            Assert.That(atChange.All(touch => (touch.First == cart ? touch.FirstPartData : touch.SecondPartData)
+                                              is "left" or "right"), Is.True);
+        });
+    }
+
     // A crate resting in a zone on the floor, taken out: it leaves the zone and the floor, and the steps go on clean.
     [Test]
     public void ABodyTakenOutInATrigger_LeavesIt()

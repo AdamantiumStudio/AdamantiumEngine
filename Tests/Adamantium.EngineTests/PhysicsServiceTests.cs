@@ -18,7 +18,7 @@ namespace Adamantium.EngineTests;
 /// <summary>The physics of a game: the scene's rigid bodies fall, rest and take pushes while it plays, and the
 /// entities follow them. Down is +Y in the engine's world.</summary>
 [TestFixture]
-public class PhysicsServiceTests
+public partial class PhysicsServiceTests
 {
     private const double FrameSeconds = 1.0 / 60;
 

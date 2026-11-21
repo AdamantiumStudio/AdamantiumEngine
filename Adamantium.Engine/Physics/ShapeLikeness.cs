@@ -1,4 +1,5 @@
 using System;
+using Adamantium.DarkMatter;
 using Adamantium.DarkMatter.Shapes;
 
 namespace Adamantium.Engine.Physics;
@@ -10,7 +11,8 @@ internal static class ShapeLikeness
 {
     private const float Closeness = 1e-5f;
 
-    public static bool AreAlike(CompoundPart[] first, CompoundPart[] second)
+    /// <summary>Whether two bodies' parts are alike, each made of the same collider.</summary>
+    public static bool AreAlike(BodyPart[] first, BodyPart[] second)
     {
         if (first.Length != second.Length)
             return false;
@@ -19,7 +21,8 @@ internal static class ShapeLikeness
         {
             var firstPose = first[index].Pose;
             var secondPose = second[index].Pose;
-            if (!AreClose(firstPose.Position, secondPose.Position) || !AreClose(firstPose.Rotation, secondPose.Rotation)
+            if (!ReferenceEquals(first[index].Data, second[index].Data)
+                || !AreClose(firstPose.Position, secondPose.Position) || !AreClose(firstPose.Rotation, secondPose.Rotation)
                 || !AreAlike(first[index].Shape, second[index].Shape))
                 return false;
         }

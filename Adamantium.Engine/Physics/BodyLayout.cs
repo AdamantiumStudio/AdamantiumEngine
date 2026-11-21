@@ -1,5 +1,4 @@
 using Adamantium.DarkMatter;
-using Adamantium.DarkMatter.Shapes;
 using Adamantium.Mathematics;
 
 namespace Adamantium.Engine.Physics;
@@ -10,8 +9,8 @@ internal sealed class BodyLayout
 {
     public BodyKind Kind { get; set; }
 
-    /// <summary>The colliders' shape, around the body's origin.</summary>
-    public CollisionShape Shape { get; set; }
+    /// <summary>The colliders' shapes, a part each, around the body's origin.</summary>
+    public BodyPart[] Parts { get; set; }
 
     /// <summary>Where the body's origin stands.</summary>
     public WorldPosition Position { get; set; }

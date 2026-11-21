@@ -1,5 +1,5 @@
 using System.Collections.Generic;
-using Adamantium.DarkMatter.Shapes;
+using Adamantium.DarkMatter;
 using Adamantium.ECS;
 
 namespace Adamantium.Engine.Physics;
@@ -21,9 +21,9 @@ internal sealed class BodyParts
     /// <summary>The hull and mesh shapes the body took, to give back when it goes.</summary>
     public List<CarriedShapeKey> CarriedShapes { get; } = [];
 
-    /// <summary>The shapes the body was made of, where they stand on it, to tell whether a body made again differs.
-    /// </summary>
-    public CompoundPart[] ShapeParts { get; set; } = [];
+    /// <summary>The parts the body was made of - a collider's shape each, where it stands on it - to tell whether a body
+    /// made again differs.</summary>
+    public BodyPart[] ShapeParts { get; set; } = [];
 
     /// <summary>The body's entity's scale when the body was made: what its joints' points on it are scaled by, read
     /// once, not every frame from a matrix the physics keeps turning.</summary>

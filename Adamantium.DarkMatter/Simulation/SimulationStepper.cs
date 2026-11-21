@@ -102,10 +102,17 @@ internal sealed partial class SimulationStepper
 
         foreach (ref readonly var touch in told)
         {
-            _result.Contacts.Add(new ContactEventArgs(IdOf(touch.First), IdOf(touch.Second), touch));
+            _result.Contacts.Add(new ContactEventArgs(IdOf(touch.First), IdOf(touch.Second),
+                FindPartData(touch.First, touch.FirstPart), FindPartData(touch.Second, touch.SecondPart), touch));
         }
 
         _world.ForgetContactEvents();
+    }
+
+    private object FindPartData(BodyHandle handle, int part)
+    {
+        var partData = _bodies[_slotOfCoreBody[handle.Index]].PartData;
+        return part < partData.Length ? partData[part] : null;
     }
 
     private void ForgetRefusalsOfLastRun()
