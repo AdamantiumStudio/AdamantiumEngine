@@ -40,8 +40,8 @@ internal struct BodyState
     public float Mass;
     public float Density;
 
-    public float Friction;
-    public float Restitution;
+    /// <summary>The body's material, its parts' with none of their own.</summary>
+    public PhysicsMaterial Material;
     public float LinearDamping;
     public float AngularDamping;
     public float GravityScale;

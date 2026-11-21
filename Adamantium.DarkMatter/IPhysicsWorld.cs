@@ -93,17 +93,18 @@ internal interface IPhysicsWorld
     void SetKind(BodyHandle body, BodyKind kind);
 
     /// <summary>Gives <paramref name="body"/> <paramref name="shape"/> in place of its own, its origin where it stands;
-    /// its contacts are found anew, and it and what touched it wake.</summary>
-    void SetShape(BodyHandle body, CollisionShape shape);
+    /// its contacts are found anew, and it and what touched it wake. A compound's parts each take their own material
+    /// from <paramref name="partMaterials"/>, or the body's for none or no array.</summary>
+    void SetShape(BodyHandle body, CollisionShape shape, PhysicsMaterial?[] partMaterials = null);
 
     /// <summary>Weighs <paramref name="body"/> by <paramref name="mass"/> in kilograms, or by
     /// <paramref name="density"/> when the mass is zero, as <see cref="BodyDescription"/> does; kept, and not looked
     /// at, for a body that is not dynamic until it is. A dynamic body and what touches it wake.</summary>
     void SetMass(BodyHandle body, float mass, float density);
 
-    /// <summary>Sets how <paramref name="body"/> rubs and bounces, its contacts at once; a change wakes it and what
-    /// touches it.</summary>
-    void SetMaterial(BodyHandle body, float friction, float restitution);
+    /// <summary>Sets how <paramref name="body"/> rubs and bounces, and its parts with no material of their own, its
+    /// contacts at once; a change wakes it and what touches it.</summary>
+    void SetMaterial(BodyHandle body, in PhysicsMaterial material);
 
     /// <summary>Sets how quickly <paramref name="body"/>'s motion and spin die away by themselves.</summary>
     void SetDamping(BodyHandle body, float linearDamping, float angularDamping);

@@ -204,7 +204,12 @@ public class WorldTests
         Assert.Throws<ArgumentException>(() => world.Add(new BodyDescription { Shape = cube, Density = 0 }));
         Assert.Throws<ArgumentOutOfRangeException>(() => world.Add(new BodyDescription { Shape = cube, Mass = -1 }));
         Assert.Throws<ArgumentException>(() => world.Add(new BodyDescription { Shape = cube, Rotation = default }));
-        Assert.Throws<ArgumentOutOfRangeException>(() => world.Add(new BodyDescription { Shape = cube, Friction = -1 }));
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            world.Add(new BodyDescription { Shape = cube, Material = new PhysicsMaterial { Friction = -1 } }));
+        Assert.Throws<ArgumentOutOfRangeException>(() => world.Add(new BodyDescription
+        {
+            Shape = cube, Material = new PhysicsMaterial { RestitutionCombine = (CombineRule)7 }
+        }));
         Assert.Throws<ArgumentOutOfRangeException>(() =>
             world.Add(new BodyDescription { Shape = cube, Position = new WorldPosition(float.NaN, 0, 0) }));
         Assert.Throws<ArgumentOutOfRangeException>(() => new PhysicsWorld(new PhysicsSettings { ContactHertz = float.NaN }));

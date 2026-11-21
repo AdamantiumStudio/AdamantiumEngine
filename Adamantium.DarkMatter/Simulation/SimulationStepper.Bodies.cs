@@ -101,7 +101,7 @@ internal sealed partial class SimulationStepper
                     Follow(command.Slot, body);
                     break;
                 case SimulationCommandKind.SetShape:
-                    _world.SetShape(body.Handle, command.Shape);
+                    _world.SetShape(body.Handle, command.Shape, command.PartMaterials);
                     Tell(new SimulationNews
                     {
                         Kind = NewsKind.ShapeTaken, Slot = command.Slot, Generation = body.Generation,
@@ -110,7 +110,7 @@ internal sealed partial class SimulationStepper
                     Follow(command.Slot, body);
                     break;
                 case SimulationCommandKind.SetMaterial:
-                    _world.SetMaterial(body.Handle, command.Material.Friction, command.Material.Restitution);
+                    _world.SetMaterial(body.Handle, command.Material);
                     break;
                 case SimulationCommandKind.SetMass:
                     _world.SetMass(body.Handle, command.Mass, command.Density);

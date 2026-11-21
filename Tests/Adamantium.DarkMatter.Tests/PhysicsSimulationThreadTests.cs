@@ -318,6 +318,24 @@ public class PhysicsSimulationThreadTests
             Thread.Sleep(1);
         }
 
+        // Frames back to back, each asking more than a step's worth of frames does: the caller's list and the thread's
+        // grow past what the frames below gather, however many of them fall into one step.
+        for (var burst = 0; burst < 8; burst++)
+        {
+            for (var action = 0; action < 64; action++)
+                simulation.ApplyImpulse(crates[0], new Vector3F(0, 0.0001f, 0));
+
+            simulation.Update();
+        }
+
+        // Every batch goes round again, growing to the caller's list; what the burst left is run.
+        var drain = Stopwatch.StartNew();
+        while (drain.ElapsedMilliseconds < 200)
+        {
+            Frame();
+            Thread.Sleep(1);
+        }
+
         SlowFrame();
         SlowFrame();
         var before = GC.GetAllocatedBytesForCurrentThread();

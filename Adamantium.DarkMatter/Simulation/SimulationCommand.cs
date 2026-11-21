@@ -22,6 +22,9 @@ internal struct SimulationCommand
 
     /// <summary>The caller's own of each part of <see cref="Shape"/>, the body's once the core takes it.</summary>
     public object[] PartData;
+
+    /// <summary>Each part's own material of <see cref="Shape"/>; null when none has one.</summary>
+    public PhysicsMaterial?[] PartMaterials;
     public PhysicsMaterial Material;
     public float Mass;
     public float Density;

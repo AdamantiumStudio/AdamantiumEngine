@@ -7,6 +7,11 @@ All packages share one version.
 
 ### Added
 
+- Physics materials meet by rules: `PhysicsMaterial.FrictionCombine` and `RestitutionCombine` (`CombineRule`: `Average`,
+  `Minimum`, `Multiply`, `Maximum`); two different rules meet by the later of them. `PhysicsMaterial.Default` rubs at
+  0.5 and does not bounce, both averaged - before, a pair rubbed by the root of both frictions' product and bounced as
+  the bouncier. A body's part has a material of its own with `BodyPart.Material`, or the body's; `SetMaterial` changes
+  the body's and those of its parts with none of their own, their contacts at once.
 - `PdfStandardSecurityHandler.KeyBits`: how long an encrypted PDF's key is - 40 to 128 bits for RC4, 128 or 256 for
   AES - what a viewer says of the file's encryption. `PdfDocument.IsOpenedWithPassword` tells whether a password
   opened the file - typed, carried to the file saved again, or in the read options - not the empty one a file that
@@ -890,6 +895,9 @@ All packages share one version.
 
 ### Fixed
 
+- A `PhysicsSimulation` on its own thread allocates only when a step gathers more actions than any step before: each of
+  the batches that take actions to the thread grew by what it happened to carry, so a busy step long after the warm-up
+  could still grow one of them. A batch now grows at once to the caller's list of actions.
 - The universe host lights its scene: it gave the scene no `LightManager`, which the rendering takes the lights from, so
   a game it played was lit by the ambient light alone - nearly black.
 - An output copies its frame from the resolved image, not the multisampled one: `UniverseOutput.CopyOutput` blitted

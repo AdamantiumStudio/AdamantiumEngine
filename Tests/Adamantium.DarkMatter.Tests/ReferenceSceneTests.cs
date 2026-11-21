@@ -104,12 +104,15 @@ public class ReferenceSceneTests
             Assert.That(moved, Is.LessThan(0.05f));
     }
 
-    [Test]
-    public void Ball_BouncesToTheHeightItsRestitutionKeeps()
+    // Dropped 2 m on ground that does not bounce: by the greater it keeps its own 0.5, averaged 0.25 - the height
+    // goes as its square.
+    [TestCase(CombineRule.Maximum, 0.5f, 0.15f)]
+    [TestCase(CombineRule.Average, 0.25f, 0.05f)]
+    public void Ball_BouncesToTheHeightItsRestitutionKeeps(CombineRule rule, float kept, float tolerance)
     {
         var scene = new SceneBuilder();
         scene.AddGround();
-        var ball = scene.AddSphere(new Vector3F(0, 2.5f, 0), 0.5f, restitution: 0.5f);
+        var ball = scene.AddSphere(new Vector3F(0, 2.5f, 0), 0.5f, restitution: 0.5f, restitutionCombine: rule);
 
         var bounced = false;
         var highest = 0f;
@@ -128,7 +131,7 @@ public class ReferenceSceneTests
         }
 
         Assert.That(bounced, Is.True);
-        Assert.That(highest - 0.5f, Is.EqualTo(0.25f * 2f).Within(0.15f));
+        Assert.That(highest - 0.5f, Is.EqualTo(kept * kept * 2f).Within(tolerance));
     }
 
     [Test]

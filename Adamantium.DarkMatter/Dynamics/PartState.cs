@@ -16,6 +16,12 @@ internal struct PartState
 
     /// <summary>Whether the shape stands as its body does, centered and not turned: a body of one shape.</summary>
     public bool HasBodyPose;
+
+    /// <summary>The material the part's contacts meet by: its own, or its body's.</summary>
+    public PhysicsMaterial Material;
+
+    /// <summary>Whether <see cref="Material"/> is the part's own, kept when the body's changes.</summary>
+    public bool HasOwnMaterial;
     public int Proxy;
     public int Next;
 }

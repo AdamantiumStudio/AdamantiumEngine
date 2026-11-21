@@ -47,9 +47,9 @@ internal sealed partial class PhysicsWorld
         }
 
         if (changesShape)
-            LayParts(index);
+            LayParts(index, description.PartMaterials);
 
-        TakeMaterial(index, description.Friction, description.Restitution);
+        TakeMaterial(index, description.Material);
         state.LinearDamping = description.LinearDamping;
         state.AngularDamping = description.AngularDamping;
         TakeGravityScale(index, description.GravityScale);
@@ -74,16 +74,17 @@ internal sealed partial class PhysicsWorld
     }
 
     /// <inheritdoc/>
-    public void SetShape(BodyHandle body, CollisionShape shape)
+    public void SetShape(BodyHandle body, CollisionShape shape, PhysicsMaterial?[] partMaterials = null)
     {
         var index = Resolve(body);
         ArgumentNullException.ThrowIfNull(shape);
+        RequirePartMaterials(shape, partMaterials, nameof(partMaterials));
         ref var state = ref _bodies[index];
         RequireVolume(state.Kind, shape, nameof(shape));
         var mass = state.IsDynamic ? ComputeMass(shape, state.Mass, state.Density) : default;
         TakeShape(index, shape);
         Weigh(index, mass);
-        LayParts(index);
+        LayParts(index, partMaterials);
     }
 
     /// <inheritdoc/>
@@ -107,12 +108,11 @@ internal sealed partial class PhysicsWorld
     }
 
     /// <inheritdoc/>
-    public void SetMaterial(BodyHandle body, float friction, float restitution)
+    public void SetMaterial(BodyHandle body, in PhysicsMaterial material)
     {
         var index = Resolve(body);
-        RequireFiniteNotNegative(friction, nameof(friction));
-        RequireFiniteNotNegative(restitution, nameof(restitution));
-        TakeMaterial(index, friction, restitution);
+        PhysicsMaterial.RequireUsable(material, nameof(material));
+        TakeMaterial(index, material);
     }
 
     /// <inheritdoc/>
@@ -170,25 +170,30 @@ internal sealed partial class PhysicsWorld
     }
 
     // The new shape's parts laid around the center of mass it was weighed for, its pairs found again.
-    private void LayParts(int index)
+    private void LayParts(int index, PhysicsMaterial?[] partMaterials)
     {
         _bodies[index].Reach = 0;
-        AddParts(index, _bodies[index].Shape);
+        AddParts(index, _bodies[index].Shape, partMaterials);
         Mark(index, BodyMarks.Moved | BodyMarks.Placed);
     }
 
-    private void TakeMaterial(int index, float friction, float restitution)
+    // The body's material, and its parts' with none of their own; its pairs meet by them from now on.
+    private void TakeMaterial(int index, in PhysicsMaterial material)
     {
         ref var state = ref _bodies[index];
-        if (state.Friction == friction && state.Restitution == restitution)
+        if (state.Material == material)
             return;
 
-        state.Friction = friction;
-        state.Restitution = restitution;
+        state.Material = material;
+        for (var part = state.FirstPart; part != NoPart; part = _parts[part].Next)
+        {
+            if (!_parts[part].HasOwnMaterial)
+                _parts[part].Material = material;
+        }
+
         for (var contact = state.Contacts; contact != null; contact = contact.GetNext(index))
         {
-            contact.Friction = MathF.Sqrt(_bodies[contact.First].Friction * _bodies[contact.Second].Friction);
-            contact.Restitution = MathF.Max(_bodies[contact.First].Restitution, _bodies[contact.Second].Restitution);
+            CombineMaterials(contact);
         }
 
         // Resting by its friction, it may slide now.

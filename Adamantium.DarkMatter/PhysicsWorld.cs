@@ -125,8 +125,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         state.Rotation = rotation;
         state.StartPosition = state.Position;
         state.StartRotation = state.Rotation;
-        state.Friction = description.Friction;
-        state.Restitution = description.Restitution;
+        state.Material = description.Material;
         state.LinearDamping = description.LinearDamping;
         state.AngularDamping = description.AngularDamping;
         state.GravityScale = description.GravityScale;
@@ -151,7 +150,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
                 state.IslandHead = index;
         }
 
-        AddParts(index, description.Shape);
+        AddParts(index, description.Shape, description.PartMaterials);
         var marks = BodyMarks.Moved | BodyMarks.New;
         if (state.IsDynamic && !state.IsAwake)
             _newSleepers++;
@@ -1116,13 +1115,21 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         contact.FirstPart = firstPart;
         contact.SecondPart = secondPart;
         contact.PointCount = 0;
-        contact.Friction = MathF.Sqrt(_bodies[first].Friction * _bodies[second].Friction);
-        contact.Restitution = MathF.Max(_bodies[first].Restitution, _bodies[second].Restitution);
+        CombineMaterials(contact);
         contact.ListIndex = _contacts.Count;
         _contacts.Add(contact);
         _contactsByKey.Add(key, contact);
         LinkContact(contact, first);
         LinkContact(contact, second);
+    }
+
+    // The friction and bounce the pair's parts meet by; a surface's pieces keep their holder's.
+    private void CombineMaterials(Contact contact)
+    {
+        ref readonly var first = ref _parts[contact.FirstPart].Material;
+        ref readonly var second = ref _parts[contact.SecondPart].Material;
+        contact.Friction = PhysicsMaterial.CombineFriction(first, second);
+        contact.Restitution = PhysicsMaterial.CombineRestitution(first, second);
     }
 
     // A pair with a surface goes with the contacts of its triangles; a triangle's leaves its pair.
@@ -1223,12 +1230,13 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         return _slotCount++;
     }
 
-    private void AddParts(int body, CollisionShape shape)
+    // A compound's parts each with its own material from partMaterials, or none for the body's.
+    private void AddParts(int body, CollisionShape shape, PhysicsMaterial?[] partMaterials)
     {
         var center = _bodies[body].CenterOfMass;
         if (shape is not CompoundCollisionShape compound)
         {
-            AddPart(body, shape, new LocalPose(-center));
+            AddPart(body, shape, new LocalPose(-center), null);
             return;
         }
 
@@ -1237,11 +1245,12 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         for (var index = parts.Count - 1; index >= 0; index--)
         {
             var pose = parts[index].Pose;
-            AddPart(body, parts[index].Shape, new LocalPose(pose.Position - center, pose.Rotation));
+            AddPart(body, parts[index].Shape, new LocalPose(pose.Position - center, pose.Rotation),
+                partMaterials?[index]);
         }
     }
 
-    private void AddPart(int body, CollisionShape shape, in LocalPose pose)
+    private void AddPart(int body, CollisionShape shape, in LocalPose pose, PhysicsMaterial? material)
     {
         var part = TakePartSlot();
         ref var state = ref _bodies[body];
@@ -1249,6 +1258,8 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         slot.Body = body;
         slot.Shape = shape;
         slot.Pose = pose;
+        slot.HasOwnMaterial = material.HasValue;
+        slot.Material = material ?? state.Material;
         slot.IsCentered = pose.Position == Vector3F.Zero;
         slot.HasBodyPose = slot.IsCentered && pose.Rotation == QuaternionF.Identity;
         slot.Next = state.FirstPart;
@@ -1345,12 +1356,29 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         RequireFinite(description.Position, nameof(description));
         RequireFinite(description.LinearVelocity, nameof(description));
         RequireFinite(description.AngularVelocity, nameof(description));
-        RequireFiniteNotNegative(description.Friction, nameof(description));
-        RequireFiniteNotNegative(description.Restitution, nameof(description));
+        PhysicsMaterial.RequireUsable(description.Material, nameof(description));
+        RequirePartMaterials(description.Shape, description.PartMaterials, nameof(description));
         RequireFiniteNotNegative(description.LinearDamping, nameof(description));
         RequireFiniteNotNegative(description.AngularDamping, nameof(description));
         if (!float.IsFinite(description.GravityScale))
             throw new ArgumentOutOfRangeException(nameof(description), "The gravity scale must be finite.");
+    }
+
+    // A material for each of a compound's parts, or none for the body's; usable, every one.
+    private static void RequirePartMaterials(CollisionShape shape, PhysicsMaterial?[] partMaterials,
+        string parameterName)
+    {
+        if (partMaterials == null)
+            return;
+
+        if (shape is not CompoundCollisionShape compound || compound.Parts.Count != partMaterials.Length)
+            throw new ArgumentException("The parts' materials must be one for each part of a compound.", parameterName);
+
+        foreach (var material in partMaterials)
+        {
+            if (material.HasValue)
+                PhysicsMaterial.RequireUsable(material.Value, parameterName);
+        }
     }
 
     // A dynamic body is weighed: a mesh or a height field has no volume to weigh.
