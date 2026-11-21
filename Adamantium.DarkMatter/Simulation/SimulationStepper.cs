@@ -102,7 +102,7 @@ internal sealed partial class SimulationStepper
 
         foreach (ref readonly var touch in told)
         {
-            _result.Contacts.Add(new ContactEvent(IdOf(touch.First), IdOf(touch.Second), touch));
+            _result.Contacts.Add(new ContactEventArgs(IdOf(touch.First), IdOf(touch.Second), touch));
         }
 
         _world.ForgetContactEvents();

@@ -12,7 +12,7 @@ internal sealed class SimulationResult
     public readonly List<SimulationNews> News = [];
 
     /// <summary>The touches begun and ended in the run, in order.</summary>
-    public readonly List<ContactEvent> Contacts = [];
+    public readonly List<ContactEventArgs> Contacts = [];
 
     /// <summary>How many steps the run took, and the simulation's count of steps after them.</summary>
     public int Steps;

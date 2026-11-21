@@ -10,6 +10,9 @@ namespace Adamantium.DarkMatter;
 public sealed partial class PhysicsSimulation
 {
     private readonly List<SimulatedBody> _bodySlots = [];
+    // Each slot's center of mass as the last step read it, side by side: a search of an area walks these, not the
+    // bodies, and looks at a body only once it is in the area.
+    private WorldPosition[] _centers = [];
     private readonly Stack<int> _freeBodySlots = new();
     private readonly List<TakenOutSlot> _takenOutSlots = [];
     private readonly List<BodyId> _liveBodies = [];
@@ -24,7 +27,7 @@ public sealed partial class PhysicsSimulation
     private readonly List<BodyId> _jumpingBodies = [];
     // The touches the runs read since the last Update or step told, in order; and those begun after their body was
     // taken out, not told, until they end.
-    private readonly List<ContactEvent> _contactEvents = [];
+    private readonly List<ContactEventArgs> _contactEvents = [];
     private readonly List<TouchKey> _untoldTouches = [];
     // Counts the Updates that read, so a body's snapshot copy moves once in each.
     private long _snapshotMark;
@@ -42,7 +45,7 @@ public sealed partial class PhysicsSimulation
     /// <summary>The touches of two parts begun and ended - a trigger entered and left among them - in the steps read
     /// by the last <see cref="Update"/>, <see cref="Stop"/>, <see cref="Step"/> or <see cref="Advance"/>, in order;
     /// good until the next. A body taken out ends the touches told begun, and begins none after.</summary>
-    public ReadOnlySpan<ContactEvent> Contacts => CollectionsMarshal.AsSpan(_contactEvents);
+    public ReadOnlySpan<ContactEventArgs> Contacts => CollectionsMarshal.AsSpan(_contactEvents);
 
     /// <summary>Adds a body as <paramref name="settings"/> say and gives its id; it is <see cref="PhysicsStatus.Adding"/>
     /// until a step takes it, and actions on it can be asked at once.</summary>
@@ -62,7 +65,7 @@ public sealed partial class PhysicsSimulation
         body.Layer = description.Layer;
         body.Pose = new Pose(settings.Position, QuaternionF.Normalize(settings.Rotation));
         body.PreviousPose = body.Pose;
-        body.CenterOfMass = settings.Position;
+        TakeCenter(slot, body, settings.Position);
         body.LinearVelocity = settings.LinearVelocity;
         body.AngularVelocity = settings.AngularVelocity;
         body.Mass = 0;
@@ -245,7 +248,7 @@ public sealed partial class PhysicsSimulation
     {
         RequireFinite(pose.Position, nameof(pose));
         RequireTurn(pose.Rotation, nameof(pose));
-        var record = Find(body);
+        var record = FindToActOn(body);
         // Drawn where it was put, not back where the steps under way leave it, until the step of the jump is read.
         record.JumpPose = new Pose(pose.Position, QuaternionF.Normalize(pose.Rotation));
         if (record.JumpBatch == 0)
@@ -271,7 +274,7 @@ public sealed partial class PhysicsSimulation
     /// <summary>Wakes <paramref name="body"/> and everything asleep with it.</summary>
     public void WakeUp(BodyId body)
     {
-        Find(body);
+        FindToActOn(body);
         _commands.Add(new SimulationCommand { Kind = SimulationCommandKind.WakeUp, Slot = body.Index });
     }
 
@@ -281,7 +284,7 @@ public sealed partial class PhysicsSimulation
         if (!Enum.IsDefined(kind))
             throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown kind of body.");
 
-        var record = Find(body);
+        var record = FindToActOn(body);
         record.KindAsked = kind;
         record.KindAsks++;
         _commands.Add(new SimulationCommand
@@ -295,7 +298,7 @@ public sealed partial class PhysicsSimulation
     public void SetShape(BodyId body, CollisionShape shape)
     {
         ArgumentNullException.ThrowIfNull(shape);
-        Find(body);
+        FindToActOn(body);
         _commands.Add(new SimulationCommand
         {
             Kind = SimulationCommandKind.SetShape, Slot = body.Index, Shape = shape, PartData = OnePart
@@ -306,7 +309,7 @@ public sealed partial class PhysicsSimulation
     /// </summary>
     public void SetParts(BodyId body, ReadOnlySpan<BodyPart> parts)
     {
-        Find(body);
+        FindToActOn(body);
         var shape = Compose(parts, out var partData, out var partTraits, nameof(parts));
         _commands.Add(new SimulationCommand
         {
@@ -320,7 +323,7 @@ public sealed partial class PhysicsSimulation
     public void SetMaterial(BodyId body, in PhysicsMaterial material)
     {
         PhysicsMaterial.RequireUsable(material, nameof(material));
-        Find(body);
+        FindToActOn(body);
         _commands.Add(new SimulationCommand
         {
             Kind = SimulationCommandKind.SetMaterial, Slot = body.Index, Material = material
@@ -333,7 +336,7 @@ public sealed partial class PhysicsSimulation
     {
         ThrowIfDisposed();
         Layers.RequireDefined(layer, nameof(layer));
-        Find(body);
+        FindToActOn(body);
         _commands.Add(new SimulationCommand { Kind = SimulationCommandKind.SetLayer, Slot = body.Index, Layer = layer });
     }
 
@@ -344,7 +347,7 @@ public sealed partial class PhysicsSimulation
     {
         RequireAmount(mass, nameof(mass));
         RequireAmount(density, nameof(density));
-        Find(body);
+        FindToActOn(body);
         _commands.Add(new SimulationCommand
         {
             Kind = SimulationCommandKind.SetMass, Slot = body.Index, Mass = mass, Density = density
@@ -356,7 +359,7 @@ public sealed partial class PhysicsSimulation
     {
         RequireAmount(linearDamping, nameof(linearDamping));
         RequireAmount(angularDamping, nameof(angularDamping));
-        Find(body);
+        FindToActOn(body);
         _commands.Add(new SimulationCommand
         {
             Kind = SimulationCommandKind.SetDamping, Slot = body.Index, LinearDamping = linearDamping,
@@ -370,7 +373,7 @@ public sealed partial class PhysicsSimulation
         if (!float.IsFinite(gravityScale))
             throw new ArgumentOutOfRangeException(nameof(gravityScale), gravityScale, "The scale must be finite.");
 
-        Find(body);
+        FindToActOn(body);
         _commands.Add(new SimulationCommand
         {
             Kind = SimulationCommandKind.SetGravityScale, Slot = body.Index, GravityScale = gravityScale
@@ -380,7 +383,7 @@ public sealed partial class PhysicsSimulation
     /// <summary>Sets whether <paramref name="body"/> may fall asleep at rest; forbidden, it wakes.</summary>
     public void SetCanSleep(BodyId body, bool canSleep)
     {
-        Find(body);
+        FindToActOn(body);
         _commands.Add(new SimulationCommand
         {
             Kind = SimulationCommandKind.SetCanSleep, Slot = body.Index, CanSleep = canSleep
@@ -408,7 +411,7 @@ public sealed partial class PhysicsSimulation
             // From where it stood before - as it was added, for its first - unless it was put here by hand.
             body.PreviousPose = reading.Jumped ? reading.Pose : body.Pose;
             body.Pose = reading.Pose;
-            body.CenterOfMass = reading.CenterOfMass;
+            TakeCenter(reading.Slot, body, reading.CenterOfMass);
             body.LinearVelocity = reading.LinearVelocity;
             body.AngularVelocity = reading.AngularVelocity;
             body.Mass = reading.Mass;
@@ -452,7 +455,7 @@ public sealed partial class PhysicsSimulation
 
     // A run done before a body's removal reached it may still begin touches of it: those are not told, nor their ends.
     // The end of one told begun is.
-    private void ReadContacts(List<ContactEvent> contacts)
+    private void ReadContacts(List<ContactEventArgs> contacts)
     {
         foreach (ref readonly var touch in CollectionsMarshal.AsSpan(contacts))
         {
@@ -669,9 +672,19 @@ public sealed partial class PhysicsSimulation
     private void Ask(SimulationCommandKind kind, int slot, Vector3F vector) =>
         _commands.Add(new SimulationCommand { Kind = kind, Slot = slot, Vector = vector });
 
+    // The one place a body's center of mass is written: in its record, and among the centers side by side.
+    private void TakeCenter(int slot, SimulatedBody body, WorldPosition center)
+    {
+        body.CenterOfMass = center;
+        _centers[slot] = center;
+    }
+
     private int NewBodySlot()
     {
         _bodySlots.Add(new SimulatedBody());
+        if (_centers.Length < _bodySlots.Count)
+            Array.Resize(ref _centers, Math.Max(16, _centers.Length * 2));
+
         return _bodySlots.Count - 1;
     }
 
@@ -723,7 +736,7 @@ public sealed partial class PhysicsSimulation
         TryFind(body, out var record) ? record : throw new InvalidOperationException($"{body} is not of this simulation.");
 
     // A body to act on: being added or in the simulation.
-    private SimulatedBody Find(BodyId body)
+    private SimulatedBody FindToActOn(BodyId body)
     {
         var record = FindAny(body);
         if (record.Status is PhysicsStatus.Removed or PhysicsStatus.Refused)
@@ -735,7 +748,7 @@ public sealed partial class PhysicsSimulation
     // A body to act on that moves: dynamic only, or kinematic only, as it will be once the commands are done.
     private SimulatedBody FindKind(BodyId body, bool dynamicOnly, bool kinematicOnly)
     {
-        var record = Find(body);
+        var record = FindToActOn(body);
         if (dynamicOnly && record.KindAsked != BodyKind.Dynamic)
             throw new InvalidOperationException("Only a dynamic body is moved by forces and impulses.");
 
