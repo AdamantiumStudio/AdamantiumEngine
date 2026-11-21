@@ -15,23 +15,19 @@ namespace Adamantium.ProceduralGeometry.Shapes
                EllipseType ellipseType,
                Vector2<double> diameter,
                double startAngle = 0,
-               double sweepAngle = 360,
+               double sweepAngle = MathHelper.Arc.TurnInDegrees,
                bool isClockWise = true,
                int tessellation = 36,
                Matrix4x4<double>? transform = null)
             {
-                // Past a turn the sweep goes round and on: what is left over whole turns, 485 as 125. Whole turns are
-                // the whole ellipse - 720 is not nothing - and so is a sweep past them by no more than rounding.
-                if (sweepAngle is > 360 or < -360)
-                {
-                    var left = sweepAngle % 360;
-                    sweepAngle = Math.Abs(left) <= 1e-5 || double.IsNaN(left) ? Math.CopySign(360, sweepAngle) : left;
-                }
+                // Past a turn the sweep goes round and on: what is left over whole turns, 485 as 125; whole turns are the
+                // whole ellipse - 720 is not nothing.
+                sweepAngle = MathHelper.Arc.ReduceSweep(sweepAngle);
 
                 // A full ellipse, or a pie sector (whose outline returns through the center), is a closed loop; an
                 // edge-to-edge ARC is an open polyline. This flag drives MeshContour.IsGeometryClosed, which is what the
                 // GPU stroke reads to decide whether to wrap the ribbon back to the first point.
-                bool isClosed = Math.Abs(sweepAngle) >= 360.0 || ellipseType == EllipseType.Sector;
+                bool isClosed = Math.Abs(sweepAngle) >= MathHelper.Arc.TurnInDegrees || ellipseType == EllipseType.Sector;
 
                 Mesh mesh = null;
 
@@ -69,7 +65,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 EllipseType ellipseType,
                 Vector2<double> diameter,
                 double startAngle = 0,
-                double sweepAngle = 360,
+                double sweepAngle = MathHelper.Arc.TurnInDegrees,
                 bool isClockWise = true,
                 int tessellation = 36,
                 Matrix4x4<double>? transform = null)
@@ -88,7 +84,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                     sign = 1;
                 }
 
-                if (ellipseType == EllipseType.Sector && range < 360)
+                if (ellipseType == EllipseType.Sector && range < MathHelper.Arc.TurnInDegrees)
                 {
                     vertices.Add(Vector2<double>.Zero);
                 }
@@ -134,7 +130,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 EllipseType ellipseType,
                 Vector2<double> diameter,
                 double startAngle = 0,
-                double sweepAngle = 360,
+                double sweepAngle = MathHelper.Arc.TurnInDegrees,
                 bool isClockWise = true,
                 int tessellation = 36,
                 Matrix4x4<double>? transform = null)
@@ -147,7 +143,7 @@ namespace Adamantium.ProceduralGeometry.Shapes
                 // closing edge is implicit (IsGeometryClosed), and a duplicated start/end vertex is a zero-length segment
                 // the GPU stroke can't normalize. Partial arc: emit `tessellation + 1` points so BOTH the start- and
                 // stop-angle endpoints land exactly on the arc.
-                bool isFull = Math.Abs(sweepAngle) >= 360.0;
+                bool isFull = Math.Abs(sweepAngle) >= MathHelper.Arc.TurnInDegrees;
                 int count = isFull ? tessellation : tessellation + 1;
 
                 // SAME mapping as the solid branch above (isClockWise -> +1). It was inverted here, so one flag meant
