@@ -5,8 +5,9 @@ namespace Adamantium.DarkMatter;
 
 /// <summary>
 /// A search answered in an order: <c>orderby</c> of the query syntax, <c>ThenBy</c>, or nearest first. The order needs
-/// the caller's buffer: <see cref="Into"/> keeps the first bodies in the order, as many as fit, and the rest of the found
-/// are passed by. The order is a struct, the sort built for it; nothing is allocated, but by a lambda's closure.
+/// the caller's buffer: <see cref="Into"/> keeps the first bodies in the order, as many as fit - filled as they come,
+/// sorted once, then a body kept only if it goes before the last - and the rest of the found are passed by. The order is
+/// a struct, the sort built for it; nothing is allocated, but by a lambda's closure.
 /// </summary>
 public readonly ref struct OrderedBodies<TFilter, TOrder>
     where TFilter : IBodyFilter
@@ -27,18 +28,20 @@ public readonly ref struct OrderedBodies<TFilter, TOrder>
         _take = take;
     }
 
+    internal PhysicsSimulation Simulation => _found.Simulation;
+
     /// <summary>Where the order finds two alike, by a key of each, the least first.</summary>
     public OrderedBodies<TFilter, ThenOrder<TOrder, KeyOrder<TKey>>> ThenBy<TKey>(Func<BodyView, TKey> key) =>
-        Then(new KeyOrder<TKey>(key, false));
+        AppendOrder(new KeyOrder<TKey>(key, false));
 
     /// <summary>Where the order finds two alike, by a key of each, the greatest first.</summary>
     public OrderedBodies<TFilter, ThenOrder<TOrder, KeyOrder<TKey>>> ThenByDescending<TKey>(Func<BodyView, TKey> key) =>
-        Then(new KeyOrder<TKey>(key, true));
+        AppendOrder(new KeyOrder<TKey>(key, true));
 
     /// <summary>Where the order finds two alike, by an order of the caller's own.</summary>
     public OrderedBodies<TFilter, ThenOrder<TOrder, TNext>> ThenBy<TNext>(TNext order)
         where TNext : IBodyOrder =>
-        Then(order);
+        AppendOrder(order);
 
     /// <summary>Passes by the first <paramref name="count"/> in the order; they are held apart from the caller's buffer,
     /// on the stack when few, in the shared pool when more.</summary>
@@ -78,7 +81,6 @@ public readonly ref struct OrderedBodies<TFilter, TOrder>
         if (_skip == 0 || room == 0)
             return KeepFirst(bodies[..room]);
 
-        // Room for the skipped as well, no more than there are bodies.
         var needed = (int)Math.Min((long)_skip + room, _found.Simulation.LiveBodyCount);
         BodyId[] rented = null;
         var kept = needed <= MostOnTheStack
@@ -111,8 +113,8 @@ public readonly ref struct OrderedBodies<TFilter, TOrder>
 
     public bool Any() => _take > 0 && _found.Skip(_skip).Any();
 
-    // The first of the found in the order, as many as fit: the buffer filled as they come, then sorted once, and a body
-    // coming after kept only if it goes before the last kept.
+    /// <summary>Keeps the first of the found in the order, as many as <paramref name="bodies"/> holds, and gives how
+    /// many it kept.</summary>
     internal int KeepFirst(Span<BodyId> bodies)
     {
         if (bodies.IsEmpty)
@@ -155,52 +157,7 @@ public readonly ref struct OrderedBodies<TFilter, TOrder>
         return count;
     }
 
-    private OrderedBodies<TFilter, ThenOrder<TOrder, TNext>> Then<TNext>(TNext next)
+    private OrderedBodies<TFilter, ThenOrder<TOrder, TNext>> AppendOrder<TNext>(TNext next)
         where TNext : IBodyOrder =>
         new(_found, new ThenOrder<TOrder, TNext>(_order, next), _skip, _take);
-
-    internal PhysicsSimulation Simulation => _found.Simulation;
-}
-
-/// <summary>What each body of an ordered search gives, in its order. <see cref="Into"/> needs room for the bodies as well
-/// as for what they give: a small buffer of them is taken on the stack, a larger one from the shared pool.</summary>
-public readonly ref struct OrderedSelection<TFilter, TOrder, TResult>
-    where TFilter : IBodyFilter
-    where TOrder : IBodyOrder
-{
-    private const int MostOnTheStack = 128;
-
-    private readonly OrderedBodies<TFilter, TOrder> _ordered;
-    private readonly Func<BodyView, TResult> _selector;
-
-    internal OrderedSelection(OrderedBodies<TFilter, TOrder> ordered, Func<BodyView, TResult> selector)
-    {
-        ArgumentNullException.ThrowIfNull(selector);
-        _ordered = ordered;
-        _selector = selector;
-    }
-
-    /// <summary>Writes what the bodies give into <paramref name="results"/> in the order, as many as fit, and gives how
-    /// many it wrote.</summary>
-    public int Into(Span<TResult> results)
-    {
-        BodyId[] rented = null;
-        var bodies = results.Length <= MostOnTheStack
-            ? stackalloc BodyId[results.Length]
-            : (rented = ArrayPool<BodyId>.Shared.Rent(results.Length)).AsSpan(0, results.Length);
-        try
-        {
-            var count = _ordered.Into(bodies);
-            var simulation = _ordered.Simulation;
-            for (var index = 0; index < count; index++)
-                results[index] = _selector(simulation.ViewOf(bodies[index]));
-
-            return count;
-        }
-        finally
-        {
-            if (rented != null)
-                ArrayPool<BodyId>.Shared.Return(rented);
-        }
-    }
 }

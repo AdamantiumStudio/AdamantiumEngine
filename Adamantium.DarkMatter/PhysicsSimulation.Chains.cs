@@ -33,10 +33,11 @@ public sealed partial class PhysicsSimulation
     // A number of its own for each walk of a search, so a body given by it is given once.
     internal long StartWalk() => ++_walks;
 
-    // A body a search wrote into a caller's buffer, as the last step left it.
+    /// <summary>A body a search wrote into a caller's buffer, as the last step left it.</summary>
     internal BodyView ViewOf(BodyId body) => new(body, _bodySlots[body.Index]);
 
-    // A body a search wrote into a caller's buffer, walked again later: refused once it was taken out.
+    /// <summary>A body a search wrote into a caller's buffer, walked again later: refused once it was taken out.
+    /// </summary>
     internal BodyView ViewOfKept(BodyId body)
     {
         ThrowIfDisposed();

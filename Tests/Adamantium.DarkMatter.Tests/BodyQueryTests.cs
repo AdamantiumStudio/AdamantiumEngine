@@ -51,10 +51,10 @@ public class BodyQueryTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(byMass, Is.EqualTo(new[] { _piece, _shard, _light, _heavy }));
-            Assert.That(byMassDown, Is.EqualTo(new[] { _heavy, _light, _shard, _piece }));
-            Assert.That(byLayerThenMass, Is.EqualTo(new[] { _piece, _shard, _light, _heavy }));
-            Assert.That(nearest, Is.EqualTo(new[] { _piece, _heavy, _shard, _light, _wall }));
+            Assert.That(byMass, Is.EqualTo((BodyId[])[_piece, _shard, _light, _heavy]));
+            Assert.That(byMassDown, Is.EqualTo((BodyId[])[_heavy, _light, _shard, _piece]));
+            Assert.That(byLayerThenMass, Is.EqualTo((BodyId[])[_piece, _shard, _light, _heavy]));
+            Assert.That(nearest, Is.EqualTo((BodyId[])[_piece, _heavy, _shard, _light, _wall]));
         });
     }
 
@@ -69,7 +69,7 @@ public class BodyQueryTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(kept, Is.EqualTo(new[] { _heavy, _light }));
+            Assert.That(kept, Is.EqualTo((BodyId[])[_heavy, _light]));
             Assert.That(lightest, Is.EqualTo(_piece));
         });
     }
@@ -88,7 +88,7 @@ public class BodyQueryTests
             Assert.That(walked, Is.EqualTo(5));
             Assert.That(taken, Is.EqualTo(2));
             Assert.That(skipped, Is.EqualTo(1));
-            Assert.That(middle, Is.EqualTo(new[] { _shard, _light }));
+            Assert.That(middle, Is.EqualTo((BodyId[])[_shard, _light]));
             Assert.That(past, Is.Empty);
         });
     }
@@ -167,9 +167,9 @@ public class BodyQueryTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(groups.Select(group => group.Key), Is.EqualTo(new[] { _simulation.Layers.Default, _debris }));
-            Assert.That(groups[0].Bodies, Is.EqualTo(new[] { _heavy, _light }));
-            Assert.That(groups[1].Bodies, Is.EqualTo(new[] { _shard, _piece }));
+            Assert.That(groups.Select(group => group.Key), Is.EqualTo((Layer[])[_simulation.Layers.Default, _debris]));
+            Assert.That(groups[0].Bodies, Is.EqualTo((BodyId[])[_heavy, _light]));
+            Assert.That(groups[1].Bodies, Is.EqualTo((BodyId[])[_shard, _piece]));
             Assert.Throws<InvalidOperationException>(() =>
                 _simulation.Find().OrderBy(static body => body.Mass).Take(2).GroupBy(static body => body.Layer));
         });
@@ -198,9 +198,9 @@ public class BodyQueryTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(massesFound, Is.EqualTo(new[] { 500f, 10f }).Within(1e-3f));
-            Assert.That(kinds, Is.EquivalentTo(new[] { (BodyKind.Static, 1), (BodyKind.Dynamic, 4) }));
-            Assert.That(debrisNames, Is.EquivalentTo(new[] { _piece.ToString(), _shard.ToString() }));
+            Assert.That(massesFound, Is.EqualTo((float[])[500f, 10f]).Within(1e-3f));
+            Assert.That(kinds, Is.EquivalentTo(((BodyKind, int)[])[(BodyKind.Static, 1), (BodyKind.Dynamic, 4)]));
+            Assert.That(debrisNames, Is.EquivalentTo((string[])[_piece.ToString(), _shard.ToString()]));
         });
     }
 
@@ -262,7 +262,7 @@ public class BodyQueryTests
         Assert.Multiple(() =>
         {
             Assert.That(all, Is.EqualTo(5));
-            Assert.That(distinctKinds, Is.EquivalentTo(new[] { BodyKind.Static, BodyKind.Dynamic }));
+            Assert.That(distinctKinds, Is.EquivalentTo((BodyKind[])[BodyKind.Static, BodyKind.Dynamic]));
         });
     }
 
@@ -289,7 +289,7 @@ public class BodyQueryTests
 
         Assert.Multiple(() =>
         {
-            Assert.That(met, Is.EquivalentTo(new[] { "light", "heavy", "big" }));
+            Assert.That(met, Is.EquivalentTo((string[])["light", "heavy", "big"]));
             Assert.That(touched, Has.Count.EqualTo(1), "the crate put against the heavy one");
         });
     }

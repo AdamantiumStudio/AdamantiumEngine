@@ -29,6 +29,8 @@ public readonly ref struct BodyFinder<TFilter>
         _take = take;
     }
 
+    internal PhysicsSimulation Simulation => _simulation;
+
     /// <summary>Keeps dynamic bodies; told with another kind, either.</summary>
     public BodyFinder<TFilter> Dynamic() => With(_conditions.WithKind(BodyKind.Dynamic));
 
@@ -115,21 +117,21 @@ public readonly ref struct BodyFinder<TFilter>
         if (!point.IsFinite)
             throw new ArgumentOutOfRangeException(nameof(point), point, "The point must be finite.");
 
-        return Ordered(new NearestOrder(point));
+        return Order(new NearestOrder(point));
     }
 
     /// <summary>Answers by a key of each body, the least first: <c>orderby</c> of the query syntax.</summary>
     public OrderedBodies<TFilter, KeyOrder<TKey>> OrderBy<TKey>(Func<BodyView, TKey> key) =>
-        Ordered(new KeyOrder<TKey>(key, false));
+        Order(new KeyOrder<TKey>(key, false));
 
     /// <summary>Answers by a key of each body, the greatest first: <c>orderby … descending</c>.</summary>
     public OrderedBodies<TFilter, KeyOrder<TKey>> OrderByDescending<TKey>(Func<BodyView, TKey> key) =>
-        Ordered(new KeyOrder<TKey>(key, true));
+        Order(new KeyOrder<TKey>(key, true));
 
     /// <summary>Answers in an order of the caller's own: a struct, called straight.</summary>
     public OrderedBodies<TFilter, TOrder> OrderBy<TOrder>(TOrder order)
         where TOrder : IBodyOrder =>
-        Ordered(order);
+        Order(order);
 
     /// <summary>Groups the bodies found by a key of each: <c>group … by</c> of the query syntax, the groups slices of
     /// a buffer, in the order their first body comes.</summary>
@@ -144,7 +146,7 @@ public readonly ref struct BodyFinder<TFilter>
         Func<BodyView, TKey> bodyKey, Func<TInner, TKey> innerKey, Func<BodyView, TInner, TResult> result) =>
         new(this, inner, bodyKey, innerKey, result);
 
-    public Enumerator GetEnumerator() => new(_simulation, _conditions, _filter, _skip, _take);
+    public BodyFinderEnumerator<TFilter> GetEnumerator() => new(_simulation, _conditions, _filter, _skip, _take);
 
     /// <summary>Writes the bodies found into <paramref name="bodies"/>, as many as fit, and gives how many it wrote.
     /// </summary>
@@ -304,13 +306,13 @@ public readonly ref struct BodyFinder<TFilter>
             _simulation.RemoveBody(body.Id);
     }
 
-    internal PhysicsSimulation Simulation => _simulation;
+    /// <summary>Skips added on, held at the most an int holds.</summary>
+    internal static int AddStretch(int skip, int count) => (int)Math.Min((long)skip + count, int.MaxValue);
 
-    private OrderedBodies<TFilter, TOrder> Ordered<TOrder>(TOrder order)
+    private OrderedBodies<TFilter, TOrder> Order<TOrder>(TOrder order)
         where TOrder : IBodyOrder =>
         new(this, order, 0, int.MaxValue);
 
-    // As LINQ's: a value not a number is the least of all, and the greatest only of nothing else.
     private double Aggregate(Func<BodyView, double> value, bool takesLeast)
     {
         ArgumentNullException.ThrowIfNull(value);
@@ -342,69 +344,9 @@ public readonly ref struct BodyFinder<TFilter>
         return new BodyFinder<TFilter>(_simulation, conditions, _filter);
     }
 
-    // A condition told after Skip or Take would be read before them, as LINQ does not.
     private void RequireNoStretch()
     {
         if (_skip != 0 || _take != int.MaxValue)
             throw new InvalidOperationException("Conditions come before Skip and Take.");
-    }
-
-    // Skips added on, held at the most an int holds.
-    internal static int AddStretch(int skip, int count) => (int)Math.Min((long)skip + count, int.MaxValue);
-
-    /// <summary>Walks the bodies found, from the last added, each once: a body taken out on the way, the one walked or
-    /// another, leaves the rest walked; a body added on the way is not walked.</summary>
-    public ref struct Enumerator
-    {
-        private readonly PhysicsSimulation _simulation;
-        private readonly FindConditions _conditions;
-        private readonly TFilter _filter;
-        private readonly long _walk;
-        private int _index;
-        private int _skip;
-        private int _take;
-
-        internal Enumerator(PhysicsSimulation simulation, FindConditions conditions, TFilter filter, int skip,
-            int take)
-        {
-            simulation.ThrowIfDisposed();
-            _simulation = simulation;
-            _conditions = conditions;
-            _filter = filter;
-            _skip = skip;
-            _take = take;
-            _walk = simulation.StartWalk();
-            _index = simulation.LiveBodyCount;
-            Current = default;
-        }
-
-        public BodyView Current { get; private set; }
-
-        public bool MoveNext()
-        {
-            if (_take == 0)
-                return false;
-
-            _index = Math.Min(_index, _simulation.LiveBodyCount);
-            while (--_index >= 0)
-            {
-                // One walked already and moved here by a removal is passed by.
-                if (!_simulation.TryViewLiveBody(_index, _conditions, out var body) || !_conditions.Matches(body)
-                    || !_filter.Matches(body) || !body.TakeIntoWalk(_walk))
-                    continue;
-
-                if (_skip > 0)
-                {
-                    _skip--;
-                    continue;
-                }
-
-                _take--;
-                Current = body;
-                return true;
-            }
-
-            return false;
-        }
     }
 }
