@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- `SPI.GetKeyboardDelay` and `SPI.GetKeyboardSpeed`: the user's key repeat delay and speed, for
+  `SystemParametersInfo`.
 - Physics materials meet by rules: `PhysicsMaterial.FrictionCombine` and `RestitutionCombine` (`CombineRule`: `Average`,
   `Minimum`, `Multiply`, `Maximum`); two different rules meet by the later of them. `PhysicsMaterial.Default` rubs at
   0.5 and does not bounce, both averaged - before, a pair rubbed by the root of both frictions' product and bounced as
