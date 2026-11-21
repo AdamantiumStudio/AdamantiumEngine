@@ -11,13 +11,19 @@ namespace Adamantium.Win32
         public InputType Type;
         public InputUnion Data;
 
-        /// <summary>A key going down or up, by its virtual-key code.</summary>
-        public static INPUT Key(ushort virtualKey, bool down) => new()
+        /// <summary>A key going down or up, by its virtual-key code; <paramref name="extended"/> for the keys of the
+        /// extended set - arrows, Home, End, Insert, Delete, page keys, the right Ctrl and Alt - which applications
+        /// otherwise take for the numeric pad's.</summary>
+        public static INPUT Key(ushort virtualKey, bool down, bool extended = false) => new()
         {
             Type = InputType.Keyboard,
             Data = new InputUnion
             {
-                Keyboard = new KEYBDINPUT { VirtualKey = virtualKey, Flags = down ? default : KeyEventFlags.KeyUp },
+                Keyboard = new KEYBDINPUT
+                {
+                    VirtualKey = virtualKey,
+                    Flags = (down ? default : KeyEventFlags.KeyUp) | (extended ? KeyEventFlags.ExtendedKey : default),
+                },
             },
         };
 
