@@ -135,6 +135,40 @@ public class PrimitiveTemplateTests
         });
     }
 
+    // Whole turns either way are the whole ellipse: its points reach all four sides. Taken round the turn, 720 was
+    // nothing at all.
+    [TestCase(720)]
+    [TestCase(-720)]
+    [TestCase(1080)]
+    [TestCase(3 * 120.00000000000001)]
+    public void AnEllipseSweptWholeTurns_IsWhole(double sweep)
+    {
+        var mesh = Shapes.Ellipse.GenerateGeometry(GeometryType.Solid, EllipseType.Sector, new Vector2<double>(2), 30, sweep);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(mesh.Points.Any(p => p.X > 0.99), "the right");
+            Assert.That(mesh.Points.Any(p => p.X < -0.99), "the left");
+            Assert.That(mesh.Points.Any(p => p.Y > 0.99), "the bottom");
+            Assert.That(mesh.Points.Any(p => p.Y < -0.99), "the top");
+        });
+    }
+
+    // Past a turn the sweep goes round and on: 485 is the 125 past it, the same sector as a sweep of 125.
+    [TestCase(485, 125)]
+    [TestCase(-485, -125)]
+    public void AnEllipseSweptPastATurn_IsWhatIsLeftOverIt(double sweep, double left)
+    {
+        var past = Shapes.Ellipse.GenerateGeometry(GeometryType.Both, EllipseType.Sector, new Vector2<double>(2), 30, sweep);
+        var same = Shapes.Ellipse.GenerateGeometry(GeometryType.Both, EllipseType.Sector, new Vector2<double>(2), 30, left);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(past.Contours[0].Points, Is.EqualTo(same.Contours[0].Points), "the outline");
+            Assert.That(past.Points, Is.EqualTo(same.Points), "the fill");
+        });
+    }
+
     // A camera looks along +Z: a flat shape faces it when its triangles are clockwise on its screen - the GPU's front,
     // up being -Y - and its normals point back at it, along -Z.
     [TestCase("Rectangle")]

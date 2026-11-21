@@ -20,9 +20,12 @@ namespace Adamantium.ProceduralGeometry.Shapes
                int tessellation = 36,
                Matrix4x4<double>? transform = null)
             {
+                // Past a turn the sweep goes round and on: what is left over whole turns, 485 as 125. Whole turns are
+                // the whole ellipse - 720 is not nothing - and so is a sweep past them by no more than rounding.
                 if (sweepAngle is > 360 or < -360)
                 {
-                    sweepAngle %= 360;
+                    var left = sweepAngle % 360;
+                    sweepAngle = Math.Abs(left) <= 1e-9 || double.IsNaN(left) ? Math.CopySign(360, sweepAngle) : left;
                 }
 
                 // A full ellipse, or a pie sector (whose outline returns through the center), is a closed loop; an
