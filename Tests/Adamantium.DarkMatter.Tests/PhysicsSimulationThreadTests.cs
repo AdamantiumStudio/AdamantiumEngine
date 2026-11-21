@@ -385,7 +385,6 @@ public class PhysicsSimulationThreadTests
         SlowFrame();
         Array.Clear(parts);
         events = 0;
-        var capacitiesBefore = TempCapacities(simulation);
         var before = GC.GetAllocatedBytesForCurrentThread();
         var beforeOnThread = simulation.ThreadAllocatedBytes;
         for (var frame = 0; frame < 200; frame++)
@@ -397,14 +396,10 @@ public class PhysicsSimulationThreadTests
         SlowFrame();
         var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
         var allocatedOnThread = simulation.ThreadAllocatedBytes - beforeOnThread;
-        var capacitiesAfter = TempCapacities(simulation);
         simulation.Stop();
-        var grown = string.Join("; ", capacitiesAfter.Where(pair => !capacitiesBefore.TryGetValue(pair.Key, out var old)
-                                                                    || old != pair.Value)
-            .Select(pair => $"{pair.Key} {(capacitiesBefore.TryGetValue(pair.Key, out var old) ? old : -1)}->{pair.Value}"));
 
         Assert.That(allocated, Is.Zero,
-            $"the caller's thread: actions {parts[0]}, Update {parts[1]}, pose {parts[2]}, ray {parts[3]}; touches told {events}; grown: {grown}");
+            $"the caller's thread: actions {parts[0]}, Update {parts[1]}, pose {parts[2]}, ray {parts[3]}; touches told {events}");
         Assert.That(allocatedOnThread, Is.Zero, "the simulation's thread");
     }
 
