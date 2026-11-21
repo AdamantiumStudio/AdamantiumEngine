@@ -67,6 +67,9 @@ public sealed class PdfStandardSecurityHandler
 
     public int Revision { get; }
 
+    /// <summary>How long the file's key is, in bits: 40 to 128 for RC4, 128 or 256 for AES.</summary>
+    public int KeyBits => _keyLength * 8;
+
     public bool EncryptsMetadata { get; }
 
     public PdfCryptMethod StringMethod { get; }
@@ -88,18 +91,49 @@ public sealed class PdfStandardSecurityHandler
     /// <summary>Whether a password has opened the file.</summary>
     public bool IsAuthenticated => _fileKey != null;
 
+    /// <summary>The key the file is decrypted with, once a password opened it - the same whichever of its passwords did.
+    /// </summary>
+    internal byte[] FileKey => _fileKey;
+
     /// <summary>Whether the owner password opened it.</summary>
     public bool IsOwner { get; private set; }
 
     public PdfPermissions Permissions =>
-        IsOwner ? PdfPermissions.All : (PdfPermissions)_permissions & PdfPermissions.All;
+        IsOwner ? PdfPermissions.All : Revision < 3 ? Revision2Permissions() : (PdfPermissions)_permissions & PdfPermissions.All;
+
+    // Revision 2 defines only bits 3 to 6 (ISO 32000-2, Table 22): filling forms goes with annotating, assembling with
+    // modifying, extracting for accessibility with copying, printing well with printing.
+    private PdfPermissions Revision2Permissions()
+    {
+        var granted = (PdfPermissions)_permissions &
+                      (PdfPermissions.Print | PdfPermissions.Modify | PdfPermissions.CopyContent | PdfPermissions.Annotate);
+        Grant(PdfPermissions.Annotate, PdfPermissions.FillForms);
+        Grant(PdfPermissions.Modify, PdfPermissions.Assemble);
+        Grant(PdfPermissions.CopyContent, PdfPermissions.ExtractForAccessibility);
+        Grant(PdfPermissions.Print, PdfPermissions.PrintHighQuality);
+        return granted;
+
+        void Grant(PdfPermissions by, PdfPermissions right)
+        {
+            if (granted.HasFlag(by))
+            {
+                granted |= right;
+            }
+        }
+    }
 
     /// <summary>Tries <paramref name="password"/> as the owner password, then as the user password. The empty string
-    /// opens files that only restrict permissions. A password that fails leaves an earlier one's access as it was.
-    /// </summary>
+    /// opens files that only restrict permissions. A password that fails leaves an earlier one's access as it was, and
+    /// so does any after the owner's: it is only checked.</summary>
     public bool Authenticate(string password)
     {
         password ??= string.Empty;
+        if (IsOwner)
+        {
+            // Checked on the side, so the owner's access never lapses, not even for the moment of the check.
+            return new PdfStandardSecurityHandler(_encrypt, _firstId).Authenticate(password);
+        }
+
         var fileKey = _fileKey;
         var isOwner = IsOwner;
         if (Revision >= 5 ? AuthenticateAes256(password) : AuthenticateRc4(password))
