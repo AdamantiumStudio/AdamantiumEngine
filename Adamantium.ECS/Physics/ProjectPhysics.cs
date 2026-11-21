@@ -1,9 +1,7 @@
-using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
-using System.Xml;
 using System.Xml.Serialization;
 using Adamantium.Mathematics;
 
@@ -59,18 +57,7 @@ public sealed class ProjectPhysics
     /// that is not one, of a later version, with a gravity not finite or no steps a second.</summary>
     public static ProjectPhysics Read(Stream stream)
     {
-        ArgumentNullException.ThrowIfNull(stream);
-        ProjectPhysics physics;
-        try
-        {
-            using var reader = XmlReader.Create(stream, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit });
-            physics = (ProjectPhysics)Serializer.Deserialize(reader);
-        }
-        catch (InvalidOperationException exception)
-        {
-            throw new InvalidDataException("The file is not a project's physics.", exception);
-        }
-
+        var physics = PhysicsXml.Read<ProjectPhysics>(Serializer, stream, "a project's physics");
         if (physics.Version > CurrentVersion)
             throw new InvalidDataException($"The project's physics is of version {physics.Version}; this engine reads "
                                            + $"up to {CurrentVersion}.");
@@ -80,6 +67,12 @@ public sealed class ProjectPhysics
 
         return physics;
     }
+
+    /// <summary>Writes the project's physics to <paramref name="path"/>, whole or not at all.</summary>
+    public void Write(string path) => PhysicsXml.Write(Serializer, this, path);
+
+    /// <summary>Writes the project's physics to <paramref name="stream"/>.</summary>
+    public void Write(Stream stream) => PhysicsXml.Write(Serializer, this, stream);
 
     /// <summary>What makes the project's physics one a game cannot take; null when there is nothing.</summary>
     internal string FindProblem()

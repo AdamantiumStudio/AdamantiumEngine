@@ -7,6 +7,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using Adamantium.Content.Pipeline.Importers;
+using Adamantium.Core;
 using Adamantium.Content.Pipeline.Writers;
 using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
@@ -719,26 +720,7 @@ public sealed class ContentBuilder
         Replace(path, new AssetFile { Source = source, Body = body.ToArray(), Edits = edits });
     }
 
-    private static void Replace(string path, AssetFile file)
-    {
-        // Hidden and named afresh, so no content glob lists it and no other writer meets it.
-        var writing = Path.Combine(Path.GetDirectoryName(path),
-            $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.writing");
-        Directory.CreateDirectory(Path.GetDirectoryName(path));
-        try
-        {
-            using (var stream = File.Create(writing))
-            {
-                file.WriteTo(stream);
-            }
-
-            File.Move(writing, path, true);
-        }
-        finally
-        {
-            File.Delete(writing);
-        }
-    }
+    private static void Replace(string path, AssetFile file) => AtomicFile.Write(path, file.WriteTo);
 
     private static void Copy(ContentAsset asset, string sourceFull, string logicalName, string outputDirectory,
         BuildCache cache, BuildResult result, Action<string> log)

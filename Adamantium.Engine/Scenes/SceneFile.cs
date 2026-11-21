@@ -5,6 +5,7 @@ using System.IO;
 using System.Text;
 using System.Xml;
 using System.Xml.Serialization;
+using Adamantium.Core;
 
 namespace Adamantium.Engine.Scenes;
 
@@ -163,25 +164,7 @@ public sealed class SceneFile
 
     /// <summary>Writes the scene to <paramref name="path"/>: whole or not at all - a failed write leaves the file there
     /// was.</summary>
-    public void Write(string path)
-    {
-        var directory = Path.GetDirectoryName(Path.GetFullPath(path));
-        Directory.CreateDirectory(directory);
-        var writing = Path.Combine(directory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.writing");
-        try
-        {
-            using (var stream = File.Create(writing))
-            {
-                Write(stream);
-            }
-
-            File.Move(writing, path, true);
-        }
-        finally
-        {
-            File.Delete(writing);
-        }
-    }
+    public void Write(string path) => AtomicFile.Write(path, Write);
 
     /// <summary>Writes the scene to <paramref name="stream"/>.</summary>
     public void Write(Stream stream)

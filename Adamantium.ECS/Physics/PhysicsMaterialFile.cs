@@ -1,6 +1,4 @@
-using System;
 using System.IO;
-using System.Xml;
 using System.Xml.Serialization;
 using Adamantium.DarkMatter;
 
@@ -42,22 +40,27 @@ public sealed class PhysicsMaterialFile
         RestitutionCombine = RestitutionCombine
     };
 
+    /// <summary>The file of <paramref name="material"/>.</summary>
+    public static PhysicsMaterialFile From(in PhysicsMaterial material) => new()
+    {
+        Friction = material.Friction,
+        Restitution = material.Restitution,
+        FrictionCombine = material.FrictionCombine,
+        RestitutionCombine = material.RestitutionCombine
+    };
+
+    /// <summary>The material in the file at <paramref name="path"/>; see <see cref="Read(Stream)"/>.</summary>
+    public static PhysicsMaterialFile Read(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Read(stream);
+    }
+
     /// <summary>The material in <paramref name="stream"/>; throws <see cref="InvalidDataException"/> for a file that is
     /// not one, of a later version, or with a friction or restitution below zero or not finite.</summary>
     public static PhysicsMaterialFile Read(Stream stream)
     {
-        ArgumentNullException.ThrowIfNull(stream);
-        PhysicsMaterialFile file;
-        try
-        {
-            using var reader = XmlReader.Create(stream, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit });
-            file = (PhysicsMaterialFile)Serializer.Deserialize(reader);
-        }
-        catch (InvalidOperationException exception)
-        {
-            throw new InvalidDataException("The file is not a physics material.", exception);
-        }
-
+        var file = PhysicsXml.Read<PhysicsMaterialFile>(Serializer, stream, "a physics material");
         if (file.Version > CurrentVersion)
             throw new InvalidDataException($"The physics material is of version {file.Version}; this engine reads up to "
                                            + $"{CurrentVersion}.");
@@ -67,6 +70,12 @@ public sealed class PhysicsMaterialFile
 
         return file;
     }
+
+    /// <summary>Writes the material to <paramref name="path"/>, whole or not at all.</summary>
+    public void Write(string path) => PhysicsXml.Write(Serializer, this, path);
+
+    /// <summary>Writes the material to <paramref name="stream"/>.</summary>
+    public void Write(Stream stream) => PhysicsXml.Write(Serializer, this, stream);
 
     private static bool IsAmount(float value) => float.IsFinite(value) && value >= 0;
 }
