@@ -884,6 +884,9 @@ All packages share one version.
 
 ### Fixed
 
+- A `PhysicsSimulation` on its own thread allocates only when a step gathers more actions than any step before: each of
+  the batches that take actions to the thread grew by what it happened to carry, so a busy step long after the warm-up
+  could still grow one of them. A batch now grows at once to the caller's list of actions.
 - The universe host lights its scene: it gave the scene no `LightManager`, which the rendering takes the lights from, so
   a game it played was lit by the ambient light alone - nearly black.
 - An output copies its frame from the resolved image, not the multisampled one: `UniverseOutput.CopyOutput` blitted

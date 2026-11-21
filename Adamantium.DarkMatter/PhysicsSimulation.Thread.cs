@@ -124,6 +124,8 @@ public sealed partial class PhysicsSimulation
         if (!_spareBatches.Reader.TryRead(out var batch))
             return;
 
+        // As large as the caller's list: the batches grow once with it, not each by what it happens to carry.
+        batch.Commands.EnsureCapacity(_commands.Capacity);
         batch.Commands.AddRange(_commands);
         batch.Number = ++_handedBatches;
         _batches.Writer.TryWrite(batch);
