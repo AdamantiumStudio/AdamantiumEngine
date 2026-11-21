@@ -547,6 +547,16 @@ public sealed class SceneBuilder
             return;
         }
 
+        ApplyShapeCollider(entity, shape, made);
+        var traits = shape.Collider?.Traits is { } read && !read.HoldsDefaults() ? read : null;
+        if (entity.GetComponent<Collider>() is { } settled && PhysicsParts.TraitsOf(settled) != traits)
+        {
+            PhysicsParts.SetTraits(settled, traits);
+        }
+    }
+
+    private static void ApplyShapeCollider(Entity entity, SceneShape shape, ProceduralShape made)
+    {
         // A second collider given in a game counts as other than wanted.
         var colliders = entity.GetComponents<Collider>();
         var current = colliders.Length > 1
@@ -574,7 +584,7 @@ public sealed class SceneBuilder
         if (shape.Collider != null)
         {
             Log.Logger.Warning("Scene: the collider of {Name} is of a kind this engine does not know; it keeps the " +
-                               "template's", entry.Name);
+                               "template's", shape.Name);
         }
 
         if (PhysicsParts.TemplateColliderOf(made) is not { } template)

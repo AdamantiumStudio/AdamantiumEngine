@@ -63,6 +63,19 @@ namespace Adamantium.ECS.Components
         [Bindable]
         public partial bool DisplayCollider { get; set; }
 
+        /// <summary>Whether the collider only tells what enters and leaves it, pushing and weighing nothing.</summary>
+        [Bindable]
+        public partial bool IsTrigger { get; set; }
+
+        /// <summary>The name of the project's layer the collider is on; null or empty for its body's.</summary>
+        [Bindable]
+        public partial string Layer { get; set; }
+
+        /// <summary>The physics material file (<c>.aphysmat</c>) the collider rubs and bounces by; null or empty for its
+        /// body's.</summary>
+        [Bindable]
+        public partial string MaterialPath { get; set; }
+
         // The CPU mesh used to visualize the collider (debug draw), each collider's own. Its GPU buffers are built and
         // owned by the render-layer geometry cache, keyed by this mesh.
         [Bindable, DoNotClone]
@@ -90,6 +103,8 @@ namespace Adamantium.ECS.Components
         partial void OnRotationChanged(QuaternionF value) => Resize();
 
         partial void OnScaleChanged(Vector3F value) => Reshape();
+
+        partial void OnIsTriggerChanged(bool value) => RigidBody.ReweighAbove(Owner);
 
         public override void Initialize()
         {

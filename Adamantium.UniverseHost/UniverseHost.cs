@@ -3,6 +3,7 @@ using System.Runtime.Loader;
 using Adamantium.Core.DependencyInjection;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
+using Adamantium.ECS.Physics;
 using Adamantium.Engine.Scenes;
 using Adamantium.Graphics.Core.Assets;
 using Adamantium.Imaging;
@@ -226,6 +227,7 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
         try
         {
             var scene = SceneFile.Read(_launch.ScenePath);
+            var physics = _launch.ProjectPhysicsPath is { } physicsPath ? ProjectPhysics.Read(physicsPath) : null;
             var assemblies = LoadCode();
             var builder = new SceneBuilder(_universe.EntityWorld.MainScene, _universe.Assets);
             var models = await builder.LoadModelsAsync(scene);
@@ -233,7 +235,7 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
             {
                 try
                 {
-                    Start(scene, assemblies, builder, models);
+                    Start(scene, physics, assemblies, builder, models);
                 }
                 catch (Exception exception)
                 {
@@ -247,10 +249,11 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
         }
     }
 
-    private void Start(SceneFile file, IReadOnlyList<Assembly> assemblies, SceneBuilder builder,
+    private void Start(SceneFile file, ProjectPhysics physics, IReadOnlyList<Assembly> assemblies, SceneBuilder builder,
         IReadOnlyDictionary<string, Adamantium.Graphics.Core.Models.SceneData> models)
     {
         var world = _universe.EntityWorld;
+        world.GetService<IPhysicsService>().Project = physics;
         foreach (var problem in SceneCode.Replace(world, [], assemblies))
             Console.Error.WriteLine("Game code: " + problem);
 

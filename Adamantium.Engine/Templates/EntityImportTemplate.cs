@@ -285,6 +285,11 @@ public class EntityImportTemplate : IEntityTemplate
                 PhysicsParts.SetShape(collider, shape);
             }
 
+            if (edits.ColliderTraits is { } traits && part.GetComponent<Collider>() is { } partCollider)
+            {
+                PhysicsParts.SetTraits(partCollider, traits);
+            }
+
             if (edits.Body is { } body && !PhysicsParts.SetBody(part, body))
             {
                 Log.Logger.Warning("The body {Model} keeps for {Part} is left out", model.Name, path);

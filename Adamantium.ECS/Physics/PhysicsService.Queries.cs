@@ -19,6 +19,15 @@ public sealed partial class PhysicsService
     public BodyFinder<AnyBody> Find() => RequireGame().Find().AsReadOnly();
 
     /// <inheritdoc/>
+    public Layer FindLayer(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        return RequireGame().Layers.TryFind(name, out var layer)
+            ? layer
+            : throw new ArgumentException($"The game's physics has no layer named \"{name}\".", nameof(name));
+    }
+
+    /// <inheritdoc/>
     public bool RayCast(WorldPosition origin, Vector3F direction, float maxDistance, out EntityRayHit hit,
         in EntityQueryFilter filter = default)
     {
@@ -112,6 +121,7 @@ public sealed partial class PhysicsService
     private QueryFilter ToQueryFilter(in EntityQueryFilter filter) => new()
     {
         Except = _mainProcessor.FindMadeBody(filter.Except),
+        Layers = filter.Layers,
         MeetsTriggers = filter.MeetsTriggers
     };
 

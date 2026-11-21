@@ -15,7 +15,6 @@ public partial class RigidBody : Component
     {
         Kind = BodyKind.Dynamic;
         Density = 1000f;
-        Friction = 0.6f;
         GravityScale = 1f;
         CanSleep = true;
     }
@@ -32,13 +31,15 @@ public partial class RigidBody : Component
     [Bindable]
     public partial float Density { get; set; }
 
-    /// <summary>The friction against other bodies.</summary>
+    /// <summary>The physics material file (<c>.aphysmat</c>) the body and its colliders with none of their own rub and
+    /// bounce by; null or empty for the default material.</summary>
     [Bindable]
-    public partial float Friction { get; set; }
+    public partial string MaterialPath { get; set; }
 
-    /// <summary>How much of its speed the body keeps bouncing off: 0 not at all, 1 all of it.</summary>
+    /// <summary>The name of the project's layer the body and its colliders with none of their own are on; null or empty
+    /// for the default layer.</summary>
     [Bindable]
-    public partial float Restitution { get; set; }
+    public partial string Layer { get; set; }
 
     /// <summary>How fast the body's velocity fades by itself, per second.</summary>
     [Bindable]
@@ -199,7 +200,7 @@ public partial class RigidBody : Component
         {
             foreach (var component in entity.Components.AsSpan())
             {
-                if (component is Collider { IsEnabled: true } collider)
+                if (component is Collider { IsEnabled: true, IsTrigger: false } collider)
                     volume += isSkewed
                         ? collider.MeasureCarriedVolume(Math.Abs(stretch))
                         : collider.MeasureVolume(Vector3F.Abs(scale));

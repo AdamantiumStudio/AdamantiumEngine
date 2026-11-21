@@ -136,8 +136,14 @@ public class SceneFileTests
     public void ABodyAndACollider_AreReadBack_WritingOnlyWhatIsNotByDefault()
     {
         var scene = Sample();
-        scene.Shapes[0].Body = new SceneBody { Kind = Adamantium.DarkMatter.BodyKind.Dynamic, Mass = 2.5f, Friction = 0.2f };
-        scene.Shapes[0].Collider = new SceneCollider { Kind = ColliderKind.Sphere };
+        scene.Shapes[0].Body = new SceneBody
+        {
+            Kind = Adamantium.DarkMatter.BodyKind.Dynamic, Mass = 2.5f, MaterialPath = "Materials/Ice.aphysmat"
+        };
+        scene.Shapes[0].Collider = new SceneCollider
+        {
+            Kind = ColliderKind.Sphere, Traits = new ColliderTraits { IsTrigger = true, Layer = "Zones" }
+        };
         scene.Markers[0].Body = new SceneBody { Kind = Adamantium.DarkMatter.BodyKind.Static };
         scene.Markers[0].Collider = new SceneCollider { Kind = ColliderKind.None };
 
@@ -147,15 +153,17 @@ public class SceneFileTests
         Assert.Multiple(() =>
         {
             Assert.That(back.Shapes[0].Body.Mass, Is.EqualTo(2.5f));
-            Assert.That(back.Shapes[0].Body.Friction, Is.EqualTo(0.2f));
+            Assert.That(back.Shapes[0].Body.MaterialPath, Is.EqualTo("Materials/Ice.aphysmat"));
+            Assert.That(back.Shapes[0].Collider.Traits, Is.EqualTo(new ColliderTraits { IsTrigger = true, Layer = "Zones" }));
             Assert.That(back.Shapes[0].Body.Density, Is.EqualTo(new RigidBody().Density), "not written, read as a new body's");
             Assert.That(back.Shapes[0].Collider.Kind, Is.EqualTo(ColliderKind.Sphere));
             Assert.That(back.Markers[0].Body.Kind, Is.EqualTo(Adamantium.DarkMatter.BodyKind.Static));
             Assert.That(back.Markers[0].Collider.Kind, Is.EqualTo(ColliderKind.None));
             Assert.That(back.Models[0].Body, Is.Null);
             Assert.That(back.Models[0].Collider, Is.Null);
-            Assert.That(text, Does.Contain("<Body Mass=\"2.5\" Friction=\"0.2\" />"), "Dynamic and the rest by default");
-            Assert.That(text, Does.Contain("<Collider Kind=\"Sphere\" />"));
+            Assert.That(text, Does.Contain("<Body Mass=\"2.5\" Material=\"Materials/Ice.aphysmat\" />"),
+                "Dynamic and the rest by default");
+            Assert.That(text, Does.Contain("<Collider Kind=\"Sphere\" Trigger=\"true\" Layer=\"Zones\" />"));
             Assert.That(text, Does.Contain("<Collider Kind=\"None\" />"));
             Assert.That(Text(Sample()), Does.Not.Contain("<Body").And.Not.Contain("<Collider"));
             Assert.That(back.Shapes[0].Collider.Shape, Is.Null, "fitted as its template makes it");

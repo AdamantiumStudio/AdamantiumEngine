@@ -24,6 +24,10 @@ public sealed class SceneCollider
     [XmlIgnore]
     public ColliderShapeEdits Shape { get; set; }
 
+    /// <summary>Whether it is a trigger, its layer and material; null for the defaults.</summary>
+    [XmlIgnore]
+    public ColliderTraits Traits { get; set; }
+
     [XmlAttribute("Kind"), EditorBrowsable(EditorBrowsableState.Never)]
     public string KindText
     {
@@ -99,6 +103,36 @@ public sealed class SceneCollider
         set => Read().ChoosesAxis = value;
     }
 
+    [XmlAttribute("Trigger"), EditorBrowsable(EditorBrowsableState.Never)]
+    public bool IsTriggerValue
+    {
+        get => Traits?.IsTrigger ?? false;
+        set => ReadTraits().IsTrigger = value;
+    }
+
+    [XmlAttribute("Layer"), EditorBrowsable(EditorBrowsableState.Never)]
+    public string LayerText
+    {
+        get => Traits?.Layer;
+        set => ReadTraits().Layer = value;
+    }
+
+    [XmlAttribute("Material"), EditorBrowsable(EditorBrowsableState.Never)]
+    public string MaterialText
+    {
+        get => Traits?.MaterialPath;
+        set => ReadTraits().MaterialPath = value;
+    }
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool ShouldSerializeIsTriggerValue() => Traits?.IsTrigger == true;
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool ShouldSerializeLayerText() => !string.IsNullOrEmpty(Traits?.Layer);
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool ShouldSerializeMaterialText() => !string.IsNullOrEmpty(Traits?.MaterialPath);
+
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool ShouldSerializeIsFittedValue() => Shape != null && Shape.IsFitted != Defaults.IsFitted;
 
@@ -128,4 +162,6 @@ public sealed class SceneCollider
 
     // A value read makes the entry one with sizes and placement of its own.
     private ColliderShapeEdits Read() => Shape ??= new ColliderShapeEdits();
+
+    private ColliderTraits ReadTraits() => Traits ??= new ColliderTraits();
 }

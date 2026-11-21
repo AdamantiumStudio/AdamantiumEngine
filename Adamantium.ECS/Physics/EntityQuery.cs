@@ -21,6 +21,10 @@ public readonly ref struct EntityQuery
     /// <summary>Passes <paramref name="entity"/>'s body by: one entity; told again, the new one.</summary>
     public EntityQuery Except(Entity entity) => new(_physics, _filter with { Except = entity });
 
+    /// <summary>Meets only bodies on <paramref name="layers"/>; told again, on both.</summary>
+    public EntityQuery OnLayers(LayerMask layers) =>
+        new(_physics, _filter with { Layers = _filter.Layers.Intersect(layers) });
+
     /// <summary>Meets triggers too.</summary>
     public EntityQuery MeetingTriggers() => new(_physics, _filter with { MeetsTriggers = true });
 

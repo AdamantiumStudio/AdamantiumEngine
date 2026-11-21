@@ -20,6 +20,9 @@ public readonly record struct LayerMask
     /// <summary>These layers but <paramref name="layer"/>.</summary>
     public LayerMask Without(Layer layer) => new(Bits & ~BitOf(layer));
 
+    /// <summary>The layers both these and <paramref name="other"/> hold.</summary>
+    public LayerMask Intersect(LayerMask other) => new(Bits & other.Bits);
+
     /// <summary>Whether it holds <paramref name="layer"/>.</summary>
     public bool Contains(Layer layer) => (Bits & BitOf(layer)) != 0;
 

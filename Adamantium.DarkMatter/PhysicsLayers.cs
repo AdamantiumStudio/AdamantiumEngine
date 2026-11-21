@@ -39,6 +39,25 @@ public sealed class PhysicsLayers
         }
     }
 
+    /// <summary>The layer named <paramref name="name"/>, if one is; false when none is.</summary>
+    public bool TryFind(string name, out Layer layer)
+    {
+        _simulation.ThrowIfDisposed();
+        ArgumentNullException.ThrowIfNull(name);
+        return _layersByName.TryGetValue(name, out layer);
+    }
+
+    /// <summary>Names the next layer <paramref name="name"/>, as <see cref="Define"/> does; false when all are named.
+    /// </summary>
+    public bool TryDefine(string name)
+    {
+        if (_defined == Count)
+            return false;
+
+        Define(name);
+        return true;
+    }
+
     /// <summary>Names the next layer not yet named <paramref name="name"/> and gives it.</summary>
     public Layer Define(string name)
     {

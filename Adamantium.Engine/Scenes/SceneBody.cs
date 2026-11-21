@@ -37,11 +37,13 @@ public sealed class SceneBody
     [XmlAttribute]
     public float Density { get; set; } = Defaults.Density;
 
-    [XmlAttribute]
-    public float Friction { get; set; } = Defaults.Friction;
+    /// <summary>The physics material file the body rubs and bounces by; null for the default material.</summary>
+    [XmlAttribute("Material")]
+    public string MaterialPath { get; set; }
 
+    /// <summary>The name of the project's layer the body is on; null for the default layer.</summary>
     [XmlAttribute]
-    public float Restitution { get; set; } = Defaults.Restitution;
+    public string Layer { get; set; }
 
     [XmlAttribute]
     public float LinearDamping { get; set; } = Defaults.LinearDamping;
@@ -65,10 +67,10 @@ public sealed class SceneBody
     public bool ShouldSerializeDensity() => Density != Defaults.Density;
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public bool ShouldSerializeFriction() => Friction != Defaults.Friction;
+    public bool ShouldSerializeMaterialPath() => !string.IsNullOrEmpty(MaterialPath);
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public bool ShouldSerializeRestitution() => Restitution != Defaults.Restitution;
+    public bool ShouldSerializeLayer() => !string.IsNullOrEmpty(Layer);
 
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool ShouldSerializeLinearDamping() => LinearDamping != Defaults.LinearDamping;
@@ -86,7 +88,7 @@ public sealed class SceneBody
     public BodyEdits ToEdits() => Kind is { } kind
         ? new BodyEdits
         {
-            Kind = kind, Mass = Mass, Density = Density, Friction = Friction, Restitution = Restitution,
+            Kind = kind, Mass = Mass, Density = Density, MaterialPath = MaterialPath, Layer = Layer,
             LinearDamping = LinearDamping, AngularDamping = AngularDamping, GravityScale = GravityScale,
             CanSleep = CanSleep
         }
@@ -95,8 +97,8 @@ public sealed class SceneBody
     /// <summary>The entry of a body of <paramref name="edits"/>' settings.</summary>
     public static SceneBody From(BodyEdits edits) => new()
     {
-        Kind = edits.Kind, Mass = edits.Mass, Density = edits.Density, Friction = edits.Friction,
-        Restitution = edits.Restitution, LinearDamping = edits.LinearDamping, AngularDamping = edits.AngularDamping,
+        Kind = edits.Kind, Mass = edits.Mass, Density = edits.Density, MaterialPath = edits.MaterialPath,
+        Layer = edits.Layer, LinearDamping = edits.LinearDamping, AngularDamping = edits.AngularDamping,
         GravityScale = edits.GravityScale, CanSleep = edits.CanSleep
     };
 }

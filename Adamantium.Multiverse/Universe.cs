@@ -6,9 +6,11 @@ using System.Threading.Channels;
 using Adamantium.Core;
 using Adamantium.Core.Shared;
 using Adamantium.Core.DependencyInjection;
+using Adamantium.DarkMatter;
 using Adamantium.Engine.Compiler.Models;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
+using Adamantium.ECS.Physics;
 using Adamantium.Multiverse.Events;
 using Adamantium.Multiverse.Input;
 using Adamantium.Graphics;
@@ -299,6 +301,7 @@ public class Universe : IUniverse
         // The texture reader takes its device from the Satellites at load time, when it exists.
         assets.Readers.Add(typeof(SceneData), new SceneDataAssetReader());
         assets.Readers.Add(typeof(Texture), new TextureAssetReader());
+        assets.Readers.Add(typeof(PhysicsMaterial), new PhysicsMaterialAssetReader());
         return assets;
     }
 
