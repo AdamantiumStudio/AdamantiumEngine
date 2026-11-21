@@ -17,6 +17,14 @@ All packages share one version.
   pairs that stop colliding let go at once. A body is on `BodySettings.Layer`, put on another with `SetLayer` and read
   with `LayerOf`; a part has a layer of its own with `BodyPart.Layer`, kept when the body's changes. A query meets only
   the layers of its `QueryFilter.Layers` (`LayerMask`), all unless told.
+- Physics contact events and triggers: `PhysicsSimulation.Contacts` tells the touches of two parts begun and ended
+  (`ContactEvent`, `ContactChange`) in the steps the last `Update` - or `Stop`, `Step`, `Advance` - read: which bodies
+  and parts, and for a beginning where, along which normal and how fast they closed (`ApproachSpeed`). A pair met only
+  ahead of time, passing near, does not touch. A body taken out, given a new shape or layer ends its touches; one taken
+  out begins none after, even from steps run before its removal reached the simulation's thread. A part made a trigger
+  (`BodyPart.IsTrigger`) pushes nothing, weighs nothing and wakes nothing: it only tells what enters and leaves it,
+  where they overlap - a kinematic body too. Two triggers tell nothing of each other, and queries pass triggers by
+  unless `QueryFilter.MeetsTriggers`. Contact points and step statistics leave triggers out.
 - `PdfStandardSecurityHandler.KeyBits`: how long an encrypted PDF's key is - 40 to 128 bits for RC4, 128 or 256 for
   AES - what a viewer says of the file's encryption. `PdfDocument.IsOpenedWithPassword` tells whether a password
   opened the file - typed, carried to the file saved again, or in the read options - not the empty one a file that

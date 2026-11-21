@@ -18,7 +18,8 @@ public sealed partial class PhysicsSimulation
     {
         ThrowIfDisposed();
         hit = default;
-        if (!QueryWorld.RayCast(origin, direction, maxDistance, out var met, ExceptOf(filter), filter.Layers.Bits))
+        if (!QueryWorld.RayCast(origin, direction, maxDistance, out var met, ExceptOf(filter), filter.Layers.Bits,
+                filter.MeetsTriggers))
             return false;
 
         hit = new RayHit(IdOf(met.Body), met.Part, met.Position, met.Normal, met.Distance);
@@ -35,7 +36,8 @@ public sealed partial class PhysicsSimulation
             _rayHits = new WorldRayHit[hits.Length];
 
         var met = _rayHits.AsSpan(0, hits.Length);
-        var count = QueryWorld.RayCast(origin, direction, maxDistance, met, ExceptOf(filter), filter.Layers.Bits);
+        var count = QueryWorld.RayCast(origin, direction, maxDistance, met, ExceptOf(filter), filter.Layers.Bits,
+            filter.MeetsTriggers);
         for (var index = 0; index < count; index++)
         {
             ref var hit = ref met[index];
@@ -52,7 +54,8 @@ public sealed partial class PhysicsSimulation
     {
         ThrowIfDisposed();
         hit = default;
-        if (!QueryWorld.CastShape(shape, pose, translation, out var met, ExceptOf(filter), filter.Layers.Bits))
+        if (!QueryWorld.CastShape(shape, pose, translation, out var met, ExceptOf(filter), filter.Layers.Bits,
+                filter.MeetsTriggers))
             return false;
 
         hit = new ShapeHit(IdOf(met.Body), met.Part, met.Position, met.Normal, met.Distance);
@@ -65,7 +68,7 @@ public sealed partial class PhysicsSimulation
     {
         ThrowIfDisposed();
         _overlapped.Clear();
-        QueryWorld.Overlap(shape, pose, _overlapped, ExceptOf(filter), filter.Layers.Bits);
+        QueryWorld.Overlap(shape, pose, _overlapped, ExceptOf(filter), filter.Layers.Bits, filter.MeetsTriggers);
         var count = Math.Min(bodies.Length, _overlapped.Count);
         for (var index = 0; index < count; index++)
         {

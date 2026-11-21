@@ -28,7 +28,7 @@ internal sealed class ContactSolver
     {
         foreach (var contact in contacts)
         {
-            if (!contact.IsTouching)
+            if (!contact.Pushes)
                 continue;
 
             ref var first = ref bodies[contact.First];

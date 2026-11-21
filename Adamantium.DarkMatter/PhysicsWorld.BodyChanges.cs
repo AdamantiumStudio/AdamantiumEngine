@@ -15,6 +15,7 @@ internal sealed partial class PhysicsWorld
         ValidateDescription(description);
         ref var state = ref _bodies[index];
         var shape = changesShape ? description.Shape : state.Shape;
+        var partTraits = changesShape ? description.PartTraits : state.PartTraits;
         RequireVolume(description.Kind, shape, nameof(description));
         // Weighed as it will be, before anything changes: a change it cannot take leaves it as it was.
         var isDynamic = description.Kind == BodyKind.Dynamic;
@@ -26,9 +27,11 @@ internal sealed partial class PhysicsWorld
         // only when what it weighs changes.
         var isWeighedAnew = changesShape || changesKind || isDynamic
             && !BodyDescription.AreWeighedAlike(state.Mass, state.Density, description.Mass, description.Density);
-        var mass = isDynamic && isWeighedAnew ? ComputeMass(shape, description.Mass, description.Density) : default;
+        var mass = isDynamic && isWeighedAnew
+            ? ComputeMass(shape, partTraits, description.Mass, description.Density)
+            : default;
         if (changesShape)
-            TakeShape(index, shape);
+            TakeShape(index, shape, partTraits);
 
         if (changesKind)
             TakeKind(index, description.Kind);
@@ -48,7 +51,7 @@ internal sealed partial class PhysicsWorld
         }
 
         if (changesShape)
-            LayParts(index, description.PartTraits);
+            LayParts(index);
 
         TakeMaterial(index, description.Material);
         TakeLayer(index, description.Layer.Index);
@@ -70,7 +73,9 @@ internal sealed partial class PhysicsWorld
             return;
 
         RequireVolume(kind, state.Shape, nameof(kind));
-        var mass = kind == BodyKind.Dynamic ? ComputeMass(state.Shape, state.Mass, state.Density) : default;
+        var mass = kind == BodyKind.Dynamic
+            ? ComputeMass(state.Shape, state.PartTraits, state.Mass, state.Density)
+            : default;
         TakeKind(index, kind);
         Weigh(index, mass);
     }
@@ -83,10 +88,10 @@ internal sealed partial class PhysicsWorld
         RequirePartTraits(shape, partTraits, nameof(partTraits));
         ref var state = ref _bodies[index];
         RequireVolume(state.Kind, shape, nameof(shape));
-        var mass = state.IsDynamic ? ComputeMass(shape, state.Mass, state.Density) : default;
-        TakeShape(index, shape);
+        var mass = state.IsDynamic ? ComputeMass(shape, partTraits, state.Mass, state.Density) : default;
+        TakeShape(index, shape, partTraits);
         Weigh(index, mass);
-        LayParts(index, partTraits);
+        LayParts(index);
     }
 
     /// <inheritdoc/>
@@ -98,7 +103,9 @@ internal sealed partial class PhysicsWorld
             RequireMassAndDensity(mass, density);
 
         var isWeighedAlike = BodyDescription.AreWeighedAlike(state.Mass, state.Density, mass, density);
-        var properties = state.IsDynamic && !isWeighedAlike ? ComputeMass(state.Shape, mass, density) : default;
+        var properties = state.IsDynamic && !isWeighedAlike
+            ? ComputeMass(state.Shape, state.PartTraits, mass, density)
+            : default;
         state.Mass = mass;
         state.Density = density;
         if (!state.IsDynamic || isWeighedAlike)
@@ -158,24 +165,25 @@ internal sealed partial class PhysicsWorld
         state.IslandNext = NoBody;
         state.IsAwake = kind == BodyKind.Dynamic;
         if (kind != BodyKind.Dynamic)
-            DropContactsWithoutDynamic(index);
+            DropUnpairedContacts(index);
 
         Mark(index, BodyMarks.Moved | BodyMarks.Placed);
     }
 
     // The old shape's parts and contacts let go, waking what they touched; the new parts are laid once weighed.
-    private void TakeShape(int index, CollisionShape shape)
+    private void TakeShape(int index, CollisionShape shape, PartTraits[] partTraits)
     {
         TearOffContacts(index);
         RemoveParts(index);
         _bodies[index].Shape = shape;
+        _bodies[index].PartTraits = partTraits;
     }
 
     // The new shape's parts laid around the center of mass it was weighed for, its pairs found again.
-    private void LayParts(int index, PartTraits[] partTraits)
+    private void LayParts(int index)
     {
         _bodies[index].Reach = 0;
-        AddParts(index, _bodies[index].Shape, partTraits);
+        AddParts(index, _bodies[index].Shape, _bodies[index].PartTraits);
         Mark(index, BodyMarks.Moved | BodyMarks.Placed);
     }
 
@@ -254,13 +262,14 @@ internal sealed partial class PhysicsWorld
         MoveParts(index);
     }
 
-    private void DropContactsWithoutDynamic(int index)
+    // The pairs its new kind makes no longer: two bodies neither of which is dynamic, but for a kinematic in a trigger.
+    private void DropUnpairedContacts(int index)
     {
         var contact = _bodies[index].Contacts;
         while (contact != null)
         {
             var next = contact.GetNext(index);
-            if (!_bodies[contact.GetOther(index)].IsDynamic)
+            if (!ArePaired(contact.FirstPart, contact.SecondPart))
                 DestroyContact(contact);
 
             contact = next;

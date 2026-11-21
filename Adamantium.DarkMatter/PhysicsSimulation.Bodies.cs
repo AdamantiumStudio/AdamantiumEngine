@@ -22,6 +22,10 @@ public sealed partial class PhysicsSimulation
     private readonly List<BodyId> _snapshotMoves = [];
     // Those put by hand whose jump's batch was not read yet.
     private readonly List<BodyId> _jumpingBodies = [];
+    // The touches the runs read since the last Update or step told, in order; and those begun after their body was
+    // taken out, not told, until they end.
+    private readonly List<ContactEvent> _contactEvents = [];
+    private readonly List<TouchKey> _untoldTouches = [];
     // Counts the Updates that read, so a body's snapshot copy moves once in each.
     private long _snapshotMark;
     // The last batch of commands read as run.
@@ -34,6 +38,11 @@ public sealed partial class PhysicsSimulation
 
     /// <summary>The bodies added and not taken out, in no order kept; good until the next add or removal.</summary>
     public ReadOnlySpan<BodyId> Bodies => CollectionsMarshal.AsSpan(_liveBodies);
+
+    /// <summary>The touches of two parts begun and ended - a trigger entered and left among them - in the steps read
+    /// by the last <see cref="Update"/>, <see cref="Stop"/>, <see cref="Step"/> or <see cref="Advance"/>, in order;
+    /// good until the next. A body taken out ends the touches told begun, and begins none after.</summary>
+    public ReadOnlySpan<ContactEvent> Contacts => CollectionsMarshal.AsSpan(_contactEvents);
 
     /// <summary>Adds a body as <paramref name="settings"/> say and gives its id; it is <see cref="PhysicsStatus.Adding"/>
     /// until a step takes it, and actions on it can be asked at once.</summary>
@@ -434,10 +443,41 @@ public sealed partial class PhysicsSimulation
                 joint.Position = reading.Position;
         }
 
+        ReadContacts(result.Contacts);
         StepNumber = result.StepNumber;
         LastStep = result.Statistics;
         _batchesRead = Math.Max(_batchesRead, result.CommandBatch);
         FreeTakenOutSlots(result.CommandBatch);
+    }
+
+    // A run done before a body's removal reached it may still begin touches of it: those are not told, nor their ends.
+    // The end of one told begun is.
+    private void ReadContacts(List<ContactEvent> contacts)
+    {
+        foreach (ref readonly var touch in CollectionsMarshal.AsSpan(contacts))
+        {
+            if (!IsTakenOut(touch.First) && !IsTakenOut(touch.Second))
+            {
+                _contactEvents.Add(touch);
+                continue;
+            }
+
+            var key = new TouchKey(touch.First, touch.Second, touch.FirstPart, touch.SecondPart);
+            if (touch.Change == ContactChange.Began)
+            {
+                _untoldTouches.Add(key);
+                continue;
+            }
+
+            if (!_untoldTouches.Remove(key))
+                _contactEvents.Add(touch);
+        }
+    }
+
+    private bool IsTakenOut(BodyId body)
+    {
+        var record = _bodySlots[body.Index];
+        return record.Generation != body.Generation || record.Status == PhysicsStatus.Removed;
     }
 
     private void ReadBodyNews(in SimulationNews news)
@@ -585,8 +625,8 @@ public sealed partial class PhysicsSimulation
         };
     }
 
-    // The parts as one compound, and each part's caller's own and its own material and layer in copies; no traits when
-    // no part has any.
+    // The parts as one compound, and each part's caller's own and its own material, layer and trigger in copies; no
+    // traits when no part has any.
     private CollisionShape Compose(ReadOnlySpan<BodyPart> parts, out object[] partData, out PartTraits[] partTraits,
         string parameterName)
     {
@@ -604,7 +644,7 @@ public sealed partial class PhysicsSimulation
 
             compoundParts[index] = new CompoundPart(part.Shape, part.Pose);
             partData[index] = part.Data;
-            if (part.Material == null && part.Layer == null)
+            if (part.Material == null && part.Layer == null && !part.IsTrigger)
                 continue;
 
             if (part.Material is { } material)
@@ -614,7 +654,7 @@ public sealed partial class PhysicsSimulation
                 Layers.RequireDefined(layer, parameterName);
 
             partTraits ??= new PartTraits[parts.Length];
-            partTraits[index] = new PartTraits { Material = part.Material, Layer = part.Layer };
+            partTraits[index] = new PartTraits { Material = part.Material, Layer = part.Layer, IsTrigger = part.IsTrigger };
         }
 
         return new CompoundCollisionShape(compoundParts);

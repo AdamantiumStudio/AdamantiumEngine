@@ -28,6 +28,9 @@ internal struct PartState
 
     /// <summary>Whether <see cref="Layer"/> is the part's own, kept when the body's changes.</summary>
     public bool HasOwnLayer;
+
+    /// <summary>Whether the part only tells what enters and leaves it.</summary>
+    public bool IsTrigger;
     public int Proxy;
     public int Next;
 }

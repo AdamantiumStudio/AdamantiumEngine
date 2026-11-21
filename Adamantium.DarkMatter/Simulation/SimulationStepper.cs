@@ -44,12 +44,14 @@ internal sealed partial class SimulationStepper
         foreach (ref var command in CollectionsMarshal.AsSpan(commands))
         {
             Do(command);
+            TakeContactEvents();
         }
 
         for (var step = 0; step < steps; step++)
         {
             PushBodies();
             _world.Step();
+            TakeContactEvents();
             StepNumber++;
             // A move to a pose is over one step: after the last, it is read first.
             if (step < steps - 1)
@@ -89,6 +91,22 @@ internal sealed partial class SimulationStepper
     }
 
     private void Tell(in SimulationNews news) => _result.News.Add(news);
+
+    // The world's touches told by the caller's ids, while the core still knows whose bodies they were: after each
+    // command, so a body taken out is told by its own id.
+    private void TakeContactEvents()
+    {
+        var told = _world.ContactEvents;
+        if (told.IsEmpty)
+            return;
+
+        foreach (ref readonly var touch in told)
+        {
+            _result.Contacts.Add(new ContactEvent(IdOf(touch.First), IdOf(touch.Second), touch));
+        }
+
+        _world.ForgetContactEvents();
+    }
 
     private void ForgetRefusalsOfLastRun()
     {

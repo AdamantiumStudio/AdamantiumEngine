@@ -104,7 +104,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         var rotation = NormalizeRotation(description.Rotation, nameof(description));
         var mass = default(MassProperties);
         if (description.Kind == BodyKind.Dynamic)
-            mass = ComputeMass(description.Shape, description.Mass, description.Density);
+            mass = ComputeMass(description.Shape, description.PartTraits, description.Mass, description.Density);
 
         var index = TakeSlot();
         ref var state = ref _bodies[index];
@@ -116,6 +116,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         state.Marks = listed;
         state.Kind = description.Kind;
         state.Shape = description.Shape;
+        state.PartTraits = description.PartTraits;
         state.Mass = description.Mass;
         state.Density = description.Density;
         state.FirstPart = NoPart;
@@ -342,6 +343,10 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
     {
         foreach (var contact in contacts)
         {
+            // A trigger's overlap pushes nothing: no contact point.
+            if (contact.IsTrigger)
+                continue;
+
             var first = GetHandle(contact.First);
             var second = GetHandle(contact.Second);
             for (var index = 0; index < contact.PointCount; index++)
@@ -361,6 +366,8 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         var substep = stepSeconds / Settings.Substeps;
         var inverseSubstep = 1f / substep;
 
+        // Told since the last step began, unless taken before.
+        ForgetContactEvents();
         UpdateBroadPhase();
         FindNewPairs();
         UpdateContacts(stepSeconds);
@@ -396,6 +403,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         }
 
         _solver.ApplyRestitution(_bodies, Settings.RestitutionThreshold);
+        TellTouches();
         FinishStep(stepSeconds);
         RecordStatistics(startedAt);
     }
@@ -470,7 +478,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
                     if (otherBody.IsMoved && otherPart < part)
                         continue;
 
-                    if (!body.IsDynamic && !otherBody.IsDynamic || !PartsCollide(part, otherPart))
+                    if (!ArePaired(part, otherPart))
                         continue;
 
                     var key = Contact.MakeKey(part, otherPart);
@@ -479,6 +487,24 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
                 }
             }
         }
+    }
+
+    // Whether two parts of two bodies make a pair: on layers that collide, and with a dynamic body among them - or a
+    // trigger, which a kinematic body enters too. Two triggers tell nothing of each other.
+    private bool ArePaired(int part, int otherPart)
+    {
+        ref readonly var first = ref _parts[part];
+        ref readonly var second = ref _parts[otherPart];
+        if (first.IsTrigger && second.IsTrigger || !PartsCollide(part, otherPart))
+            return false;
+
+        ref readonly var firstBody = ref _bodies[first.Body];
+        ref readonly var secondBody = ref _bodies[second.Body];
+        if (firstBody.IsDynamic || secondBody.IsDynamic)
+            return true;
+
+        return (first.IsTrigger || second.IsTrigger)
+               && (firstBody.Kind == BodyKind.Kinematic || secondBody.Kind == BodyKind.Kinematic);
     }
 
     private void UpdateContacts(float stepSeconds)
@@ -515,13 +541,16 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
                             + otherPart.Shape.BoundingRadius;
                 var surfaceSpeed = relativeSpeed + surfaceBody.AngularVelocity.Length() * reach
                                    + MeasureSweepSpeed(otherBody, otherPart);
-                CollideWithSurface(contact, Settings.SpeculativeDistance + surfaceSpeed * stepSeconds);
+                CollideWithSurface(contact,
+                    contact.IsTrigger ? 0 : Settings.SpeculativeDistance + surfaceSpeed * stepSeconds);
+                _metThisStep.Add(contact);
                 contactIndex++;
                 continue;
             }
 
+            // A trigger is entered where they overlap, not where they are about to.
             var closingSpeed = relativeSpeed + MeasureSweepSpeed(first, firstPart) + MeasureSweepSpeed(second, secondPart);
-            var speculativeDistance = Settings.SpeculativeDistance + closingSpeed * stepSeconds;
+            var speculativeDistance = contact.IsTrigger ? 0 : Settings.SpeculativeDistance + closingSpeed * stepSeconds;
 
             // In the first body's frame, in float: the pair stands side by side wherever it is in the world.
             var origin = first.Position;
@@ -537,14 +566,16 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
             }
 
             WakeOnTouch(contact);
+            _metThisStep.Add(contact);
             contactIndex++;
         }
     }
 
-    // A touch wakes a sleeper when the other body moves, or was put there by hand after the sleeper was.
+    // A touch wakes a sleeper when the other body moves, or was put there by hand after the sleeper was; a trigger's
+    // wakes nothing.
     private void WakeOnTouch(Contact contact)
     {
-        if (!contact.IsTouching)
+        if (!contact.Pushes)
             return;
 
         ref var first = ref _bodies[contact.First];
@@ -730,6 +761,8 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         piece.PointCount = 0;
         piece.Friction = holder.Friction;
         piece.Restitution = holder.Restitution;
+        piece.IsTrigger = holder.IsTrigger;
+        piece.IsToldTouching = false;
         piece.Holder = holder;
         holder.Pieces ??= [];
         piece.PieceIndex = holder.Pieces.Count;
@@ -752,7 +785,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
 
             for (var contact = _bodies[index].Contacts; contact != null; contact = contact.GetNext(index))
             {
-                if (contact.IsTouching && _bodies[contact.GetOther(index)].IsDynamic)
+                if (contact.Pushes && _bodies[contact.GetOther(index)].IsDynamic)
                     WakeIsland(contact.GetOther(index));
             }
         }
@@ -971,6 +1004,9 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         var points = 0;
         foreach (var contact in _contacts)
         {
+            if (contact.IsTrigger)
+                continue;
+
             var pairPoints = contact.PointCount;
             if (contact.Pieces != null)
             {
@@ -1087,7 +1123,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         while (state.Contacts != null)
         {
             var contact = state.Contacts;
-            if (contact.IsTouching)
+            if (contact.Pushes)
                 WakeIsland(contact.GetOther(index));
 
             DestroyContact(contact);
@@ -1100,7 +1136,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
     {
         for (var contact = _bodies[index].Contacts; contact != null; contact = contact.GetNext(index))
         {
-            if (contact.IsTouching)
+            if (contact.Pushes)
                 WakeIsland(contact.GetOther(index));
         }
     }
@@ -1116,6 +1152,8 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         contact.FirstPart = firstPart;
         contact.SecondPart = secondPart;
         contact.PointCount = 0;
+        contact.IsTrigger = _parts[firstPart].IsTrigger || _parts[secondPart].IsTrigger;
+        contact.IsToldTouching = false;
         CombineMaterials(contact);
         contact.ListIndex = _contacts.Count;
         _contacts.Add(contact);
@@ -1136,6 +1174,10 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
     // A pair with a surface goes with the contacts of its triangles; a triangle's leaves its pair.
     private void DestroyContact(Contact contact)
     {
+        // A pair let go of while touching - parted, taken out, its shape or layer changed - ends its touch.
+        if (contact.IsToldTouching)
+            TellTouchEnded(contact);
+
         var pieces = contact.Pieces;
         if (pieces != null)
         {
@@ -1263,6 +1305,7 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         slot.Material = traits.Material ?? state.Material;
         slot.HasOwnLayer = traits.Layer.HasValue;
         slot.Layer = traits.Layer?.Index ?? state.Layer;
+        slot.IsTrigger = traits.IsTrigger;
         slot.IsCentered = pose.Position == Vector3F.Zero;
         slot.HasBodyPose = slot.IsCentered && pose.Rotation == QuaternionF.Identity;
         slot.Next = state.FirstPart;
@@ -1403,6 +1446,23 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
             throw new ArgumentOutOfRangeException(parameterName, vector, "The vector must be finite.");
     }
 
+    private static CollisionShape WeighedShape(CollisionShape shape, PartTraits[] partTraits)
+    {
+        if (partTraits == null || shape is not CompoundCollisionShape compound
+                               || Array.TrueForAll(partTraits, traits => !traits.IsTrigger)
+                               || Array.TrueForAll(partTraits, traits => traits.IsTrigger))
+            return shape;
+
+        var weighed = new List<CompoundPart>(partTraits.Length);
+        for (var index = 0; index < partTraits.Length; index++)
+        {
+            if (!partTraits[index].IsTrigger)
+                weighed.Add(compound.Parts[index]);
+        }
+
+        return new CompoundCollisionShape(weighed);
+    }
+
     private static bool IsFinite(Vector3F vector) =>
         float.IsFinite(vector.X) && float.IsFinite(vector.Y) && float.IsFinite(vector.Z);
 
@@ -1412,9 +1472,11 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
             throw new ArgumentOutOfRangeException(parameterName, position, "The position must be finite.");
     }
 
-    private static MassProperties ComputeMass(CollisionShape shape, float mass, float density)
+    // Weighed by the parts that are not triggers; by all of them when every one is.
+    private static MassProperties ComputeMass(CollisionShape shape, PartTraits[] partTraits, float mass, float density)
     {
         RequireMassAndDensity(mass, density);
+        shape = WeighedShape(shape, partTraits);
         // Measured at the density itself: scaling a unit density's inertia overflows for huge and tiny shapes.
         var weighedBy = mass > 0 ? mass / shape.ComputeMass(1f).Mass : density;
         var properties = shape.ComputeMass(weighedBy);

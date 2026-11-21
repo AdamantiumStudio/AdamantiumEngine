@@ -106,6 +106,7 @@ public sealed partial class PhysicsSimulation
         if (State == SimulationState.Stopped)
             return;
 
+        _contactEvents.Clear();
         HandOver();
         ReadResults();
         if (_failure is { } failure)
@@ -168,6 +169,8 @@ public sealed partial class PhysicsSimulation
         _wake.Set();
         _thread.Join();
         _thread = null;
+        // Its last reading: the touches of these runs, not those the last Update told again.
+        _contactEvents.Clear();
         ReadResults();
         // The thread has ended: its side is the caller's now. What it took over and had not run yet goes first, then
         // the batches it did not take, then what was asked since.

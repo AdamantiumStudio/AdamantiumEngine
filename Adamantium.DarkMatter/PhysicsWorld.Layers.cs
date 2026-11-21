@@ -76,7 +76,7 @@ internal sealed partial class PhysicsWorld
     // A pair let go of: what it held up falls.
     private void LetGo(Contact contact)
     {
-        if (contact.IsTouching)
+        if (contact.Pushes)
         {
             WakeIsland(contact.First);
             WakeIsland(contact.Second);

@@ -35,8 +35,10 @@ internal struct BodyState
     /// </summary>
     public Vector3F CenterOfMass;
 
-    /// <summary>The whole shape, and the mass and density it is weighed by, to weigh it again.</summary>
+    /// <summary>The whole shape, what its parts have of their own - a trigger weighs nothing - and the mass and density
+    /// it is weighed by, to weigh it again.</summary>
     public CollisionShape Shape;
+    public PartTraits[] PartTraits;
     public float Mass;
     public float Density;
 
