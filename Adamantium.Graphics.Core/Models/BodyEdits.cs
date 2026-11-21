@@ -13,9 +13,11 @@ public sealed class BodyEdits
     /// <summary>The density, in kilograms per cubic meter.</summary>
     public float Density { get; set; } = 1000f;
 
-    public float Friction { get; set; } = 0.6f;
+    /// <summary>The physics material file the body rubs and bounces by; null for the default material.</summary>
+    public string MaterialPath { get; set; }
 
-    public float Restitution { get; set; }
+    /// <summary>The name of the project's layer the body is on; null for the default layer.</summary>
+    public string Layer { get; set; }
 
     public float LinearDamping { get; set; }
 

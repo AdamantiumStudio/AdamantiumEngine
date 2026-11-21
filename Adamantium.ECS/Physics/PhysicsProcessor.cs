@@ -1,9 +1,10 @@
 using System;
 using System.Collections.Generic;
-using Adamantium.Core;
+using System.IO;
 using Adamantium.DarkMatter;
 using Adamantium.DarkMatter.Shapes;
 using Adamantium.ECS.Components;
+using Adamantium.Graphics.Core.Assets;
 using Adamantium.Mathematics;
 using Serilog;
 
@@ -33,9 +34,12 @@ public partial class PhysicsProcessor
     // Rigid bodies the physics could not make, tried again once what they are made of changes.
     private readonly Dictionary<Entity, BodyParts> _refused = new();
     private readonly List<Entity> _gone = [];
+    private readonly Dictionary<string, PhysicsMaterial?> _materials = new();
+    private readonly HashSet<string> _toldOfLayers = [];
 
     private PhysicsSimulation _simulation;
     private Scene _scene;
+    private IAssetService _assets;
     private long _frameNumber;
     private long _lookNumber;
 
@@ -79,11 +83,13 @@ public partial class PhysicsProcessor
     internal BodyId FindMadeBody(Entity entity) =>
         entity != null && _keys.TryGetValue(entity, out var key) ? _links[key].Id : BodyId.None;
 
-    /// <summary>Lays <paramref name="scene"/> out in <paramref name="simulation"/> as a game starts.</summary>
-    internal void Start(Scene scene, PhysicsSimulation simulation)
+    /// <summary>Lays <paramref name="scene"/> out in <paramref name="simulation"/> as a game starts, physics materials
+    /// read through <paramref name="assets"/>.</summary>
+    internal void Start(Scene scene, PhysicsSimulation simulation, IAssetService assets)
     {
         _scene = scene;
         _simulation = simulation;
+        _assets = assets;
         FollowBodies();
         OnStarted();
     }
@@ -116,6 +122,9 @@ public partial class PhysicsProcessor
         {
             _simulation = null;
             _scene = null;
+            _assets = null;
+            _materials.Clear();
+            _toldOfLayers.Clear();
             _links.Clear();
             _keys.Clear();
             _movers.Clear();
@@ -389,12 +398,6 @@ public partial class PhysicsProcessor
     // the weight it has.
     private static void KeepUsableSettings(BodyLayout layout, BodyLayout made)
     {
-        if (!IsAmount(layout.Friction))
-            layout.Friction = made.Friction;
-
-        if (!IsAmount(layout.Restitution))
-            layout.Restitution = made.Restitution;
-
         if (!IsAmount(layout.LinearDamping))
             layout.LinearDamping = made.LinearDamping;
 
@@ -422,7 +425,7 @@ public partial class PhysicsProcessor
     private static bool HasSameSettings(BodyLayout made, BodyLayout layout) =>
         made.Kind == layout.Kind
         && (layout.Kind != BodyKind.Dynamic || made.IsWeighedAs(layout))
-        && made.Friction == layout.Friction && made.Restitution == layout.Restitution
+        && made.Material == layout.Material && made.Layer == layout.Layer
         && made.LinearDamping == layout.LinearDamping && made.AngularDamping == layout.AngularDamping
         && made.GravityScale == layout.GravityScale && made.CanSleep == layout.CanSleep;
 
@@ -456,10 +459,8 @@ public partial class PhysicsProcessor
 
         if (changesSettings)
         {
-            _simulation.SetMaterial(id, new PhysicsMaterial
-            {
-                Friction = layout.Friction, Restitution = layout.Restitution
-            });
+            _simulation.SetMaterial(id, layout.Material);
+            _simulation.SetLayer(id, layout.Layer);
             if (layout.Kind == BodyKind.Dynamic)
                 _simulation.SetMass(id, layout.Mass, layout.Density);
 
@@ -505,7 +506,8 @@ public partial class PhysicsProcessor
             Rotation = layout.Rotation,
             Mass = layout.Mass,
             Density = layout.Density,
-            Material = new PhysicsMaterial { Friction = layout.Friction, Restitution = layout.Restitution },
+            Material = layout.Material,
+            Layer = layout.Layer,
             LinearDamping = layout.LinearDamping,
             AngularDamping = layout.AngularDamping,
             GravityScale = layout.GravityScale,
@@ -597,8 +599,8 @@ public partial class PhysicsProcessor
             Rotation = rotation,
             Mass = body.Mass,
             Density = body.Density,
-            Friction = body.Friction,
-            Restitution = body.Restitution,
+            Material = FindMaterial(body.MaterialPath, entity) ?? PhysicsMaterial.Default,
+            Layer = FindLayer(body.Layer, entity) ?? _simulation.Layers.Default,
             LinearDamping = body.LinearDamping,
             AngularDamping = body.AngularDamping,
             GravityScale = body.GravityScale,
@@ -721,21 +723,72 @@ public partial class PhysicsProcessor
 
             if (entity == body)
             {
-                _shapeParts.Add(new BodyPart
-                {
-                    Shape = shape.Shape, Pose = new LocalPose(shape.Offset, shape.Turn), Data = collider
-                });
+                _shapeParts.Add(MakePart(collider, shape.Shape, new LocalPose(shape.Offset, shape.Turn)));
                 continue;
             }
 
             var center = fromBody + Vector3F.Transform(shape.Offset, turn);
-            _shapeParts.Add(new BodyPart
-            {
-                Shape = shape.Shape,
-                Pose = new LocalPose(Vector3F.Transform(center, unturn), unturn * turn * shape.Turn),
-                Data = collider
-            });
+            _shapeParts.Add(MakePart(collider, shape.Shape,
+                new LocalPose(Vector3F.Transform(center, unturn), unturn * turn * shape.Turn)));
         }
+    }
+
+    private BodyPart MakePart(Collider collider, CollisionShape shape, in LocalPose pose) => new()
+    {
+        Shape = shape,
+        Pose = pose,
+        Material = FindMaterial(collider.MaterialPath, collider.Owner),
+        Layer = FindLayer(collider.Layer, collider.Owner),
+        IsTrigger = collider.IsTrigger,
+        Data = collider
+    };
+
+    private PhysicsMaterial? FindMaterial(string path, Entity entity)
+    {
+        if (string.IsNullOrEmpty(path))
+            return null;
+
+        if (_materials.TryGetValue(path, out var known))
+            return known;
+
+        PhysicsMaterial? material = null;
+        if (_assets == null)
+        {
+            Log.Logger.Warning("The game has no assets to read the physics material {Material} of {Entity} from; it "
+                               + "takes its body's or the default", path, entity?.Name);
+        }
+        else
+        {
+            try
+            {
+                material = _assets.Load<PhysicsMaterial>(path);
+            }
+            catch (Exception exception) when (exception is AssetNotFoundException or InvalidDataException or IOException
+                                                  or UnauthorizedAccessException or NotSupportedException
+                                                  or InvalidOperationException or ArgumentException)
+            {
+                Log.Logger.Warning(exception, "The physics material {Material} of {Entity} cannot be read; it takes its "
+                                              + "body's or the default", path, entity?.Name);
+            }
+        }
+
+        _materials[path] = material;
+        return material;
+    }
+
+    private Layer? FindLayer(string name, Entity entity)
+    {
+        if (string.IsNullOrEmpty(name))
+            return null;
+
+        if (_simulation.Layers.TryFind(name, out var layer))
+            return layer;
+
+        if (_toldOfLayers.Add(name))
+            Log.Logger.Warning("The project's physics has no layer named \"{Layer}\", which {Entity} is on; it takes its "
+                               + "body's or the default", name, entity?.Name);
+
+        return null;
     }
 
     // A skewed entity's collider as the hull its corners make, carried into the body and standing at position there; a
@@ -754,7 +807,7 @@ public partial class PhysicsProcessor
                 return;
             }
 
-            _shapeParts.Add(new BodyPart { Shape = shape, Pose = new LocalPose(position), Data = collider });
+            _shapeParts.Add(MakePart(collider, shape, new LocalPose(position)));
         }
         catch (ArgumentException exception)
         {

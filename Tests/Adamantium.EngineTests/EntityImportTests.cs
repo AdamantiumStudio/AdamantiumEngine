@@ -211,8 +211,14 @@ public class EntityImportTests
         scene.CreateMesh(scene.Models, "ghost", "Ghost").Meshes.Add(Box(1));
         scene.CreateMesh(scene.Models, "crate", "Crate").Meshes.Add(Box(1));
         scene.Edits = new ModelEdits();
-        scene.Edits.Parts[""] = new PartEdits { Body = new BodyEdits { Mass = 900, Friction = 0.9f } };
-        scene.Edits.Parts["Ball"] = new PartEdits { Collider = ColliderKind.Sphere };
+        scene.Edits.Parts[""] = new PartEdits
+        {
+            Body = new BodyEdits { Mass = 900, MaterialPath = "Materials/Rubber.aphysmat", Layer = "Debris" }
+        };
+        scene.Edits.Parts["Ball"] = new PartEdits
+        {
+            Collider = ColliderKind.Sphere, ColliderTraits = new ColliderTraits { IsTrigger = true, Layer = "Ghosts" }
+        };
         scene.Edits.Parts["Ghost"] = new PartEdits { Collider = ColliderKind.None };
         scene.Edits.Parts["Gone"] = new PartEdits { Collider = ColliderKind.Capsule };
 
@@ -223,10 +229,13 @@ public class EntityImportTests
             var body = model.GetComponent<RigidBody>();
             Assert.That(body, Is.Not.Null);
             Assert.That(body.Mass, Is.EqualTo(900));
-            Assert.That(body.Friction, Is.EqualTo(0.9f));
+            Assert.That(body.MaterialPath, Is.EqualTo("Materials/Rubber.aphysmat"));
+            Assert.That(body.Layer, Is.EqualTo("Debris"));
             var ball = model.Dependencies.First(part => part.Name == "Ball");
             Assert.That(ball.GetComponents<Collider>(), Has.Length.EqualTo(1));
             Assert.That(ball.GetComponent<Collider>(), Is.InstanceOf<SphereCollider>());
+            Assert.That(ball.GetComponent<Collider>().IsTrigger, Is.True);
+            Assert.That(ball.GetComponent<Collider>().Layer, Is.EqualTo("Ghosts"));
             Assert.That(ball.GetComponent<Collider>().Bounds.Radius, Is.GreaterThan(0), "fitted to its mesh");
             Assert.That(model.Dependencies.First(part => part.Name == "Ghost").GetComponent<Collider>(), Is.Null);
             Assert.That(model.Dependencies.First(part => part.Name == "Crate").GetComponent<Collider>(),

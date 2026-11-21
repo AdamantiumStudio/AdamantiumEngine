@@ -2,7 +2,9 @@ using System;
 using System.Collections.Generic;
 using Adamantium.Core;
 using Adamantium.DarkMatter;
+using Adamantium.Graphics.Core.Assets;
 using Adamantium.Mathematics;
+using Serilog;
 
 namespace Adamantium.ECS.Physics;
 
@@ -25,6 +27,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
     private PhysicsSettings _settingsBeforeGame;
     private Vector3F _gravityBeforeGame;
     private PhysicsSimulation _simulation;
+    private ProjectPhysics _project;
 
     public PhysicsService(EntityWorld world) : this(world, true)
     {
@@ -51,6 +54,22 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
                 throw new InvalidOperationException("The main processor is changed only while no game plays.");
 
             _mainProcessor = value;
+        }
+    }
+
+    /// <inheritdoc/>
+    public ProjectPhysics Project
+    {
+        get => _project;
+        set
+        {
+            if (_simulation != null)
+                throw new InvalidOperationException("The project's physics is changed only while no game plays.");
+
+            if (value?.FindProblem() is { } problem)
+                throw new ArgumentException(problem, nameof(value));
+
+            _project = value;
         }
     }
 
@@ -190,16 +209,21 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
 
     protected override void OnStart()
     {
+        var settings = _project != null ? _settings with { StepRate = _project.StepRate } : _settings;
+        var gravity = _project?.Gravity ?? _gravity;
+        _simulation = new PhysicsSimulation(settings) { Gravity = gravity };
         _settingsBeforeGame = _settings;
         _gravityBeforeGame = _gravity;
-        _simulation = new PhysicsSimulation(Settings) { Gravity = _gravity };
+        _gravity = gravity;
         try
         {
-            _mainProcessor.Start(Scene, _simulation);
+            DefineLayers();
+            EntityWorld.Satellites.TryGet<IAssetService>(out var assets);
+            _mainProcessor.Start(Scene, _simulation, assets);
         }
         catch
         {
-            EndGame();
+            OnStop();
             throw;
         }
 
@@ -237,6 +261,43 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
             _simulation?.Dispose();
             _simulation = null;
             _contacts.Clear();
+        }
+    }
+
+    private void DefineLayers()
+    {
+        if (_project == null)
+            return;
+
+        var layers = _simulation.Layers;
+        foreach (var layer in _project.Layers ?? [])
+        {
+            if (string.IsNullOrWhiteSpace(layer?.Name) || layers.TryFind(layer.Name, out _))
+            {
+                Log.Logger.Warning("The project's physics names a layer \"{Layer}\" with no name or twice; it is left out",
+                    layer?.Name);
+                continue;
+            }
+
+            if (!layers.TryDefine(layer.Name))
+            {
+                Log.Logger.Warning("The project's physics names more than {Count} layers; those after are left out",
+                    PhysicsLayers.Count);
+                break;
+            }
+        }
+
+        foreach (var pair in _project.Apart ?? [])
+        {
+            if (pair?.First == null || pair.Second == null || !layers.TryFind(pair.First, out var first)
+                || !layers.TryFind(pair.Second, out var second))
+            {
+                Log.Logger.Warning("The project's physics keeps apart \"{First}\" and \"{Second}\", not both its layers; "
+                                   + "they collide", pair?.First, pair?.Second);
+                continue;
+            }
+
+            layers.SetCollides(first, second, false);
         }
     }
 

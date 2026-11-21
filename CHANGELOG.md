@@ -70,6 +70,23 @@ All packages share one version.
   bodies and pushes them in that step alone through `StepActions`: poses, centers of mass, velocities, masses, gravity,
   forces, torques, impulses and velocities set; a body the simulation no longer holds is refused (`Contains` tells).
 - `BodyFinder.AsReadOnly()`: the same search, refusing its actions - for bodies another keeps.
+- Physics materials as files: a `.aphysmat` (`PhysicsMaterialFile`, read as a `PhysicsMaterial` by
+  `PhysicsMaterialAssetReader`, which every universe's assets have) holds a friction, a restitution and their rules.
+  `RigidBody.MaterialPath` names the body's - the default material for none - and `Collider.MaterialPath` a collider's
+  own, its body's for none; the game's physics reads each file once a game, and one it cannot read is said in the log
+  and left to the default.
+- Physics layers of a project: a `.aphysics` (`ProjectPhysics`: `Layers`, the pairs kept `Apart`, `Gravity`,
+  `StepRate`; its steps and gravity win over the service's `Settings` and `Gravity` when given) given to the game's
+  physics as `IPhysicsService.Project` before a game, and to a game host as `UniverseLaunch.ProjectPhysicsPath`. `RigidBody.Layer` and `Collider.Layer` name a body's and a collider's layer - the
+  default and the body's for none, and for a name the project has not, said in the log. A query of the game's physics
+  meets only some layers with `EntityQuery.OnLayers` and `IPhysicsService.FindLayer`; `LayerMask.Intersect`,
+  `PhysicsLayers.TryFind` and `TryDefine` are new.
+- Trigger colliders: `Collider.IsTrigger` makes a collider only tell what enters and leaves it; it weighs nothing in
+  `RigidBody.ComputedMass` either.
+- A collider's trigger, layer and material are kept in a scene (`<Collider Trigger Layer Material>`) and in a model's
+  edits (`PartEdits.ColliderTraits`, `ColliderTraits`); a body's material and layer likewise (`<Body Material Layer>`,
+  `BodyEdits.MaterialPath`, `BodyEdits.Layer`). `PhysicsSettings` is a record, so a copy with a value told otherwise is
+  made by `with`.
 - `TriangleMeshCollisionShape.Indices`: the triangles kept, as they are wound.
 - `PdfStandardSecurityHandler.KeyBits`: how long an encrypted PDF's key is - 40 to 128 bits for RC4, 128 or 256 for
   AES - what a viewer says of the file's encryption. `PdfDocument.IsOpenedWithPassword` tells whether a password
@@ -1186,6 +1203,9 @@ All packages share one version.
 ### Removed
 
 - The engine's tests no longer see the physics core's insides: only DarkMatter's own tests do.
+- `RigidBody.Friction` and `Restitution`, with `BodyEdits`' and a scene body's: a body rubs and bounces by its material
+  file (`MaterialPath`). A scene or a model's edits that keep them are read without them: such a body takes the default
+  material - rubbing at 0.5, where a body rubbed at 0.6 by default before - until a material file is named.
 - `Collider.Transform(ref scale, ref rotation, ref translation)`, both: nothing called them, and a collider is placed
   by `Position`, `Rotation` and `Scale`.
 - `EntityIcons.ShowsLights` and `EntityIcons.ShowsCameras`: use `EntityIcons.Shows`.

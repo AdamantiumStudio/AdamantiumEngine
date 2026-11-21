@@ -22,9 +22,10 @@ internal sealed class BodyLayout
 
     public float Density { get; set; }
 
-    public float Friction { get; set; }
+    /// <summary>The material its material file holds, the default for none.</summary>
+    public PhysicsMaterial Material { get; set; }
 
-    public float Restitution { get; set; }
+    public Layer Layer { get; set; }
 
     public float LinearDamping { get; set; }
 

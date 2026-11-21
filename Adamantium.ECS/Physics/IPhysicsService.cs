@@ -11,12 +11,17 @@ namespace Adamantium.ECS.Physics;
 public interface IPhysicsService : IGameService
 {
     /// <summary>How the next game's physics steps and solves; a game playing keeps those it started with, and ones set
-    /// during it go back when it stops. Their gravity is not used: <see cref="Gravity"/> is.</summary>
+    /// during it go back when it stops. Their gravity is not used: <see cref="Gravity"/> is; with a <see cref="Project"/>,
+    /// its steps a second are the project's.</summary>
     PhysicsSettings Settings { get; set; }
 
-    /// <summary>The pull every dynamic body feels while the game plays, in meters per second squared; set during a game,
-    /// it goes back when the game stops.</summary>
+    /// <summary>The pull every dynamic body feels while the game plays, in meters per second squared - the
+    /// <see cref="Project"/>'s as a game starts with one; set during a game, it goes back when the game stops.</summary>
     Vector3F Gravity { get; set; }
+
+    /// <summary>The game project's physics - its layers, which collide, its gravity and steps a second - taken as the
+    /// next game starts; null for the defaults, the default layer alone. Changed only while no game plays.</summary>
+    ProjectPhysics Project { get; set; }
 
     /// <summary>What the last step of the game's physics did.</summary>
     StepStatistics LastStep { get; }
@@ -41,6 +46,11 @@ public interface IPhysicsService : IGameService
     /// <c>body.Entity</c> (<see cref="BodyViewEntity"/>). The search only reads: an entity found is acted on through
     /// <see cref="Body"/>. Refused while no game plays.</summary>
     BodyFinder<AnyBody> Find();
+
+    /// <summary>The layer of the game playing named <paramref name="name"/>, one of <see cref="Project"/>'s or the
+    /// default one ("Default"), for a query's <see cref="EntityQuery.OnLayers"/>; refused for one there is none of, and
+    /// while no game plays.</summary>
+    Layer FindLayer(string name);
 
     /// <summary>The velocity of <paramref name="entity"/>'s body as the last step left it, in meters per second.</summary>
     Vector3F GetLinearVelocity(Entity entity);
