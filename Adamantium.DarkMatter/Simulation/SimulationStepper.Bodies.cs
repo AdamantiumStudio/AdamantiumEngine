@@ -48,6 +48,8 @@ internal sealed partial class SimulationStepper
             {
                 case SimulationCommandKind.RemoveBody:
                     _world.Remove(body.Handle);
+                    // Its touches ended, told by its id before the core's index of it names nothing.
+                    TakeContactEvents();
                     _slotOfCoreBody[body.Handle.Index] = NoSlot;
                     body.Handle = default;
                     body.Force = Vector3F.Zero;

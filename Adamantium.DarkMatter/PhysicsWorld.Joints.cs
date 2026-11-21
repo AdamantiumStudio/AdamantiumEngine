@@ -212,7 +212,13 @@ internal sealed partial class PhysicsWorld
 
     private void LetGoOfContactsBetween(int first, int second)
     {
-        var contact = _bodies[first].Contacts;
+        LetGoOfContactsBetween(_bodies[first].Contacts, first, second);
+        LetGoOfContactsBetween(_bodies[first].Triggers, first, second);
+    }
+
+    private void LetGoOfContactsBetween(Contact head, int first, int second)
+    {
+        var contact = head;
         while (contact != null)
         {
             var next = contact.GetNext(first);

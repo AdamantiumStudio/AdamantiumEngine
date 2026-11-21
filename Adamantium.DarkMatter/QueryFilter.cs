@@ -15,4 +15,7 @@ public readonly struct QueryFilter
         get => new(~_passedLayers);
         init => _passedLayers = ~value.Bits;
     }
+
+    /// <summary>Whether it meets triggers too; they are passed by unless told.</summary>
+    public bool MeetsTriggers { get; init; }
 }

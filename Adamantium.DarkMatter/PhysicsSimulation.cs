@@ -83,6 +83,7 @@ public sealed partial class PhysicsSimulation : IDisposable
     {
         RequireStopped();
         _blendsByClock = false;
+        _contactEvents.Clear();
         RunHere(1);
     }
 
@@ -93,6 +94,7 @@ public sealed partial class PhysicsSimulation : IDisposable
     {
         RequireStopped();
         _blendsByClock = true;
+        _contactEvents.Clear();
         var steps = _clock.Advance(elapsedSeconds);
         if (steps > 0)
             RunHere(steps);
@@ -120,6 +122,8 @@ public sealed partial class PhysicsSimulation : IDisposable
         _refusedJoints.Clear();
         _snapshotMoves.Clear();
         _jumpingBodies.Clear();
+        _contactEvents.Clear();
+        _untoldTouches.Clear();
         _snapshot = null;
     }
 

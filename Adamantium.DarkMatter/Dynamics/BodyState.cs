@@ -13,7 +13,12 @@ internal struct BodyState
     /// <summary>How far the body reaches from its center of mass.</summary>
     public float Reach;
     public BodyMarks Marks;
+
+    /// <summary>The first of the body's pairs that push: what solves, wakes and sleeps walks these.</summary>
     public Contact Contacts;
+
+    /// <summary>The first of the body's pairs with a trigger, apart from those that push.</summary>
+    public Contact Triggers;
 
     public WorldPosition Position;
     public QuaternionF Rotation;
@@ -35,8 +40,10 @@ internal struct BodyState
     /// </summary>
     public Vector3F CenterOfMass;
 
-    /// <summary>The whole shape, and the mass and density it is weighed by, to weigh it again.</summary>
+    /// <summary>The whole shape, what its parts have of their own - a trigger weighs nothing - and the mass and density
+    /// it is weighed by, to weigh it again.</summary>
     public CollisionShape Shape;
+    public PartTraits[] PartTraits;
     public float Mass;
     public float Density;
 

@@ -175,26 +175,32 @@ internal interface IPhysicsWorld
     /// <summary>Moves the world by one step of <see cref="StepSeconds"/>.</summary>
     void Step();
 
+    /// <summary>The touches of two parts begun and ended - by the last step, and by changes since such as a body taken
+    /// out - in order; forgotten as the next step begins, or by <see cref="ForgetContactEvents"/>.</summary>
+    ReadOnlySpan<WorldContactEventArgs> ContactEvents { get; }
+
+    void ForgetContactEvents();
+
     /// <summary>Where a ray from <paramref name="origin"/> along <paramref name="direction"/> first meets a body within
     /// <paramref name="maxDistance"/> meters, <paramref name="except"/> passed by; a ray starting inside a body meets it
-    /// at once. Every query meets only parts on <paramref name="layers"/>, a bit for each: all for the default.
-    /// </summary>
+    /// at once. Every query meets only parts on <paramref name="layers"/>, a bit for each: all for the default; and
+    /// triggers only when it <paramref name="meetsTriggers"/>.</summary>
     bool RayCast(WorldPosition origin, Vector3F direction, float maxDistance, out WorldRayHit hit,
-        BodyHandle except = default, ulong layers = ulong.MaxValue);
+        BodyHandle except = default, ulong layers = ulong.MaxValue, bool meetsTriggers = false);
 
     /// <summary>Writes into <paramref name="hits"/> every body the ray meets within <paramref name="maxDistance"/>,
     /// nearest first, each where it first meets it - the nearest as many as fit - and gives how many it wrote.</summary>
     int RayCast(WorldPosition origin, Vector3F direction, float maxDistance, Span<WorldRayHit> hits,
-        BodyHandle except = default, ulong layers = ulong.MaxValue);
+        BodyHandle except = default, ulong layers = ulong.MaxValue, bool meetsTriggers = false);
 
     /// <summary>Adds to <paramref name="into"/> every body but <paramref name="except"/> that shares a point with
     /// <paramref name="shape"/> standing at <paramref name="pose"/>.</summary>
     void Overlap(CollisionShape shape, in Pose pose, ICollection<BodyHandle> into, BodyHandle except = default,
-        ulong layers = ulong.MaxValue);
+        ulong layers = ulong.MaxValue, bool meetsTriggers = false);
 
     /// <summary>The first body but <paramref name="except"/> <paramref name="shape"/> meets moved by
     /// <paramref name="translation"/> without turning - within half a millimeter - and where it stopped, first within a
     /// millimeter of it; meshes and fields cannot be cast.</summary>
     bool CastShape(CollisionShape shape, in Pose pose, Vector3F translation, out WorldShapeHit hit,
-        BodyHandle except = default, ulong layers = ulong.MaxValue);
+        BodyHandle except = default, ulong layers = ulong.MaxValue, bool meetsTriggers = false);
 }

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Adamantium.DarkMatter.Dynamics;
 
 namespace Adamantium.DarkMatter;
@@ -19,14 +20,8 @@ internal sealed partial class PhysicsWorld
 
         if (!collides)
         {
-            // From the end, as one let go of takes the last one's place.
-            for (var index = _contacts.Count - 1; index >= 0; index--)
-            {
-                var contact = _contacts[index];
-                if (!PartsCollide(contact.FirstPart, contact.SecondPart))
-                    LetGo(contact);
-            }
-
+            LetGoOfPairsApart(_contacts, true);
+            LetGoOfPairsApart(_triggerContacts, false);
             return;
         }
 
@@ -59,24 +54,41 @@ internal sealed partial class PhysicsWorld
         if (!changed)
             return;
 
-        // A pair with a surface goes with its pieces: made after it, they stand before it in the list, passed by already.
-        var contact = state.Contacts;
+        LetGoOfPairsApart(state.Contacts, index, true);
+        LetGoOfPairsApart(state.Triggers, index, false);
+        LookForPairs(index);
+    }
+
+    // From the end, as one let go of takes the last one's place.
+    private void LetGoOfPairsApart(List<Contact> pairs, bool wakes)
+    {
+        for (var index = pairs.Count - 1; index >= 0; index--)
+        {
+            var contact = pairs[index];
+            if (!PartsCollide(contact.FirstPart, contact.SecondPart))
+                LetGo(contact, wakes);
+        }
+    }
+
+    // A pair with a surface goes with its pieces: made after it, they stand before it in the body's list, passed by
+    // already.
+    private void LetGoOfPairsApart(Contact first, int index, bool wakes)
+    {
+        var contact = first;
         while (contact != null)
         {
             var next = contact.GetNext(index);
             if (contact.Holder == null && !PartsCollide(contact.FirstPart, contact.SecondPart))
-                LetGo(contact);
+                LetGo(contact, wakes);
 
             contact = next;
         }
-
-        LookForPairs(index);
     }
 
-    // A pair let go of: what it held up falls.
-    private void LetGo(Contact contact)
+    // A pair let go of: what it held up falls; a trigger's held up nothing.
+    private void LetGo(Contact contact, bool wakes)
     {
-        if (contact.IsTouching)
+        if (wakes && contact.IsTouching)
         {
             WakeIsland(contact.First);
             WakeIsland(contact.Second);

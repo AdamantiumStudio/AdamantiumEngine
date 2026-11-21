@@ -22,6 +22,10 @@ public readonly struct BodyPart
     /// <summary>The layer the part collides and is met by queries on; the body's for none.</summary>
     public Layer? Layer { get; init; }
 
+    /// <summary>Whether the part only tells what enters and leaves it (<see cref="PhysicsSimulation.Contacts"/>): it
+    /// pushes nothing, weighs nothing, and queries pass it by unless they meet triggers.</summary>
+    public bool IsTrigger { get; init; }
+
     /// <summary>The caller's own, given back by <see cref="PhysicsSimulation.DataOf(BodyId, int)"/>.</summary>
     public object Data { get; init; }
 }

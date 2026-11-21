@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Adamantium.DarkMatter.CollisionDetection;
 
@@ -28,6 +29,7 @@ internal sealed class ContactSolver
     {
         foreach (var contact in contacts)
         {
+            Debug.Assert(!contact.IsTrigger, "A trigger's pair is kept apart from those solved.");
             if (!contact.IsTouching)
                 continue;
 
