@@ -1,11 +1,12 @@
 namespace Adamantium.DarkMatter;
 
 /// <summary>A joint told link by link on the caller's stack - its <see cref="JointSettings"/> gathered - and added by
-/// <see cref="Add"/>, as <see cref="PhysicsSimulation.AddJoint"/> adds it.</summary>
-public ref struct JointBuilder
+/// <see cref="Add"/>, as <see cref="PhysicsSimulation.AddJoint"/> adds it. Each link gives a new builder and leaves the
+/// one it was told on as it was.</summary>
+public readonly ref struct JointBuilder
 {
     private readonly PhysicsSimulation _simulation;
-    private JointSettings _settings;
+    private readonly JointSettings _settings;
 
     internal JointBuilder(PhysicsSimulation simulation, JointSettings settings)
     {
@@ -53,9 +54,5 @@ public ref struct JointBuilder
     /// <summary>Adds the joint as told and gives its id.</summary>
     public JointId Add() => _simulation.AddJoint(_settings);
 
-    private JointBuilder With(JointSettings settings)
-    {
-        _settings = settings;
-        return this;
-    }
+    private JointBuilder With(JointSettings settings) => new(_simulation, settings);
 }

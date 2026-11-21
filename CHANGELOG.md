@@ -27,7 +27,9 @@ All packages share one version.
   unless `QueryFilter.MeetsTriggers`. Contact points, and the touches step statistics count, leave triggers out.
 - Physics chains, thin structs on the caller's stack over the simulation's own methods: `Body(id)` (`BodyActions`) acts
   on and reads one body; `NewBody()` (`BodyBuilder`) and `NewJoint()` (`JointBuilder`) tell a body or a joint link by
-  link and add it; `Query()` (`QueryBuilder`) gathers a filter for a ray, cast or overlap; `World()` (`WorldActions`)
+  link and add it, each link giving a new builder and leaving the one it was told on as it was, as `Query()` and
+  `Find()` do - so a link told as a statement of its own, its builder not taken, is lost; `Query()` (`QueryBuilder`)
+  gathers a filter for a ray, cast or overlap; `World()` (`WorldActions`)
   sets gravity and layers, wakes an area, sets off an explosion, steps, starts, pauses and stops. New on the simulation:
   `WakeUp(area)`, and `ApplyRadialImpulse(center, radius, strength)`, fading to none at the radius.
 - Physics searches: `PhysicsSimulation.Find()` (`BodyFinder`) walks the bodies the last step read, kept by ready

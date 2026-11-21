@@ -10,6 +10,10 @@
         <Configurations>Debug;Release</Configurations>
 
         <LangVersion>latest</LangVersion>
+
+        <!-- Optimized from the first call: tests that count the bytes allocated must not catch the JIT moving a method
+             to a higher tier, which on a slow runner can fall inside what they measure. -->
+        <TieredCompilation>false</TieredCompilation>
     </PropertyGroup>
 
     <ItemGroup>
