@@ -971,6 +971,9 @@ All packages share one version.
 
 ### Fixed
 
+- The game host starts its game again: it gave the project's physics to the game's physics before the world had taken
+  its services in, found none and threw, so no game launched under the debugger. It gives it once the world is up to
+  date, just before the game starts.
 - `Shapes.Ellipse` swept whole turns either way is the whole ellipse: taken round the turn, 720 drew nothing. A sweep
   past a turn still draws what is left over whole turns, 485 as 125.
 - A kinematic body moved to a pose in a frame of several steps is read there: it arrived in the first step and fell
