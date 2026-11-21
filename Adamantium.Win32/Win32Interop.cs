@@ -327,6 +327,21 @@ namespace Adamantium.Win32
         [DllImport("user32.dll")]
         public static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr ProcessId);
 
+        /// <summary>Puts key and mouse events into the system's input as if from the hardware, to whatever window
+        /// takes them - the foreground one for keys. A window of a process with more rights than this one does not
+        /// get them (UIPI). Returns how many were put in.</summary>
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern uint SendInput(uint inputCount, INPUT[] inputs, int inputSize);
+
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetForegroundWindow();
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern int GetWindowText(IntPtr hWnd, char[] text, int maxCount);
+
+        [DllImport("user32.dll", SetLastError = true)]
+        public static extern int GetWindowTextLength(IntPtr hWnd);
+
         [DllImport("kernel32.dll")]
         public static extern uint GetCurrentThreadId();
 

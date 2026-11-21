@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- `Win32Interop.SendInput` with `INPUT` (`INPUT.Key`, `INPUT.Character` for a character typed whatever the layout),
+  `KEYBDINPUT`, `KeyEventFlags`: keys put into the system's input, for an on-screen keyboard typing into another
+  application. `GetForegroundWindow`, `GetWindowText` and `GetWindowTextLength` name the window they go to.
 - `SPI.GetKeyboardDelay` and `SPI.GetKeyboardSpeed`: the user's key repeat delay and speed, for
   `SystemParametersInfo`.
 - Physics materials meet by rules: `PhysicsMaterial.FrictionCombine` and `RestitutionCombine` (`CombineRule`: `Average`,
