@@ -19,9 +19,11 @@ internal sealed class QuerySnapshot
 
     public PhysicsWorld World => _world;
 
-    /// <summary>Puts the body in <paramref name="slot"/> at <paramref name="pose"/>, a copy of
-    /// <paramref name="shape"/>; a copy there already is moved, or made anew for a shape not its own.</summary>
-    public void Place(int slot, int generation, CollisionShape shape, in Pose pose)
+    /// <summary>Puts the body in <paramref name="slot"/> at <paramref name="pose"/> on <paramref name="layer"/>, a copy
+    /// of <paramref name="shape"/> and its parts' own; a copy there already is moved, or made anew for a shape not its
+    /// own.</summary>
+    public void Place(int slot, int generation, CollisionShape shape, PartTraits[] partTraits, Layer layer,
+        in Pose pose)
     {
         while (_handleOfSlot.Count <= slot)
         {
@@ -34,13 +36,15 @@ internal sealed class QuerySnapshot
         if (handle.IsValid && _generationOfSlot[slot] == generation && _shapeOfSlot[slot] == shape)
         {
             _world.SetPose(handle, pose);
+            _world.SetLayer(handle, layer);
             return;
         }
 
         Remove(slot);
         handle = _world.Add(new BodyDescription
         {
-            Kind = BodyKind.Static, Shape = shape, Position = pose.Position, Rotation = pose.Rotation
+            Kind = BodyKind.Static, Shape = shape, PartTraits = partTraits, Layer = layer, Position = pose.Position,
+            Rotation = pose.Rotation
         });
         while (_slotOfCopy.Count <= handle.Index)
         {
@@ -51,6 +55,14 @@ internal sealed class QuerySnapshot
         _handleOfSlot[slot] = handle;
         _generationOfSlot[slot] = generation;
         _shapeOfSlot[slot] = shape;
+    }
+
+    /// <summary>Puts the copy of the body in <paramref name="slot"/> on <paramref name="layer"/>, if there is one of
+    /// its generation.</summary>
+    public void SetLayer(int slot, int generation, Layer layer)
+    {
+        if (slot < _handleOfSlot.Count && _handleOfSlot[slot].IsValid && _generationOfSlot[slot] == generation)
+            _world.SetLayer(_handleOfSlot[slot], layer);
     }
 
     /// <summary>Moves the copy of the body in <paramref name="slot"/>, if there is one of its generation.</summary>

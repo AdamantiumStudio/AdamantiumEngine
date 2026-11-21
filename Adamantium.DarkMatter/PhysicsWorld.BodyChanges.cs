@@ -4,7 +4,8 @@ using Adamantium.DarkMatter.Shapes;
 
 namespace Adamantium.DarkMatter;
 
-// A body changed where it stands: its kind, shape, weight and material, without taking it out and adding it again.
+// A body changed where it stands: its kind, shape, weight, material and layer, without taking it out and adding it
+// again.
 internal sealed partial class PhysicsWorld
 {
     /// <inheritdoc/>
@@ -47,9 +48,10 @@ internal sealed partial class PhysicsWorld
         }
 
         if (changesShape)
-            LayParts(index, description.PartMaterials);
+            LayParts(index, description.PartTraits);
 
         TakeMaterial(index, description.Material);
+        TakeLayer(index, description.Layer.Index);
         state.LinearDamping = description.LinearDamping;
         state.AngularDamping = description.AngularDamping;
         TakeGravityScale(index, description.GravityScale);
@@ -74,17 +76,17 @@ internal sealed partial class PhysicsWorld
     }
 
     /// <inheritdoc/>
-    public void SetShape(BodyHandle body, CollisionShape shape, PhysicsMaterial?[] partMaterials = null)
+    public void SetShape(BodyHandle body, CollisionShape shape, PartTraits[] partTraits = null)
     {
         var index = Resolve(body);
         ArgumentNullException.ThrowIfNull(shape);
-        RequirePartMaterials(shape, partMaterials, nameof(partMaterials));
+        RequirePartTraits(shape, partTraits, nameof(partTraits));
         ref var state = ref _bodies[index];
         RequireVolume(state.Kind, shape, nameof(shape));
         var mass = state.IsDynamic ? ComputeMass(shape, state.Mass, state.Density) : default;
         TakeShape(index, shape);
         Weigh(index, mass);
-        LayParts(index, partMaterials);
+        LayParts(index, partTraits);
     }
 
     /// <inheritdoc/>
@@ -170,10 +172,10 @@ internal sealed partial class PhysicsWorld
     }
 
     // The new shape's parts laid around the center of mass it was weighed for, its pairs found again.
-    private void LayParts(int index, PhysicsMaterial?[] partMaterials)
+    private void LayParts(int index, PartTraits[] partTraits)
     {
         _bodies[index].Reach = 0;
-        AddParts(index, _bodies[index].Shape, partMaterials);
+        AddParts(index, _bodies[index].Shape, partTraits);
         Mark(index, BodyMarks.Moved | BodyMarks.Placed);
     }
 

@@ -19,6 +19,8 @@ internal enum SimulationCommandKind
     SetKind,
     SetShape,
     SetMaterial,
+    SetLayer,
+    SetLayersCollide,
     SetMass,
     SetDamping,
     SetGravityScale,

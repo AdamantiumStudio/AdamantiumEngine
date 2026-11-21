@@ -12,6 +12,11 @@ All packages share one version.
   0.5 and does not bounce, both averaged - before, a pair rubbed by the root of both frictions' product and bounced as
   the bouncier. A body's part has a material of its own with `BodyPart.Material`, or the body's; `SetMaterial` changes
   the body's and those of its parts with none of their own, their contacts at once.
+- Physics layers: a `PhysicsSimulation`'s 64 `Layers` (`PhysicsLayers`) are named with `Define` - layer 0 is the
+  default, every body's unless told - and `SetCollides` says which pass through each other, from the next step; the
+  pairs that stop colliding let go at once. A body is on `BodySettings.Layer`, put on another with `SetLayer` and read
+  with `LayerOf`; a part has a layer of its own with `BodyPart.Layer`, kept when the body's changes. A query meets only
+  the layers of its `QueryFilter.Layers` (`LayerMask`), all unless told.
 - `PdfStandardSecurityHandler.KeyBits`: how long an encrypted PDF's key is - 40 to 128 bits for RC4, 128 or 256 for
   AES - what a viewer says of the file's encryption. `PdfDocument.IsOpenedWithPassword` tells whether a password
   opened the file - typed, carried to the file saved again, or in the read options - not the empty one a file that

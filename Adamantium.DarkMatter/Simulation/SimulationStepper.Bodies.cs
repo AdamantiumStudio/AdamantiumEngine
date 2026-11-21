@@ -101,16 +101,24 @@ internal sealed partial class SimulationStepper
                     Follow(command.Slot, body);
                     break;
                 case SimulationCommandKind.SetShape:
-                    _world.SetShape(body.Handle, command.Shape, command.PartMaterials);
+                    _world.SetShape(body.Handle, command.Shape, command.PartTraits);
                     Tell(new SimulationNews
                     {
                         Kind = NewsKind.ShapeTaken, Slot = command.Slot, Generation = body.Generation,
-                        Shape = command.Shape, PartData = command.PartData
+                        Shape = command.Shape, PartData = command.PartData, PartTraits = command.PartTraits
                     });
                     Follow(command.Slot, body);
                     break;
                 case SimulationCommandKind.SetMaterial:
                     _world.SetMaterial(body.Handle, command.Material);
+                    break;
+                case SimulationCommandKind.SetLayer:
+                    _world.SetLayer(body.Handle, command.Layer);
+                    Tell(new SimulationNews
+                    {
+                        Kind = NewsKind.LayerTaken, Slot = command.Slot, Generation = body.Generation,
+                        Layer = command.Layer
+                    });
                     break;
                 case SimulationCommandKind.SetMass:
                     _world.SetMass(body.Handle, command.Mass, command.Density);
@@ -179,7 +187,8 @@ internal sealed partial class SimulationStepper
         _slotOfCoreBody[body.Handle.Index] = slot;
         Tell(new SimulationNews
         {
-            Kind = NewsKind.Taken, Slot = slot, Generation = generation, Shape = description.Shape, PartData = partData
+            Kind = NewsKind.Taken, Slot = slot, Generation = generation, Shape = description.Shape, PartData = partData,
+            PartTraits = description.PartTraits, Layer = description.Layer
         });
         Follow(slot, body);
     }

@@ -14,6 +14,10 @@ internal sealed class SimulatedBody
 
     /// <summary>The shape the core took for it last, for the queries' snapshot.</summary>
     public CollisionShape Shape;
+    public PartTraits[] PartTraits;
+
+    /// <summary>Its layer after the last run read.</summary>
+    public Layer Layer;
 
     /// <summary>Where it stands in the simulation's list of bodies alive.</summary>
     public int ListIndex;

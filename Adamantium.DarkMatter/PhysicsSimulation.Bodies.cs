@@ -49,6 +49,8 @@ public sealed partial class PhysicsSimulation
         body.Data = settings.Data;
         body.PartData = partData;
         body.Shape = description.Shape;
+        body.PartTraits = description.PartTraits;
+        body.Layer = description.Layer;
         body.Pose = new Pose(settings.Position, QuaternionF.Normalize(settings.Rotation));
         body.PreviousPose = body.Pose;
         body.CenterOfMass = settings.Position;
@@ -160,6 +162,10 @@ public sealed partial class PhysicsSimulation
 
     /// <summary>Whether <paramref name="body"/> was asleep after the last step read; a static body always is.</summary>
     public bool IsSleeping(BodyId body) => FindAny(body).IsSleeping;
+
+    /// <summary>The layer <paramref name="body"/> was on after the last step read; the one it was added on until a
+    /// step takes it.</summary>
+    public Layer LayerOf(BodyId body) => FindAny(body).Layer;
 
     /// <summary>Strikes a dynamic body at its center of mass with <paramref name="impulse"/>, in newton seconds.</summary>
     public void ApplyImpulse(BodyId body, Vector3F impulse)
@@ -292,11 +298,11 @@ public sealed partial class PhysicsSimulation
     public void SetParts(BodyId body, ReadOnlySpan<BodyPart> parts)
     {
         Find(body);
-        var shape = Compose(parts, out var partData, out var partMaterials, nameof(parts));
+        var shape = Compose(parts, out var partData, out var partTraits, nameof(parts));
         _commands.Add(new SimulationCommand
         {
             Kind = SimulationCommandKind.SetShape, Slot = body.Index, Shape = shape, PartData = partData,
-            PartMaterials = partMaterials
+            PartTraits = partTraits
         });
     }
 
@@ -310,6 +316,16 @@ public sealed partial class PhysicsSimulation
         {
             Kind = SimulationCommandKind.SetMaterial, Slot = body.Index, Material = material
         });
+    }
+
+    /// <summary>Puts <paramref name="body"/>, and its parts with no layer of their own, on <paramref name="layer"/>:
+    /// from the next step it collides as that layer does, and queries meet it there.</summary>
+    public void SetLayer(BodyId body, Layer layer)
+    {
+        ThrowIfDisposed();
+        Layers.RequireDefined(layer, nameof(layer));
+        Find(body);
+        _commands.Add(new SimulationCommand { Kind = SimulationCommandKind.SetLayer, Slot = body.Index, Layer = layer });
     }
 
     /// <summary>Weighs <paramref name="body"/> by <paramref name="mass"/> in kilograms, or by
@@ -435,7 +451,9 @@ public sealed partial class PhysicsSimulation
             case NewsKind.Taken when body.Status == PhysicsStatus.Adding:
                 body.Status = PhysicsStatus.Active;
                 body.Shape = news.Shape;
-                _snapshot?.Place(news.Slot, news.Generation, news.Shape, body.Pose);
+                body.PartTraits = news.PartTraits;
+                body.Layer = news.Layer;
+                _snapshot?.Place(news.Slot, news.Generation, news.Shape, news.PartTraits, news.Layer, body.Pose);
                 break;
             case NewsKind.Refused when body.Status == PhysicsStatus.Adding:
                 body.Status = PhysicsStatus.Refused;
@@ -448,7 +466,12 @@ public sealed partial class PhysicsSimulation
             case NewsKind.ShapeTaken when body.Status == PhysicsStatus.Active:
                 body.Shape = news.Shape;
                 body.PartData = news.PartData;
-                _snapshot?.Place(news.Slot, news.Generation, news.Shape, body.Pose);
+                body.PartTraits = news.PartTraits;
+                _snapshot?.Place(news.Slot, news.Generation, news.Shape, news.PartTraits, body.Layer, body.Pose);
+                break;
+            case NewsKind.LayerTaken when body.Status == PhysicsStatus.Active:
+                body.Layer = news.Layer;
+                _snapshot?.SetLayer(news.Slot, news.Generation, news.Layer);
                 break;
             case NewsKind.KindSettled when news.KindAsk == body.KindAsks:
                 body.KindAsked = news.BodyKind;
@@ -516,7 +539,7 @@ public sealed partial class PhysicsSimulation
         {
             var body = _bodySlots[id.Index];
             if (body.Status == PhysicsStatus.Active)
-                snapshot.Place(id.Index, id.Generation, body.Shape, body.Pose);
+                snapshot.Place(id.Index, id.Generation, body.Shape, body.PartTraits, body.Layer, body.Pose);
         }
 
         return snapshot;
@@ -535,11 +558,12 @@ public sealed partial class PhysicsSimulation
         RequireFinite(settings.LinearVelocity, nameof(settings));
         RequireFinite(settings.AngularVelocity, nameof(settings));
         PhysicsMaterial.RequireUsable(settings.Material, nameof(settings));
+        Layers.RequireDefined(settings.Layer, nameof(settings));
         var shape = settings.Shape;
         partData = OnePart;
-        PhysicsMaterial?[] partMaterials = null;
+        PartTraits[] partTraits = null;
         if (shape == null)
-            shape = Compose(settings.Parts, out partData, out partMaterials, nameof(settings));
+            shape = Compose(settings.Parts, out partData, out partTraits, nameof(settings));
 
         return new BodyDescription
         {
@@ -552,7 +576,8 @@ public sealed partial class PhysicsSimulation
             Mass = settings.Mass,
             Density = settings.Density,
             Material = settings.Material,
-            PartMaterials = partMaterials,
+            Layer = settings.Layer,
+            PartTraits = partTraits,
             LinearDamping = settings.LinearDamping,
             AngularDamping = settings.AngularDamping,
             GravityScale = settings.GravityScale,
@@ -560,16 +585,17 @@ public sealed partial class PhysicsSimulation
         };
     }
 
-    // The parts as one compound, and each part's own and its material in copies; no materials when no part has one.
-    private static CollisionShape Compose(ReadOnlySpan<BodyPart> parts, out object[] partData,
-        out PhysicsMaterial?[] partMaterials, string parameterName)
+    // The parts as one compound, and each part's caller's own and its own material and layer in copies; no traits when
+    // no part has any.
+    private CollisionShape Compose(ReadOnlySpan<BodyPart> parts, out object[] partData, out PartTraits[] partTraits,
+        string parameterName)
     {
         if (parts.IsEmpty)
             throw new ArgumentException("A body needs at least one part.", parameterName);
 
         var compoundParts = new CompoundPart[parts.Length];
         partData = new object[parts.Length];
-        partMaterials = null;
+        partTraits = null;
         for (var index = 0; index < parts.Length; index++)
         {
             ref readonly var part = ref parts[index];
@@ -578,12 +604,17 @@ public sealed partial class PhysicsSimulation
 
             compoundParts[index] = new CompoundPart(part.Shape, part.Pose);
             partData[index] = part.Data;
-            if (part.Material is not { } material)
+            if (part.Material == null && part.Layer == null)
                 continue;
 
-            PhysicsMaterial.RequireUsable(material, parameterName);
-            partMaterials ??= new PhysicsMaterial?[parts.Length];
-            partMaterials[index] = material;
+            if (part.Material is { } material)
+                PhysicsMaterial.RequireUsable(material, parameterName);
+
+            if (part.Layer is { } layer)
+                Layers.RequireDefined(layer, parameterName);
+
+            partTraits ??= new PartTraits[parts.Length];
+            partTraits[index] = new PartTraits { Material = part.Material, Layer = part.Layer };
         }
 
         return new CompoundCollisionShape(compoundParts);
