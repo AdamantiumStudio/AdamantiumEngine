@@ -141,6 +141,7 @@ public class PrimitiveTemplateTests
     [TestCase(-720)]
     [TestCase(1080)]
     [TestCase(3 * 120.00000000000001)]
+    [TestCase(360.000004)]
     public void AnEllipseSweptWholeTurns_IsWhole(double sweep)
     {
         var mesh = Shapes.Ellipse.GenerateGeometry(GeometryType.Solid, EllipseType.Sector, new Vector2<double>(2), 30, sweep);
