@@ -10,6 +10,9 @@ public sealed class PhysicsLayers
     /// <summary>How many layers there are.</summary>
     public const int Count = 64;
 
+    /// <summary>The name of the <see cref="Default"/> layer.</summary>
+    public const string DefaultName = "Default";
+
     private readonly PhysicsSimulation _simulation;
     private readonly string[] _names = new string[Count];
     private readonly Dictionary<string, Layer> _layersByName = new(StringComparer.Ordinal);
@@ -20,7 +23,7 @@ public sealed class PhysicsLayers
     internal PhysicsLayers(PhysicsSimulation simulation)
     {
         _simulation = simulation;
-        Define("Default");
+        Define(DefaultName);
     }
 
     /// <summary>Layer 0, every body's unless told.</summary>
