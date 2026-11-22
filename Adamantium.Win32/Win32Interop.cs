@@ -681,6 +681,12 @@ namespace Adamantium.Win32
         [DllImport("shell32.dll", EntryPoint = "SHFileOperationW", CharSet = CharSet.Unicode)]
         public static extern int SHFileOperation(ref SHFILEOPSTRUCT operation);
 
+        /// <summary>Adds, changes or takes away an icon of the notification area; false when the shell did not take it
+        /// - not running yet, as early in a session: it says it is back with the "TaskbarCreated" message.</summary>
+        [DllImport("shell32.dll", EntryPoint = "Shell_NotifyIconW", CharSet = CharSet.Unicode)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        public static extern bool ShellNotifyIcon(NotifyIconMessage message, ref NOTIFYICONDATA data);
+
         [DllImport("kernel32.dll")]
         public static extern UIntPtr GlobalSize(IntPtr mem);
 

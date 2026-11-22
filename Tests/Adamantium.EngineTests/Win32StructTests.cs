@@ -26,4 +26,16 @@ public class Win32StructTests
     {
         Assert.That(Marshal.SizeOf<MONITORINFOEX>(), Is.EqualTo(104));
     }
+
+    [Test]
+    public void ANotificationAreaIcon_IsTheSizeWindowsExpects()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(Marshal.SizeOf<NOTIFYICONDATA>(), Is.EqualTo(976));
+            Assert.That(NOTIFYICONDATA.For(1, 7).Size, Is.EqualTo(976u));
+            Assert.That(Marshal.OffsetOf<NOTIFYICONDATA>(nameof(NOTIFYICONDATA.Version)).ToInt32(), Is.EqualTo(816));
+            Assert.That(Marshal.OffsetOf<NOTIFYICONDATA>(nameof(NOTIFYICONDATA.BalloonIcon)).ToInt32(), Is.EqualTo(968));
+        });
+    }
 }
