@@ -1,14 +1,13 @@
 using System;
-using Adamantium.Graphics.Core;
 using Adamantium.Graphics.Core.Extensions;
 using Adamantium.Vulkan.Core;
 using VulkanBuffer = Adamantium.Vulkan.Core.Buffer;
 
-namespace Adamantium.Graphics;
+namespace Adamantium.Graphics.Core;
 
 /// <summary>A slot of <see cref="SharedFrameMemory"/> imported into a device as a buffer (VK_EXT_external_memory_host).
 /// </summary>
-internal sealed class HostSlotBuffer : IDisposable
+public sealed class HostSlotBuffer : IDisposable
 {
     private readonly IGraphicsDevice _device;
     private DeviceMemory _memory;
@@ -20,6 +19,11 @@ internal sealed class HostSlotBuffer : IDisposable
     }
 
     public VulkanBuffer Buffer { get; private set; }
+
+    /// <summary>Whether <paramref name="device"/> imports the memory of the process as its own.</summary>
+    public static bool CanImport(IGraphicsDevice device) =>
+        device.Adapter.HostPointerAlignment != 0
+        && device.MainDevice.IsExtensionEnabled(Constants.VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME);
 
     /// <summary>Imports <paramref name="size"/> bytes at <paramref name="pointer"/>, aligned as the device asks, for
     /// <paramref name="usage"/>; throws <see cref="NotSupportedException"/> when the device takes none of it.</summary>

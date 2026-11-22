@@ -7,21 +7,20 @@ using Adamantium.Vulkan.Core;
 namespace Adamantium.Graphics;
 
 /// <summary>A ring of frames in <see cref="SharedFrameMemory"/>, each slot imported into a device as a buffer its frames
-/// are copied into, with the descriptors a consumer finds them by.</summary>
+/// are copied into. A slot holds a frame of any size up to its own, and says the size it holds; the consumer finds the
+/// frames of one size by <see cref="Describe"/>.</summary>
 internal sealed unsafe class HostFrameRing : IDisposable
 {
     private readonly IGraphicsDevice _device;
+    private readonly SurfaceFormat _format;
     private readonly HostSlotBuffer[] _slots;
 
-    public HostFrameRing(IGraphicsDevice device, uint width, uint height, SurfaceFormat format, uint slotCount)
+    public HostFrameRing(IGraphicsDevice device, ulong slotCapacity, SurfaceFormat format, uint slotCount)
     {
         _device = device;
-        Width = width;
-        Height = height;
-        Memory = SharedFrameMemory.Create((ulong)width * height * (ulong)format.SizeInBytes, slotCount,
-            Math.Max(device.Adapter.HostPointerAlignment, 4096));
+        _format = format;
+        Memory = SharedFrameMemory.Create(slotCapacity, slotCount, Math.Max(device.Adapter.HostPointerAlignment, 4096));
         _slots = new HostSlotBuffer[slotCount];
-        Descriptors = new SharedSurfaceDescriptor[slotCount];
         try
         {
             Timeline = device.LogicalDevice.CreateSemaphore(new SemaphoreCreateInfo
@@ -32,17 +31,6 @@ internal sealed unsafe class HostFrameRing : IDisposable
             {
                 _slots[slot] = HostSlotBuffer.Import(device, (nuint)Memory.At(Memory.SlotOffset(slot)), Memory.SlotSize,
                     BufferUsageFlagBits.TransferDstBit);
-                Descriptors[slot] = new SharedSurfaceDescriptor
-                {
-                    HandleType = SharedHandleType.HostMemory,
-                    MemoryPath = Memory.Path,
-                    MemoryOffset = Memory.SlotOffset(slot),
-                    CounterOffset = Memory.CounterOffset(slot),
-                    AllocationSize = Memory.SlotSize,
-                    Width = width,
-                    Height = height,
-                    Format = format
-                };
             }
         }
         catch
@@ -50,16 +38,9 @@ internal sealed unsafe class HostFrameRing : IDisposable
             Dispose();
             throw;
         }
-
-        Descriptors[0].BufferCount = slotCount;
-        Descriptors[0].Others = Descriptors[1..];
     }
 
     public IGraphicsDevice Device => _device;
-
-    public uint Width { get; }
-
-    public uint Height { get; }
 
     public SharedFrameMemory Memory { get; }
 
@@ -76,17 +57,52 @@ internal sealed unsafe class HostFrameRing : IDisposable
         }
     }
 
-    /// <summary>One per slot; the first names the others.</summary>
-    public SharedSurfaceDescriptor[] Descriptors { get; }
 
-    /// <summary>Whether <paramref name="device"/> imports the memory of the process as its own.</summary>
-    public static bool CanImport(IGraphicsDevice device) =>
-        device.Adapter.HostPointerAlignment != 0
-        && device.MainDevice.IsExtensionEnabled(Constants.VK_EXT_EXTERNAL_MEMORY_HOST_EXTENSION_NAME);
+    /// <summary>The bytes of a <paramref name="width"/> by <paramref name="height"/> frame of
+    /// <paramref name="format"/>.</summary>
+    public static ulong FrameBytes(uint width, uint height, SurfaceFormat format) =>
+        (ulong)width * height * (ulong)format.SizeInBytes;
 
-    /// <summary>Records into the device's current command buffer a copy of <paramref name="frame"/> into slot
-    /// <paramref name="slot"/>; after EndDraw, before Submit.</summary>
-    public void RecordCopy(ITexture frame, uint slot)
+    /// <summary>Whether a <paramref name="width"/> by <paramref name="height"/> frame fits in a slot.</summary>
+    public bool Fits(uint width, uint height) => FrameBytes(width, height, _format) <= Memory.SlotSize;
+
+    /// <summary>The descriptors the consumer takes the ring's frames of this size by, one per slot; the first names the
+    /// others.</summary>
+    public SharedSurfaceDescriptor[] Describe(uint width, uint height)
+    {
+        var descriptors = new SharedSurfaceDescriptor[_slots.Length];
+        for (uint slot = 0; slot < _slots.Length; slot++)
+        {
+            descriptors[slot] = new SharedSurfaceDescriptor
+            {
+                HandleType = SharedHandleType.HostMemory,
+                MemoryPath = Memory.Path,
+                MemoryOffset = Memory.SlotOffset(slot),
+                CounterOffset = Memory.CounterOffset(slot),
+                AllocationSize = Memory.SlotSize,
+                Width = width,
+                Height = height,
+                Format = _format
+            };
+        }
+
+        descriptors[0].BufferCount = (uint)_slots.Length;
+        descriptors[0].Others = descriptors[1..];
+        return descriptors;
+    }
+
+    /// <summary>Says slot <paramref name="slot"/> holds frame <paramref name="frame"/> of this size, finished: the size
+    /// first, so the consumer reads it with the frame.</summary>
+    public void Finish(uint slot, ulong frame, uint width, uint height)
+    {
+        Memory.WriteFrameSize(Memory.CounterOffset(slot), width, height);
+        Memory.WriteCounter(Memory.CounterOffset(slot), frame);
+    }
+
+    /// <summary>Records into the device's current command buffer a copy of the <paramref name="width"/> by
+    /// <paramref name="height"/> <paramref name="frame"/> into slot <paramref name="slot"/>; after EndDraw, before
+    /// Submit.</summary>
+    public void RecordCopy(ITexture frame, uint slot, uint width, uint height)
     {
         var commandBuffer = _device.CurrentCommandBuffer;
         _device.InsertImageMemoryBarrier(commandBuffer, frame,
@@ -96,14 +112,14 @@ internal sealed unsafe class HostFrameRing : IDisposable
         var region = new BufferImageCopy
         {
             BufferOffset = 0,
-            BufferRowLength = Width,
-            BufferImageHeight = Height,
+            BufferRowLength = width,
+            BufferImageHeight = height,
             ImageSubresource = new ImageSubresourceLayers { AspectMask = ImageAspectFlagBits.ColorBit, LayerCount = 1 },
             ImageOffset = new Offset3D(),
             ImageExtent = new Extent3D
             {
-                Width = Math.Min(frame.Width, Width),
-                Height = Math.Min(frame.Height, Height),
+                Width = Math.Min(frame.Width, width),
+                Height = Math.Min(frame.Height, height),
                 Depth = 1
             }
         };

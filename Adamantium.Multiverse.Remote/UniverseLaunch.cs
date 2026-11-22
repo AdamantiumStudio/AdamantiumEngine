@@ -23,4 +23,11 @@ public sealed class UniverseLaunch
     /// <summary>The GPU the viewer draws on (<c>GraphicsAdapter.DeviceUuid</c>); the host shares GPU memory only with
     /// the same.</summary>
     public Guid ViewerDeviceUuid { get; set; }
+
+    /// <summary>The largest screen the viewer shows the frames on, in pixels: frames through memory of the process are
+    /// kept in slots of its size, so a new size of them needs no new ring. 0 when unknown.</summary>
+    public uint LargestScreenWidth { get; set; }
+
+    /// <summary>See <see cref="LargestScreenWidth"/>.</summary>
+    public uint LargestScreenHeight { get; set; }
 }

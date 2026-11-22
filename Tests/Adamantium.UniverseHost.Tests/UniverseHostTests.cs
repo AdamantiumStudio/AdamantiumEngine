@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Adamantium.Engine.Scenes;
+using Adamantium.Graphics.Core;
 using Adamantium.Imaging;
 using Adamantium.Multiverse.Remote;
 using NUnit.Framework;
@@ -141,11 +142,11 @@ public class UniverseHostTests
         await Launch("Drift.ascene", 160, 90, FrameSharing.HostMemory);
         Assert.That(_viewer.Surfaces.TryTake(out var surface, Patience), Is.True, "given a surface");
         Assert.That(surface.HandleType, Is.EqualTo(Adamantium.Graphics.Core.SharedHandleType.HostMemory));
-        using var reader = new Adamantium.Graphics.HostFrameReader(surface.ToDescriptor());
+        using var reader = new HostFrameReader(surface.ToDescriptor());
 
-        var first = TakeLitFrame(reader, out var brightness);
+        var first = TakeLitFrame(reader, surface, out var brightness);
         reader.GiveBack(first);
-        var later = TakeFrame(reader, out _);
+        var later = TakeFrame(reader, surface, first, out _);
         reader.GiveBack(later);
         await _connection.Host.StopAsync(CancellationToken.None);
 
@@ -163,20 +164,20 @@ public class UniverseHostTests
     {
         await Launch("Drift.ascene", 160, 90, FrameSharing.HostMemory);
         Assert.That(_viewer.Surfaces.TryTake(out var first, Patience), Is.True, "given a surface");
-        using (var firstReader = new Adamantium.Graphics.HostFrameReader(first.ToDescriptor()))
+        using (var firstReader = new HostFrameReader(first.ToDescriptor()))
         {
-            firstReader.GiveBack(TakeFrame(firstReader, out _));
+            firstReader.GiveBack(TakeFrame(firstReader, first, 0, out _));
         }
 
         _connection.Host.AskNewSurface();
         _connection.Host.AskFrame(_viewer.LastFrame + 1);
         var asked = Stopwatch.StartNew();
         Assert.That(_viewer.Surfaces.TryTake(out var second, Patience), Is.True, "given a new surface");
-        using var reader = new Adamantium.Graphics.HostFrameReader(second.ToDescriptor());
+        using var reader = new HostFrameReader(second.ToDescriptor());
         var frame = 0ul;
         while (frame < 3 && asked.Elapsed < Patience)
         {
-            frame = TakeFrame(reader, out _);
+            frame = TakeFrame(reader, second, frame, out _);
             reader.GiveBack(frame);
         }
 
@@ -238,35 +239,37 @@ public class UniverseHostTests
             FrameSharing = sharing
         }, new CancellationTokenSource(Patience).Token);
 
-    private static ulong TakeFrame(Adamantium.Graphics.HostFrameReader reader, out int centerBrightness)
+    // The newest frame of the surface's size after the one given.
+    private static ulong TakeFrame(HostFrameReader reader, RemoteSurface surface, ulong after, out int centerBrightness)
     {
         var waited = Stopwatch.StartNew();
         int slot;
         ulong frame;
-        while (!reader.TryTakeNewest(out slot, out frame))
+        while (!reader.TryTakeNewest(after, surface.Width, surface.Height, out slot, out frame))
         {
             Assert.That(waited.Elapsed, Is.LessThan(Patience), "a frame comes");
             Thread.Sleep(5);
         }
 
-        var pixels = reader.Pixels(slot);
-        var center = ((int)reader.Height / 2 * (int)reader.Width + (int)reader.Width / 2) * 4;
+        var pixels = reader.Pixels(slot, surface.Width, surface.Height);
+        var center = ((int)surface.Height / 2 * (int)surface.Width + (int)surface.Width / 2) * 4;
         centerBrightness = pixels[center] + pixels[center + 1] + pixels[center + 2];
         return frame;
     }
 
-    private static ulong TakeLitFrame(Adamantium.Graphics.HostFrameReader reader, out int centerBrightness)
+    private static ulong TakeLitFrame(HostFrameReader reader, RemoteSurface surface, out int centerBrightness)
     {
         var waited = Stopwatch.StartNew();
+        var after = 0ul;
         while (true)
         {
-            var frame = TakeFrame(reader, out centerBrightness);
+            after = TakeFrame(reader, surface, after, out centerBrightness);
             if (centerBrightness > LitBrightness || waited.Elapsed > Patience)
             {
-                return frame;
+                return after;
             }
 
-            reader.GiveBack(frame);
+            reader.GiveBack(after);
         }
     }
 

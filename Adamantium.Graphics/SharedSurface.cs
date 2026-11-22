@@ -743,14 +743,14 @@ public sealed unsafe class SharedSurface : Texture
         return surface;
     }
 
-    // Frames in memory of the process are copied into the surface itself, which is sampled as its latched copy.
+    // Frames in memory of the process are copied into the surface itself, which is sampled as its latched copy. It is
+    // not sampled before the first copy, which takes it out of its first layout.
     private static SharedSurface ImportHostMemory(IGraphicsDevice device, SharedSurfaceDescriptor descriptor, string name)
     {
         var description = BuildDescription(descriptor.Width, descriptor.Height, descriptor.Format);
         var surface = new SharedSurface(device, description, null, null, name);
         try
         {
-            surface.TransitionImageLayout(description.DesiredImageLayout);
             surface._hostFrames = new HostFrameImport(device, descriptor);
         }
         catch

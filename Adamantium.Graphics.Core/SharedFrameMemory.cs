@@ -3,14 +3,14 @@ using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Threading;
 
-namespace Adamantium.Graphics;
+namespace Adamantium.Graphics.Core;
 
-/// <summary>Memory shared between processes through a file, mapped into each: a header of two counters per slot - the
-/// frame the producer finished in it, the frame the consumer read from it - then the slots, each a frame's pixels, rows
-/// packed. Every slot starts and ends on <c>alignment</c>, as memory imported into a GPU must.</summary>
+/// <summary>Memory shared between processes through a file, mapped into each: a header of three values per slot - the
+/// frame the producer finished in it, the frame the consumer read from it, that frame's size - then the slots, each a
+/// frame's pixels, rows packed. Every slot starts and ends on <c>alignment</c>, as memory imported into a GPU must.</summary>
 public sealed unsafe class SharedFrameMemory : IDisposable
 {
-    private const ulong CounterSize = 2 * sizeof(ulong);
+    private const ulong CounterSize = 3 * sizeof(ulong);
     private const string SharedMemoryFolder = "/dev/shm";
 
     private readonly FileStream _file;
@@ -109,6 +109,16 @@ public sealed unsafe class SharedFrameMemory : IDisposable
 
     /// <summary>Writes the counter at <paramref name="offset"/>, after everything written before it.</summary>
     public void WriteCounter(ulong offset, ulong value) => Volatile.Write(ref *(ulong*)At(offset), value);
+
+    /// <summary>Whether the frame in the slot whose counters are at <paramref name="counterOffset"/> is of this size, as
+    /// the producer wrote it before saying the frame is finished.</summary>
+    public bool HoldsFrameOfSize(ulong counterOffset, uint width, uint height) =>
+        ReadCounter(counterOffset + 2 * sizeof(ulong)) == (width | (ulong)height << 32);
+
+    /// <summary>Writes the size of the frame in the slot whose counters are at <paramref name="counterOffset"/>; before
+    /// the counter that says the frame is finished.</summary>
+    public void WriteFrameSize(ulong counterOffset, uint width, uint height) =>
+        WriteCounter(counterOffset + 2 * sizeof(ulong), width | (ulong)height << 32);
 
     public void Dispose()
     {

@@ -94,20 +94,79 @@ public class HostMemorySurfaceImportTests
         });
     }
 
-    private static GraphicsPresenter CreatePresenter(IGraphicsDevice device)
+    // Slots of the largest screen's frame: a smaller frame is new descriptors of the same memory, handed over with its
+    // first frame in it, and the surfaces of both sizes take their own frames from the one ring.
+    [Test]
+    public void ANewSizeThatFits_IsTheSameRing_AndEachSizeTakesItsOwnFrames()
     {
-        var parameters = new PresentationParameters(PresenterType.RenderTarget, Size, Size, IntPtr.Zero);
+        var device = GpuFixture.CreateRenderDevice();
+        Assume.That(HostMemorySurfaceProducer.CanProduce(device), "the device copies no frames into memory of the process");
+        using var presenter = CreatePresenter(device);
+        var consumer = new RecordingSurfaceConsumer();
+        using var producer = new HostMemorySurfaceProducer(consumer, SurfaceFormat.B8G8R8A8.UNorm, 2 * Size, 2 * Size);
+        device.ClearColor = Colors.Red;
+        Produce(device, presenter, producer);
+        Produce(device, presenter, producer);
+        device.ClearColor = Colors.Lime;
+        Produce(device, presenter, producer, Size / 2, Size / 2);
+        Produce(device, presenter, producer, Size / 2, Size / 2);
+
+        var viewer = GpuFixture.CreateRenderDevice();
+        using var viewerPresenter = CreatePresenter(viewer);
+        using var whole = SharedSurface.Import(viewer, consumer.Bound[0]);
+        using var half = SharedSurface.Import(viewer, consumer.Bound[^1]);
+        View(viewer, viewerPresenter, whole);
+        View(viewer, viewerPresenter, half);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(consumer.Bound, Has.Count.EqualTo(2), "one hand-over a size");
+            Assert.That(consumer.Bound[1].MemoryPath, Is.EqualTo(consumer.Bound[0].MemoryPath), "the same memory");
+            Assert.That((consumer.Bound[1].Width, consumer.Bound[1].Height), Is.EqualTo((Size / 2, Size / 2)));
+            Assert.That(PixelAt(whole.LatchedCopy, 3, 5), Is.EqualTo(new byte[] { 0, 0, 255, 255 }), "the whole size's frame, red");
+            Assert.That(PixelAt(half.LatchedCopy, 1, 2, Size / 2), Is.EqualTo(new byte[] { 0, 255, 0, 255 }), "the half size's, green");
+        });
+    }
+
+    [Test]
+    public void AFrameLargerThanTheSlots_GetsANewRing()
+    {
+        var device = GpuFixture.CreateRenderDevice();
+        Assume.That(HostMemorySurfaceProducer.CanProduce(device), "the device copies no frames into memory of the process");
+        // No screen told: the slots are half again a 32 by 32 frame, rounded up to the device's alignment - 64 KiB at
+        // most; a 160 by 160 frame (100 KiB) fits in none of them.
+        using var presenter = CreatePresenter(device, 160);
+        var consumer = new RecordingSurfaceConsumer();
+        using var producer = new HostMemorySurfaceProducer(consumer, SurfaceFormat.B8G8R8A8.UNorm);
+        Produce(device, presenter, producer, 32, 32);
+        Produce(device, presenter, producer, 32, 32);
+        Assume.That(consumer.Bound[0].AllocationSize, Is.LessThan(160ul * 160 * 4), "the device aligns to 64 KiB or less");
+        Produce(device, presenter, producer, 160, 160);
+        Produce(device, presenter, producer, 160, 160);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(consumer.Bound, Has.Count.EqualTo(2));
+            Assert.That(consumer.Bound[1].MemoryPath, Is.Not.EqualTo(consumer.Bound[0].MemoryPath), "a new ring");
+            Assert.That(consumer.Bound[1].AllocationSize, Is.GreaterThan(consumer.Bound[0].AllocationSize));
+        });
+    }
+
+    private static GraphicsPresenter CreatePresenter(IGraphicsDevice device, uint size = Size)
+    {
+        var parameters = new PresentationParameters(PresenterType.RenderTarget, size, size, IntPtr.Zero);
         return GraphicsPresenter.Create(device, parameters, "host_memory_import");
     }
 
-    private static void Produce(IGraphicsDevice device, GraphicsPresenter presenter, HostMemorySurfaceProducer producer)
+    private static void Produce(IGraphicsDevice device, GraphicsPresenter presenter, HostMemorySurfaceProducer producer,
+        uint width = Size, uint height = Size)
     {
         device.SetRenderTargets(presenter.RenderTarget);
         device.SetDepthBuffer(presenter.DepthBuffer);
         device.Presenter = presenter;
         Assert.That(device.BeginDraw(), Is.True);
         device.EndDraw();
-        producer.Produce(device, ((RenderTargetGraphicsPresenter)presenter).ResolveTexture, Size, Size, inDevice: false);
+        producer.Produce(device, ((RenderTargetGraphicsPresenter)presenter).ResolveTexture, width, height, inDevice: false);
         device.Submit();
         presenter.Present();
         device.FrameEnded();
@@ -129,11 +188,11 @@ public class HostMemorySurfaceImportTests
         device.DeviceWaitIdle();
     }
 
-    private static byte[] PixelAt(ITexture texture, int x, int y)
+    private static byte[] PixelAt(ITexture texture, int x, int y, uint width = Size)
     {
         using var image = texture.ToImage(0, 0);
         var pixel = new byte[4];
-        Marshal.Copy(image.DataPointer + (int)((y * Size + x) * 4), pixel, 0, 4);
+        Marshal.Copy(image.DataPointer + (int)((y * width + x) * 4), pixel, 0, 4);
         return pixel;
     }
 }
