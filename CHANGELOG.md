@@ -1005,6 +1005,10 @@ All packages share one version.
 
 ### Fixed
 
+- Reading a PDF content stream lexed every number operand twice - an integer up to four times, looking ahead for a
+  reference - though most of a page of maps is numbers: `PdfContentReader` takes a number from the token it has just
+  looked at (`PdfObjectParser.ReadNumber`), read as before. Writing the geologic map of Alaska's page takes 0.3 s
+  less.
 - Fixed-size arrays read from Vulkan and GameInput structs - a GPU's UUID and LUID, the heap budgets, limits such as
   `MaxComputeWorkGroupCount`, a GameInput device's id - held their first element only, the rest read from beside a copy
   on the stack (Adamantium.Vulkan 1.3.2, QuantumBinding.Utils 3.2.0). So the game host took the editor's GPU for

@@ -29,6 +29,15 @@ internal sealed class PdfObjectParser
     /// inside an array means the array was never closed.</summary>
     public bool KeywordsEndObjects { get; init; }
 
+    /// <summary>The number <paramref name="token"/> - already read at the lexer's position, which it moves past - as
+    /// <see cref="ReadObject"/> reads it there: an integer followed by <c>G R</c> a reference. Not lexing it again is
+    /// most of what reading a content stream of coordinates costs.</summary>
+    internal PdfObject ReadNumber(PdfToken token)
+    {
+        _lexer.Position = token.End;
+        return token.Kind == PdfTokenKind.Real ? new PdfReal(token.Real) : ReadIntegerOrReference(token);
+    }
+
     /// <summary>Reads the object at the lexer's position, or returns null at the end of the data or at a keyword that
     /// is not a value (<c>endobj</c>, <c>stream</c> and the like), which is left unread.</summary>
     public PdfObject ReadObject()

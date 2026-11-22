@@ -64,7 +64,10 @@ public sealed class PdfContentReader
             PdfObject operand;
             try
             {
-                operand = _parser.ReadObject();
+                // A number - most operands - is taken from the token just peeked, not lexed a second time.
+                operand = token.Kind is PdfTokenKind.Real or PdfTokenKind.Integer
+                    ? _parser.ReadNumber(token)
+                    : _parser.ReadObject();
             }
             catch (PdfException)
             {
