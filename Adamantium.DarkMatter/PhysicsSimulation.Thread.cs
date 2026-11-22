@@ -31,6 +31,8 @@ public sealed partial class PhysicsSimulation
     private readonly AutoResetEvent _wake = new(false);
     // Tells a Pause the thread holds: a run under way when it was asked has ended.
     private readonly ManualResetEventSlim _parked = new(false);
+    // Set while the thread waits for the caller to read: every run it may leave unread sent, its allocations told.
+    private readonly ManualResetEventSlim _heldByUnreadResults = new(false);
     private Thread _thread;
     private volatile bool _stopping;
     private volatile bool _paused;
@@ -44,6 +46,11 @@ public sealed partial class PhysicsSimulation
 
     // What its thread allocated, as of its last run: for the tests to see that it allocates none.
     internal long ThreadAllocatedBytes => Volatile.Read(ref _threadAllocatedBytes);
+
+    // Whether the thread waits for the caller, every run it may leave unread sent: as many results as ever go round.
+    // For the tests; set only once the last of them is sent and what it allocated told.
+    internal bool IsHeldByUnreadResults =>
+        _heldByUnreadResults.IsSet && Volatile.Read(ref _unreadResults) >= MaxUnreadResults;
 
     /// <summary>Steps on a thread of its own from now on, at <see cref="PhysicsSettings.StepRate"/>; paused, it goes
     /// on. What it does is read at each <see cref="Update"/>.</summary>
@@ -202,7 +209,9 @@ public sealed partial class PhysicsSimulation
 
                 if (Volatile.Read(ref _unreadResults) >= MaxUnreadResults)
                 {
+                    _heldByUnreadResults.Set();
                     _wake.WaitOne();
+                    _heldByUnreadResults.Reset();
                     continue;
                 }
 

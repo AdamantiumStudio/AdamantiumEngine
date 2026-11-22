@@ -128,6 +128,7 @@ public sealed partial class PhysicsSimulation : IDisposable
         StopThread();
         _wake.Dispose();
         _parked.Dispose();
+        _heldByUnreadResults.Dispose();
         _isDisposed = true;
         _commands.Clear();
         _bodySlots.Clear();
