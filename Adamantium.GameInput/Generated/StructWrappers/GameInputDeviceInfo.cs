@@ -68,11 +68,7 @@ public unsafe partial class GameInputDeviceInfo : IMarshallableObject, IMarshall
     {
         VendorId = native.vendorId;
         ProductId = native.productId;
-        var tmpDeviceId = new byte[32];
-        var deviceIdp = native.deviceId[0];
-        var pDeviceId = (byte*)System.Runtime.CompilerServices.Unsafe.AsPointer(ref System.Runtime.CompilerServices.Unsafe.AsRef(in deviceIdp ));
-        QuantumBinding.Utils.MarshalingUtils.MarshalFromPointerToArray(pDeviceId, 32, tmpDeviceId);
-        DeviceId = tmpDeviceId;
+        DeviceId = QuantumBinding.Utils.MarshalingUtils.CopyFixedArray(in native.deviceId[0], new byte[32]);
         SupportedButtons = native.supportedButtons;
         SupportedSystemButtons = native.supportedSystemButtons;
         SupportedRumbleMotors = native.supportedRumbleMotors;

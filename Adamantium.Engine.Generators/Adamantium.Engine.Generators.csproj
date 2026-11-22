@@ -55,7 +55,6 @@
 		
 		<PackageReference Include="Adamantium.Vulkan.Spirv" Version="2.0.2" GeneratePathProperty="true" PrivateAssets="all" />
 		<PackageReference Include="Adamantium.Vulkan.Slang" Version="$(AdamantiumSlangVersion)" GeneratePathProperty="true" PrivateAssets="compile;runtime;native;analyzers;build;buildtransitive" />
-        <PackageReference Include="QuantumBinding.Utils" Version="3.1.0" GeneratePathProperty="true" PrivateAssets="all" />
         <PackageReference Include="MessagePack" Version="3.1.12" GeneratePathProperty="true" PrivateAssets="all" />
         <PackageReference Include="MessagePack.Annotations" Version="3.1.12" GeneratePathProperty="true" PrivateAssets="all" />
 		<PackageReference Include="System.Runtime.CompilerServices.Unsafe" Version="6.1.2" GeneratePathProperty="true" PrivateAssets="all" />
@@ -73,6 +72,17 @@
         <EmbeddedResource Include="$(PKGAdamantium_Vulkan_Spirv)\runtimes\linux-x64\native\libspirv-cross-c-shared.so" LogicalName="$(RootNamespace).libspirv-cross-c-shared.so" Visible="false" />
         <EmbeddedResource Include="$(PKGAdamantium_Vulkan_Slang)\runtimes\linux-x64\native\libslang-c-shared.so" LogicalName="$(RootNamespace).libslang-c-shared.so" Visible="false" />
     </ItemGroup>
+
+    <ItemGroup Condition="'$(UseQuantumBindingSource)' == 'true'">
+        <ProjectReference Include="$(QuantumBindingDir)QuantumBinding.Utils\QuantumBinding.Utils.csproj" PrivateAssets="all" />
+    </ItemGroup>
+    <ItemGroup Condition="'$(UseQuantumBindingSource)' != 'true'">
+        <PackageReference Include="QuantumBinding.Utils" Version="$(QuantumBindingUtilsVersion)" GeneratePathProperty="true" PrivateAssets="all" />
+    </ItemGroup>
+    <PropertyGroup>
+        <QuantumBindingUtilsForAnalyzer Condition="'$(UseQuantumBindingSource)' == 'true'">$(QuantumBindingDir)QuantumBinding.Utils\bin\$(Configuration)\netstandard2.0\QuantumBinding.Utils.dll</QuantumBindingUtilsForAnalyzer>
+        <QuantumBindingUtilsForAnalyzer Condition="'$(UseQuantumBindingSource)' != 'true'">$(PKGQuantumBinding_Utils)\lib\netstandard2.0\QuantumBinding.Utils.dll</QuantumBindingUtilsForAnalyzer>
+    </PropertyGroup>
 
     <PropertyGroup>
         <GetTargetPathDependsOn>$(GetTargetPathDependsOn);GetDependencyTargetPaths</GetTargetPathDependsOn>
@@ -92,7 +102,7 @@
         <ItemGroup>
             <TargetPathWithTargetPlatformMoniker Include="$(PKGAdamantium_Vulkan_Spirv)\lib\netstandard2.0\Adamantium.Vulkan.Spirv.dll" IncludeRuntimeDependency="false" />
             <TargetPathWithTargetPlatformMoniker Include="$(PKGAdamantium_Vulkan_Slang)\lib\netstandard2.0\Adamantium.Vulkan.Slang.dll" IncludeRuntimeDependency="false" />
-            <TargetPathWithTargetPlatformMoniker Include="$(PKGQuantumBinding_Utils)\lib\netstandard2.0\QuantumBinding.Utils.dll" IncludeRuntimeDependency="false" />
+            <TargetPathWithTargetPlatformMoniker Include="$(QuantumBindingUtilsForAnalyzer)" IncludeRuntimeDependency="false" />
             <TargetPathWithTargetPlatformMoniker Include="$(PKGMessagePack)\lib\netstandard2.0\MessagePack.dll" IncludeRuntimeDependency="false" />
             <TargetPathWithTargetPlatformMoniker Include="$(PKGMessagePack_Annotations)\lib\netstandard2.0\MessagePack.Annotations.dll" IncludeRuntimeDependency="false" />
             <TargetPathWithTargetPlatformMoniker Include="$(PKGSystem_Runtime_CompilerServices_Unsafe)\lib\netstandard2.0\System.Runtime.CompilerServices.Unsafe.dll" IncludeRuntimeDependency="false" />

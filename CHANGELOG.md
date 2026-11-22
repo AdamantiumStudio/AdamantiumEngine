@@ -981,6 +981,10 @@ All packages share one version.
 
 ### Fixed
 
+- Fixed-size arrays read from Vulkan and GameInput structs - a GPU's UUID and LUID, the heap budgets, limits such as
+  `MaxComputeWorkGroupCount`, a GameInput device's id - held their first element only, the rest read from beside a copy
+  on the stack (Adamantium.Vulkan 1.3.2, QuantumBinding.Utils 3.2.0). So the game host took the editor's GPU for
+  another and sent its frames through host memory; it now shares them on the GPU.
 - The game host starts its game again: it gave the project's physics to the game's physics before the world had taken
   its services in, found none and threw, so no game launched under the debugger. It gives it once the world is up to
   date, just before the game starts.

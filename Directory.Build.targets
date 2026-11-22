@@ -21,6 +21,15 @@
     <PackageReference Include="@(AdamantiumVulkanReference)" Version="$(AdamantiumVulkanVersion)" />
   </ItemGroup>
 
+  <!-- QuantumBinding.Utils the same way, named once as a QuantumBindingUtilsReference. -->
+  <ItemGroup Condition="'$(UseQuantumBindingSource)' == 'true'">
+    <ProjectReference Include="@(QuantumBindingUtilsReference->'$(QuantumBindingDir)%(Identity)\%(Identity).csproj')" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseQuantumBindingSource)' != 'true'">
+    <PackageReference Include="@(QuantumBindingUtilsReference)" Version="$(QuantumBindingUtilsVersion)" />
+  </ItemGroup>
+
   <Target Name="AdditionalFilesAreUpToDateInputs" BeforeTargets="CollectUpToDateCheckInputDesignTime">
     <ItemGroup>
       <UpToDateCheckInput Include="@(AdditionalFiles)" />
