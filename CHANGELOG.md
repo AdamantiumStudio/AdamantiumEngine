@@ -788,6 +788,13 @@ All packages share one version.
 
 ### Changed
 
+- `AdamantiumCollection` puts in and takes out a range as one change: `InsertItems(int, ReadOnlySpan<T>)` and
+  `RemoveItems(int, int)` store it, in place of `InsertItem` and `RemoveItem`, and `OnInsert(int, ReadOnlySpan<T>)` and
+  `OnRemove(int, ReadOnlySpan<T>)` tell it, in place of `OnInsert(int, T)` and `OnRemoveItem`; a single `Insert` or
+  `RemoveAt` is a range of one. A `TrackingCollection` raises one `Add` or `Remove` for a range, with all its items
+  from where they stand, not one an item. What may not come in is refused for the whole range, before any of it is in
+  (`CheckItems`): a range with a null `EntityComponentCollection` component, or one it holds already, changes nothing,
+  where the items before it went in.
 - A scene file keeps components by their type and fields in one section, `Components` (`SceneFile.Components`,
   `SceneComponent`): the game's, as `GameComponents` did, and any of the engine's marked `[InspectorComponent]` that no section of
   an entry keeps - a rigid body, a collider and a joint keep theirs. A new such component is saved with nothing more
@@ -1005,11 +1012,15 @@ All packages share one version.
 
 ### Fixed
 
-- `AdamantiumCollection.AddRange` copied its range into a new array, then added it item by item, each taking the lock
-  and checking again: a range of a collection, or of a span (`AddRange(ReadOnlySpan<T>)`, which an array now binds
-  to), is copied through a pooled array, still taken whole before the first item is added; the room is made once, and
-  each item still goes through `InsertItem` and `OnInsert` as `Add` takes it. A `TrackingCollection` made from a list
-  of 2,000 points takes 4.8 ns a point, not 16.2, and half the memory.
+- `AdamantiumCollection.AddRange` and `InsertRange` copied their range into a new array, then put it in item by item,
+  each taking the lock and checking again, an insertion in the middle moving the rest once an item; `RemoveRange`
+  moved the rest once an item it removed. A range is taken whole before it goes in, through a pooled array, stored at
+  once, what follows it moved once, and told once. `AddRange(ReadOnlySpan<T>)` and `InsertRange(int, ReadOnlySpan<T>)`
+  take a span; an array binds to them. Adding 2,000 items takes 3 - 4.4 ns an item, not 18; inserting 200 in the middle
+  of 2,000, 52 ns, not 191; removing 1,000 of 2,000, 3.4 ns, not 87.
+- `AdamantiumCollection.RemoveAt` with an index past the end took the count down before failing, or - within the
+  storage - wiped the last item and told a default one removed: it throws `ArgumentOutOfRangeException` and changes
+  nothing.
 - Reading a PDF content stream lexed every number operand twice - an integer up to four times, looking ahead for a
   reference - though most of a page of maps is numbers: `PdfContentReader` takes a number from the token it has just
   looked at (`PdfObjectParser.ReadNumber`), read as before. Writing the geologic map of Alaska's page takes 0.3 s

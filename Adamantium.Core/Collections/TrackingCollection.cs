@@ -86,18 +86,25 @@ namespace Adamantium.Core.Collections
             CollectionChanged?.Invoke(this, new NotifyCollectionChangedEventArgs(action, items));
         }
 
-        protected override void OnInsert(int index, T item)
+        // A range is ONE change: one Add or Remove with all its items, from where they stand. The items are copied
+        // only when someone listens.
+        protected override void OnInsert(int index, ReadOnlySpan<T> range)
         {
-            CollectionChanged?.Invoke(this,
-                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Add, new List<T>() { item }, index));
-            NotifyCountChanged();
+            if (CollectionChanged == null) NotifyCountChanged();
+            else NotifyAdd(ListOf(range), index);
         }
 
-        protected override void OnRemoveItem(int index, T item)
+        protected override void OnRemove(int index, ReadOnlySpan<T> range)
         {
-            CollectionChanged?.Invoke(this,
-                new NotifyCollectionChangedEventArgs(NotifyCollectionChangedAction.Remove, new List<T>() { item }, index));
-            NotifyCountChanged();
+            if (CollectionChanged == null) NotifyCountChanged();
+            else NotifyRemove(ListOf(range), index);
+        }
+
+        private static List<T> ListOf(ReadOnlySpan<T> range)
+        {
+            var list = new List<T>(range.Length);
+            list.AddRange(range);
+            return list;
         }
 
         protected override void OnSet(int index, T oldItem, T newItem)
@@ -121,8 +128,7 @@ namespace Adamantium.Core.Collections
         {
             if (CollectionChanged == null || items.Count == 0) return;
 
-            _clearing = new List<T>(items.Count);
-            foreach (var item in items) _clearing.Add(item);
+            _clearing = new List<T>(items);
         }
 
         protected override void OnCleared()

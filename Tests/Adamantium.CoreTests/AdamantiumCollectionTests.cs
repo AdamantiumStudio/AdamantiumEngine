@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.Linq;
 using Adamantium.Core.Collections;
 using NUnit.Framework;
@@ -123,7 +124,7 @@ public class AdamantiumCollectionTests
     {
         var from = Of("B", "C", "D");
         var to = Of("A");
-        to.CollectionChanged += (_, e) => from.Remove((string)e.NewItems![0]);
+        to.CollectionChanged += (_, e) => from.Remove(e.NewItems!.Cast<string>());
 
         to.AddRange(from);
 
@@ -149,16 +150,37 @@ public class AdamantiumCollectionTests
         Assert.That(c, Is.EqualTo(new[] { "A", "B", "C", "D", "E", "F", "G0", "G1", "H", "I" }));
     }
 
+    // What one change to a collection told: its action, where, what, and how many were in once it was made.
+    private static List<string> ToldOf(TrackingCollection<string> c)
+    {
+        var told = new List<string>();
+        c.CollectionChanged += (_, e) => told.Add(e.Action switch
+        {
+            NotifyCollectionChangedAction.Add => "+" + e.NewStartingIndex + ":" + string.Join(",", e.NewItems!.Cast<string>()),
+            NotifyCollectionChangedAction.Remove => "-" + e.OldStartingIndex + ":" + string.Join(",", e.OldItems!.Cast<string>()),
+            _ => e.Action.ToString(),
+        } + " of " + c.Count);
+        return told;
+    }
+
+    // A range is one change: one Add with all its items, from where they stand.
     [Test]
-    public void AddRange_OfASpan_TellsEachItemAddedAtItsIndex()
+    public void ARange_IsToldAsOneChange_WithAllItsItems()
     {
         var c = Of("A");
-        var added = new List<string>();
-        c.CollectionChanged += (_, e) => added.Add(e.NewStartingIndex + ":" + e.NewItems![0]);
+        var told = ToldOf(c);
 
         c.AddRange(["B", "C"]);
+        c.AddRange(new List<string> { "D" });
+        c.InsertRange(1, new List<string> { "X", "Y" });
+        c.RemoveRange(0, 2);
+        c.Insert(0, "Z");
+        c.RemoveAt(0);
 
-        Assert.That(added, Is.EqualTo(new[] { "1:B", "2:C" }));
+        Assert.That(told, Is.EqualTo(new[]
+        {
+            "+1:B,C of 3", "+3:D of 4", "+1:X,Y of 6", "-0:A,X of 4", "+0:Z of 5", "-0:Z of 4",
+        }));
     }
 
     // What was passed is added, though a handler of the adds changes the array it came in.
@@ -187,35 +209,112 @@ public class AdamantiumCollectionTests
         });
     }
 
-    // A collection that checks its items still sees every one of a range, each at the end it has grown to.
+    // Every way in and out goes through the one pair of storage hooks, a range at once.
     [Test]
-    public void AddRange_GoesThroughInsertItem_ItemByItem()
+    public void EveryChange_IsStoredThroughInsertItemsAndRemoveItems_ARangeAtOnce()
     {
         var c = new OnlyEven();
 
-        c.AddRange(new List<int> { 1, 2, 3, 4, 6 });
-        c.AddRange([7, 8]);
+        c.AddRange(new List<int> { 2, 4, 6 });
+        c.Insert(1, 8);
+        c.InsertRange(0, [10, 12]);
+        c.RemoveRange(1, 3);
+        c.RemoveAt(0);
+        c.Remove(6);
 
         Assert.Multiple(() =>
         {
-            Assert.That(c, Is.EqualTo(new[] { 2, 4, 6, 8 }));
-            Assert.That(c.Told, Is.EqualTo(new[] { "0:2", "1:4", "2:6", "3:8" }));
+            Assert.That(c, Is.EqualTo(new[] { 4 }));
+            Assert.That(c.Stored, Is.EqualTo(new[] { "+0:3", "+1:1", "+0:2", "-1:3", "-0:1", "-1:1" }));
+            Assert.That(c.Told, Is.EqualTo(new[] { "0:2,4,6", "1:8", "0:10,12" }));
+        });
+    }
+
+    // A range with an item the collection refuses is not stored at all, and nothing is told.
+    [Test]
+    public void ARangeWithAnItemRefused_LeavesTheCollectionAsItWas()
+    {
+        var c = new OnlyEven();
+        c.AddRange([2]);
+
+        Assert.Throws<ArgumentException>(() => c.AddRange([4, 5, 6]));
+        Assert.Multiple(() =>
+        {
+            Assert.That(c, Is.EqualTo(new[] { 2 }));
+            Assert.That(c.Told, Is.EqualTo(new[] { "0:2" }));
         });
     }
 
     private sealed class OnlyEven : AdamantiumCollection<int>
     {
+        public List<string> Stored { get; } = [];
+
         public List<string> Told { get; } = [];
 
-        protected override void InsertItem(int index, int item)
+        protected override void CheckItems(ReadOnlySpan<int> range)
         {
-            if (item % 2 == 0) base.InsertItem(index, item);
+            foreach (var item in range)
+            {
+                if (item % 2 != 0) throw new ArgumentException("odd", nameof(range));
+            }
         }
 
-        protected override void OnInsert(int index, int item)
+        protected override void InsertItems(int index, ReadOnlySpan<int> range)
         {
-            if (item % 2 == 0) Told.Add(index + ":" + item);
+            Stored.Add("+" + index + ":" + range.Length);
+            base.InsertItems(index, range);
         }
+
+        protected override void RemoveItems(int index, int count)
+        {
+            Stored.Add("-" + index + ":" + count);
+            base.RemoveItems(index, count);
+        }
+
+        protected override void OnInsert(int index, ReadOnlySpan<int> range) =>
+            Told.Add(index + ":" + string.Join(",", range.ToArray()));
+    }
+
+    [Test]
+    public void InsertRange_InTheMiddle_PutsTheItemsThere()
+    {
+        var c = Of("A", "B", "C");
+
+        c.InsertRange(1, new List<string> { "X", "Y" });
+
+        Assert.That(c, Is.EqualTo(new[] { "A", "X", "Y", "B", "C" }));
+    }
+
+    [Test]
+    public void InsertRange_OfItself_InTheMiddle_InsertsWhatItHeldBefore()
+    {
+        var c = Of("A", "B");
+
+        c.InsertRange(1, c);
+
+        Assert.That(c, Is.EqualTo(new[] { "A", "A", "B", "B" }));
+    }
+
+    [Test]
+    public void InsertRange_PastTheEnd_Appends()
+    {
+        var c = Of("A");
+
+        c.InsertRange(5, ["B", "C"]);
+
+        Assert.That(c, Is.EqualTo(new[] { "A", "B", "C" }));
+    }
+
+
+    // Regression: an index past the end took the count down before failing - or, within the storage, wiped the last
+    // item and told a default one removed.
+    [Test]
+    public void RemoveAt_PastTheEnd_Throws_AndKeepsTheItems()
+    {
+        var c = Of("A", "B");
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => c.RemoveAt(2));
+        Assert.That(c, Is.EqualTo(new[] { "A", "B" }));
     }
 
     [Test]
@@ -230,17 +329,6 @@ public class AdamantiumCollectionTests
         Assert.That(removed, Is.EqualTo("B"));
     }
 
-    [Test]
-    public void AddRange_StillTellsEachItemAdded()
-    {
-        var c = Of("A");
-        var told = new List<(object Item, int Index)>();
-        c.CollectionChanged += (_, e) => told.Add((e.NewItems![0], e.NewStartingIndex));
-
-        c.AddRange(new List<string> { "B", "C" });
-
-        Assert.That(told, Is.EqualTo(new List<(object, int)> { ("B", 1), ("C", 2) }));
-    }
 
     // Unwatched, a collection filled with many items costs about their storage: an announcement of each was made for
     // nobody - a list per item - and a mesh of a map tile's areas paid megabytes for it.
