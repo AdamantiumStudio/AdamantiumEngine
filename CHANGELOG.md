@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- `InspectorComponentAttribute`: marks a component type an editor's inspector shows and offers to add, in a group (`ComponentGroups`:
+  `Physics`, `Joints`, or a name of the game's own) and with an icon by key. The rigid body, the colliders and the
+  joints have it; a transform, a placeholder and what makes an entity a light or a shape do not.
 - `Messages.ChangeWindowMessageFilterEx` with `CHANGEFILTERSTRUCT` (`MessageFilterAction`, `MessageFilterStatus`): a
   message from processes of a lower integrity level let through to a window, as an elevated application needs to hear
   the shell's `TaskbarCreated`.
@@ -785,6 +788,16 @@ All packages share one version.
 
 ### Changed
 
+- A scene file keeps components by their type and fields in one section, `Components` (`SceneFile.Components`,
+  `SceneComponent`): the game's, as `GameComponents` did, and any of the engine's marked `[InspectorComponent]` that no section of
+  an entry keeps - a rigid body, a collider and a joint keep theirs. A new such component is saved with nothing more
+  written for it. `GameComponents` of a file before is read into `Components`; the format is version 2, so an engine
+  that reads 1 refuses the file rather than drop them, and a file is always written in this engine's version. Renamed
+  with it: `SceneGameComponent` to `SceneComponent`, `UnloadedGameComponents` to `UnloadedComponents`. `SceneCode.Add`
+  and `Load` take the engine's components kept by type as well; `SceneCode.KeepsByType` says which those are.
+- A joint's limits are never the wrong way round: `HingeJoint.LowerAngle`, `SliderJoint.LowerLimit` and
+  `DistanceJoint.MinDistance` set past the other limit take it along, and the other way. Before, such a joint was
+  refused when its scene was read, and lost.
 - Frames through memory of the process (`HostMemorySurfaceProducer`, for a viewer on another GPU) keep one ring for
   every size: its slots hold a frame of the largest screen the viewer shows them on (`UniverseLaunch.LargestScreenWidth`
   and `LargestScreenHeight`), each slot says the size of the frame it holds, and a new size is new descriptors of the

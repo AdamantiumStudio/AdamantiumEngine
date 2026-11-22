@@ -41,6 +41,33 @@ public class JointEditsTests
         });
     }
 
+    // A limit set past the other takes it along, so the limits are never the wrong way round - a joint whose edits the
+    // engine refuses, and a scene would lose. Settings given whole, in either order, end as they were given.
+    [Test]
+    public void ALimitSetPastTheOther_TakesItAlong_AndAJointsEditsComeOutAsGiven()
+    {
+        var hinge = new HingeJoint { UpperAngle = 10 };
+        hinge.LowerAngle = 50;
+        var slider = new SliderJoint { LowerLimit = 2 };
+        slider.UpperLimit = -3;
+        var distance = new DistanceJoint { MaxDistance = 1 };
+        distance.MinDistance = 5;
+        var gate = new Entity(null, "Gate");
+        gate.AddComponent(new HingeJoint { LowerAngle = -170, UpperAngle = -150 });
+        var wanted = new JointEdits { Kind = JointKind.Hinge, UsesLimits = true, LowerLimit = 100, UpperLimit = 120 };
+
+        PhysicsParts.SetJoint(gate, wanted, null);
+        var given = gate.GetComponent<HingeJoint>();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That((hinge.LowerAngle, hinge.UpperAngle), Is.EqualTo((50f, 50f)));
+            Assert.That((slider.LowerLimit, slider.UpperLimit), Is.EqualTo((-3f, -3f)));
+            Assert.That((distance.MinDistance, distance.MaxDistance), Is.EqualTo((5f, 5f)));
+            Assert.That((given.LowerAngle, given.UpperAngle), Is.EqualTo((100f, 120f)));
+        });
+    }
+
     [Test]
     public void AnotherKind_StandsBesideTheJointThePartHas_TheSameKindTakesItsPlace()
     {

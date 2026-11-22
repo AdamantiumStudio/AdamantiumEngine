@@ -127,11 +127,11 @@ public sealed class SceneBuilder
                 ApplyJoints(each.Entity, each.Entry, byId);
         }
 
-        foreach (var entry in scene.GameComponents)
+        foreach (var entry in scene.Components)
         {
             if (byId.TryGetValue(entry.On, out var entity))
             {
-                SceneGameComponents.Attach(entity, entry, world.Satellites.Get<IWorldCode>(), problems);
+                SceneComponents.Attach(entity, entry, world.Satellites.Get<IWorldCode>(), problems);
             }
             else
             {
@@ -238,8 +238,8 @@ public sealed class SceneBuilder
     }
 
     /// <summary>Puts on <paramref name="entity"/>, made for <paramref name="entry"/>, what the entry says of it - its
-    /// place and the settings of its kind - as building it does; the game's components are put back by
-    /// <see cref="ApplyGameComponents"/>. For a scene put back as it was. On the world's thread.</summary>
+    /// place and the settings of its kind - as building it does; the components kept by type are put back by
+    /// <see cref="ApplyComponents"/>. For a scene put back as it was. On the world's thread.</summary>
     internal static void Apply(Entity entity, ScenePlacement entry)
     {
         switch (entry)
@@ -263,43 +263,59 @@ public sealed class SceneBuilder
         }
     }
 
-    /// <summary>Makes the game's components of <paramref name="entity"/> those of <paramref name="entries"/> - none for
-    /// null: one of a kind not there is taken off, one there gets the entry's values, one missing is put on. On the world's
-    /// thread.</summary>
-    internal static void ApplyGameComponents(Entity entity, IReadOnlyList<SceneGameComponent> entries, IWorldCode code,
+    /// <summary>Makes the components of <paramref name="entity"/> kept by type those of <paramref name="entries"/> - none
+    /// for null: one of a kind not there is taken off, one there gets the entry's values, one missing is put on. On the
+    /// world's thread.</summary>
+    internal static void ApplyComponents(Entity entity, IReadOnlyList<SceneComponent> entries, IWorldCode code,
         List<GameComponentProblem> problems)
     {
-        var existing = entity.Components.GetAll<GameComponent>();
-        foreach (var component in existing)
+        var existing = KeptComponentsOf(entity);
+        if (existing != null)
         {
-            if (!HasEntryOfType(entries, component.GetType().FullName))
-                entity.RemoveComponent(component);
+            foreach (var component in existing)
+            {
+                if (!HasEntryOfType(entries, component.GetType().FullName))
+                    entity.RemoveComponent(component);
+            }
         }
 
         if (entries == null)
             return;
 
-        HashSet<GameComponent> applied = null;
-        var unloaded = entity.GetComponent<UnloadedGameComponents>();
+        HashSet<Component> applied = null;
+        var unloaded = entity.GetComponent<UnloadedComponents>();
         foreach (var entry in entries)
         {
             // Kept as it was read - its code not loaded: no game changed it, it is there still.
-            if (code.FindType<GameComponent>(entry.Type) == null)
+            if (SceneComponents.FindType(code, entry.Type) == null)
                 continue;
 
             if (FindOfType(existing, entry.Type) is { } component && (applied ??= []).Add(component))
             {
-                ComponentFields.Read(entry.Values, component, typeof(GameComponent));
+                SceneComponents.Read(entry, component);
             }
             else if (!HasUnloadedOfType(unloaded, entry.Type))
             {
                 // A second of a kind, or one whose code threw, is kept as it was read already: not again.
-                SceneGameComponents.Attach(entity, entry, code, problems);
+                SceneComponents.Attach(entity, entry, code, problems);
             }
         }
     }
 
-    private static bool HasUnloadedOfType(UnloadedGameComponents unloaded, string type)
+    // Null when there are none: most entities have none, and a game stopping puts every one back.
+    private static List<Component> KeptComponentsOf(Entity entity)
+    {
+        List<Component> kept = null;
+        foreach (var component in entity.Components)
+        {
+            if (component is Component each && SceneComponents.IsKept(each.GetType()))
+                (kept ??= []).Add(each);
+        }
+
+        return kept;
+    }
+
+    private static bool HasUnloadedOfType(UnloadedComponents unloaded, string type)
     {
         if (unloaded == null)
             return false;
@@ -313,8 +329,11 @@ public sealed class SceneBuilder
         return false;
     }
 
-    private static GameComponent FindOfType(GameComponent[] components, string type)
+    private static Component FindOfType(List<Component> components, string type)
     {
+        if (components == null)
+            return null;
+
         foreach (var component in components)
         {
             if (component.GetType().FullName == type)
@@ -324,7 +343,7 @@ public sealed class SceneBuilder
         return null;
     }
 
-    private static bool HasEntryOfType(IReadOnlyList<SceneGameComponent> entries, string type)
+    private static bool HasEntryOfType(IReadOnlyList<SceneComponent> entries, string type)
     {
         if (entries == null)
             return false;

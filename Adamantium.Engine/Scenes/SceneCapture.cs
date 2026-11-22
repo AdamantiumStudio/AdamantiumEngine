@@ -77,12 +77,12 @@ public static class SceneCapture
                 }
 
                 Add(scene, entry);
-                AddGameComponents(scene, entity);
+                AddComponents(scene, entity);
                 placed = entity;
             }
-            else if (entity.ContainsComponent<GameComponent>() || entity.ContainsComponent<UnloadedGameComponents>())
+            else if (SceneComponents.HasKept(entity))
             {
-                Log.Logger.Warning("Scene: {Name} is nothing the scene keeps; the game's components on it are not kept",
+                Log.Logger.Warning("Scene: {Name} is nothing the scene keeps; the components on it are not kept",
                     entity.Name);
             }
 
@@ -254,22 +254,20 @@ public static class SceneCapture
         }
     }
 
-    private static void AddGameComponents(SceneFile scene, Entity entity)
+    private static void AddComponents(SceneFile scene, Entity entity)
     {
         foreach (var component in entity.Components)
         {
-            switch (component)
+            if (component is UnloadedComponents unloaded)
             {
-                case UnloadedGameComponents unloaded:
-                    foreach (var kept in unloaded.Entries)
-                    {
-                        scene.GameComponents.Add(kept.CopyOn(entity.Uid));
-                    }
-
-                    break;
-                case GameComponent gameComponent:
-                    scene.GameComponents.Add(SceneGameComponents.Write(gameComponent, entity.Uid));
-                    break;
+                foreach (var kept in unloaded.Entries)
+                {
+                    scene.Components.Add(kept.CopyOn(entity.Uid));
+                }
+            }
+            else if (component is Component kept && SceneComponents.IsKept(kept.GetType()))
+            {
+                scene.Components.Add(SceneComponents.Write(kept, entity.Uid));
             }
         }
     }

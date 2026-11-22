@@ -13,6 +13,7 @@ namespace Adamantium.ECS.Components;
 /// A fit stands it along the mesh's longest side, as thick as the wider of the other two.
 /// </summary>
 [ViewModel]
+[InspectorComponent(ComponentGroups.Physics, Icon = "PhysicsCapsuleIcon")]
 public partial class CapsuleCollider : Collider
 {
     private readonly Dictionary<CameraBase, BoundingCapsule> colliderData = new();

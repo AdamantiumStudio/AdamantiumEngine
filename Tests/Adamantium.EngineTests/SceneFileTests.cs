@@ -53,10 +53,10 @@ public class SceneFileTests
         scene.Shapes.Add(floor);
         scene.SpawnPoints.Add(new SceneSpawnPoint
             { Uid = 30, Name = "Player start", Position = new Vector3<double>(0, 0, 5) });
-        var patrol = new SceneGameComponent { On = Robot, Type = "Game.Patrol" };
+        var patrol = new SceneComponent { On = Robot, Type = "Game.Patrol" };
         patrol.Values.Add(new SceneValue("Speed", "2"));
         patrol.Values.Add(new SceneValue("Route", "A, B, C"));
-        scene.GameComponents.Add(patrol);
+        scene.Components.Add(patrol);
         return scene;
     }
 
@@ -256,7 +256,8 @@ public class SceneFileTests
         Assert.Multiple(() =>
         {
             Assert.That(WriteAndRead(scene).Uid, Is.EqualTo(Robot));
-            Assert.That(Text(scene), Does.Contain("<Scene Version=\"1\" Uid=\"123456789abcdef00fedcba987654321\""));
+            Assert.That(Text(scene),
+                Does.Contain($"<Scene Version=\"{SceneFile.FormatVersion}\" Uid=\"123456789abcdef00fedcba987654321\""));
             Assert.That(WriteAndRead(new SceneFile()).Uid, Is.Null);
             Assert.That(Text(new SceneFile()), Does.Not.Contain("Uid="));
         });
@@ -326,7 +327,7 @@ public class SceneFileTests
 
             Assert.That(read.SpawnPoints[0].Position, Is.EqualTo(new Vector3<double>(0, 0, 5)));
 
-            var patrol = read.GameComponents[0];
+            var patrol = read.Components[0];
             Assert.That(patrol.On, Is.EqualTo(Robot));
             Assert.That(patrol.Type, Is.EqualTo("Game.Patrol"));
             Assert.That(patrol.Values,
@@ -348,8 +349,35 @@ public class SceneFileTests
 
         var again = WriteAndRead(SceneFile.Read(stream));
 
-        Assert.That(again.GameComponents[0].Values,
+        Assert.That(again.Components[0].Values,
             Is.EqualTo(new[] { new SceneValue("Glow", "0, 1, 0"), new SceneValue("Mode", "Pulse") }));
+    }
+
+    [Test]
+    public void TheFormerGameComponentsSection_IsReadAsComponents_AndWrittenAsThem()
+    {
+        const string text = """
+            <Scene Version="1">
+              <GameComponents>
+                <GameComponent On="00000000000000000000000000000001" Type="Game.Patrol" Speed="2" />
+              </GameComponents>
+              <Components>
+                <Component On="00000000000000000000000000000002" Type="Game.Guard" />
+              </Components>
+            </Scene>
+            """;
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(text));
+
+        var read = SceneFile.Read(stream);
+        var written = Text(read);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(read.Components.Select(entry => entry.Type), Is.EquivalentTo(new[] { "Game.Patrol", "Game.Guard" }));
+            Assert.That(written, Does.Contain("<Components>").And.Contain("Type=\"Game.Patrol\""));
+            Assert.That(written, Does.Not.Contain("GameComponent"));
+            Assert.That(written, Does.Contain($"Version=\"{SceneFile.FormatVersion}\""));
+        });
     }
 
     [Test]
@@ -384,7 +412,7 @@ public class SceneFileTests
         Assert.Multiple(() =>
         {
             Assert.That(text, Does.Not.Contain("Rotation=").And.Not.Contain("Scale=").And.Not.Contain("Parent="));
-            Assert.That(text, Does.Not.Contain("<Lights").And.Not.Contain("<GameComponents"));
+            Assert.That(text, Does.Not.Contain("<Lights").And.Not.Contain("<Components").And.Not.Contain("<GameComponents"));
             Assert.That(text, Does.Not.Contain("xmlns"));
         });
     }

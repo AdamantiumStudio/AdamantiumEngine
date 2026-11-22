@@ -7,6 +7,7 @@ namespace Adamantium.ECS.Components;
 /// <summary>A rod, a rope or a spring from its anchor to a point of the other body: their distance kept as it was when
 /// the game started, held between limits, or pulled toward it by a spring.</summary>
 [ViewModel]
+[InspectorComponent(ComponentGroups.Joints, Icon = "DistanceJointIcon")]
 public partial class DistanceJoint : Joint
 {
     public DistanceJoint()
@@ -26,11 +27,13 @@ public partial class DistanceJoint : Joint
     [Bindable]
     public partial bool UsesLimits { get; set; }
 
-    /// <summary>The shortest the distance may be, in meters.</summary>
+    /// <summary>The shortest the distance may be, in meters. Set above <see cref="MaxDistance"/>, it takes that along:
+    /// limits the wrong way round are no joint the physics can make.</summary>
     [Bindable]
     public partial float MinDistance { get; set; }
 
-    /// <summary>The longest the distance may be, in meters.</summary>
+    /// <summary>The longest the distance may be, in meters. Set below <see cref="MinDistance"/>, it takes that along.
+    /// </summary>
     [Bindable]
     public partial float MaxDistance { get; set; }
 
@@ -42,4 +45,16 @@ public partial class DistanceJoint : Joint
     /// <summary>How the spring's swing dies: 1 not at all past its rest.</summary>
     [Bindable]
     public partial float SpringDampingRatio { get; set; }
+
+    partial void OnMinDistanceChanged(float value)
+    {
+        if (value > MaxDistance)
+            MaxDistance = value;
+    }
+
+    partial void OnMaxDistanceChanged(float value)
+    {
+        if (value < MinDistance)
+            MinDistance = value;
+    }
 }

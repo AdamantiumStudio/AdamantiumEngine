@@ -6,10 +6,10 @@ using System.Xml.Serialization;
 
 namespace Adamantium.Engine.Scenes;
 
-/// <summary>A component of the game's or a mod's code on something put in a scene: which it is on, its type, and the
-/// values of its fields as the file writes them. Kept as it is when its type is not loaded - the code not built, the mod
-/// off - so the scene does not lose it.</summary>
-public sealed class SceneGameComponent
+/// <summary>A component on something put in a scene, kept by its type and the values of its fields as the file writes
+/// them: one of the game's or a mod's code, or one of the engine's that no section of an entry keeps. Kept as it is when
+/// its type is not loaded - the code not built, the mod off - so the scene does not lose it.</summary>
+public sealed class SceneComponent
 {
     /// <summary>The entry's own attributes, which no field of the component can be named.</summary>
     public static readonly IReadOnlyCollection<string> OwnAttributes = ["On", "Type"];
@@ -41,9 +41,9 @@ public sealed class SceneGameComponent
     }
 
     /// <summary>A copy of the entry, on <paramref name="on"/>.</summary>
-    public SceneGameComponent CopyOn(UInt128 on)
+    public SceneComponent CopyOn(UInt128 on)
     {
-        var copy = new SceneGameComponent { On = on, Type = Type };
+        var copy = new SceneComponent { On = on, Type = Type };
         copy.Values.AddRange(Values);
         return copy;
     }

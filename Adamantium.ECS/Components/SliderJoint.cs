@@ -7,6 +7,7 @@ namespace Adamantium.ECS.Components;
 /// <summary>A slider: the bodies keep their turn and slide along its axis alone - a drawer, a piston - within limits,
 /// and driven by a motor if it has one.</summary>
 [ViewModel]
+[InspectorComponent(ComponentGroups.Joints, Icon = "SliderJointIcon")]
 public partial class SliderJoint : Joint
 {
     public SliderJoint()
@@ -26,11 +27,13 @@ public partial class SliderJoint : Joint
     [Bindable]
     public partial bool UsesLimits { get; set; }
 
-    /// <summary>How far it may slide back from where it stood when the game started, in meters.</summary>
+    /// <summary>How far it may slide back from where it stood when the game started, in meters. Set above
+    /// <see cref="UpperLimit"/>, it takes that along: limits the wrong way round are no slider the physics can make.
+    /// </summary>
     [Bindable]
     public partial float LowerLimit { get; set; }
 
-    /// <summary>How far it may slide on, in meters.</summary>
+    /// <summary>How far it may slide on, in meters. Set below <see cref="LowerLimit"/>, it takes that along.</summary>
     [Bindable]
     public partial float UpperLimit { get; set; }
 
@@ -45,4 +48,16 @@ public partial class SliderJoint : Joint
     /// <summary>The most force the motor gives, in newtons.</summary>
     [Bindable]
     public partial float MaxMotorForce { get; set; }
+
+    partial void OnLowerLimitChanged(float value)
+    {
+        if (value > UpperLimit)
+            UpperLimit = value;
+    }
+
+    partial void OnUpperLimitChanged(float value)
+    {
+        if (value < LowerLimit)
+            LowerLimit = value;
+    }
 }

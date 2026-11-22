@@ -11,6 +11,7 @@ namespace Adamantium.ECS.Components;
 /// <summary>A cylinder round an entity's mesh, fitted along the side whose cross-section is roundest: a wheel's thin
 /// side, a barrel's height.</summary>
 [ViewModel]
+[InspectorComponent(ComponentGroups.Physics, Icon = "PhysicsCylinderIcon")]
 public partial class CylinderCollider : Collider
 {
     private readonly Dictionary<CameraBase, BoundingCylinder> colliderData = new();
