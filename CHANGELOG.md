@@ -7,6 +7,7 @@ All packages share one version.
 
 ### Added
 
+- `PhysicsLayers.DefaultName`: the default layer's name, `Default`, for an editor that offers it beside the project's.
 - `Win32Interop.SendInput` with `INPUT` (`INPUT.Key`, `INPUT.Character` for a character typed whatever the layout),
   `KEYBDINPUT`, `KeyEventFlags`: keys put into the system's input, for an on-screen keyboard typing into another
   application. `MapVirtualKey` (`MapVirtualKeyType`) gives a key's scan code and whether it is of the extended set.
