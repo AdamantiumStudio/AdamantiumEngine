@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- netstandard2.0: the generator loads it at build time to know a language's plural forms, and reads its own
+         messages through MessageCatalog; the running application uses the same assembly. -->
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <Configurations>Debug;Release</Configurations>
+        <Platforms>AnyCPU</Platforms>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>disable</Nullable>
+        <IsPackable>true</IsPackable>
+        <Description>Localization of Adamantium: string tables generated from .alang language files, the application's language, plural rules and the messages of tools - for the engine, games and the UI alike.</Description>
+        <PackageTags>adamantium;localization;language;plural</PackageTags>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Adamantium.LocalizationTests" />
+    </ItemGroup>
+
+</Project>

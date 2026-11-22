@@ -7,6 +7,16 @@ All packages share one version.
 
 ### Added
 
+- Localization in the engine, as two packages: `Adamantium.Localization` - string tables (`LocalizedStrings`,
+  `ILanguageTable`, `LanguageTableAttribute`), the application's language (`Languages`: `Current`, `Changed`, `Say`,
+  cultures and formats by `LanguageFormat`, translations of another assembly's table), `PluralRules` and
+  `PhraseCases`, `FormattedArgument`, `PhraseArgument` - a placeholder's value by its name, what `Languages.Say`,
+  `LocalizedStrings.TryText` and `MessageCatalog.Say` take in place of the UI's tuples and lookup function - and
+  `MessageCatalog` for the messages of tools - and its source generator
+  `Adamantium.Localization.Generators`, a table for every set of `.alang` files, checked as it is built, with the
+  build file that hands the generator a project's language files. Taken over from Adamantium UI, with no UI in it:
+  the engine, a game or a tool can speak the user's language without one. `Adamantium.Core.Shared.PathExtension`
+  turns a file's folder into the namespace generated code goes in.
 - `InspectorComponentAttribute`: marks a component type an editor's inspector shows and offers to add, in a group (`ComponentGroups`:
   `Physics`, `Joints`, or a name of the game's own) and with an icon by key. The rigid body, the colliders and the
   joints have it; a transform, a placeholder and what makes an entity a light or a shape do not.

@@ -1,0 +1,50 @@
+<Language>
+    <Phrase Key="NoRootNamespace" Text="Нет RootNamespace: добавьте в проект &lt;CompilerVisibleProperty Include=&quot;RootNamespace&quot; /&gt;"/>
+    <Phrase Key="LanguageFileUnnamed" Text="'{file}' не называет свой язык: языковой файл называется &lt;Таблица&gt;.&lt;язык&gt;{extension}, например Strings.en{extension}"/>
+    <Phrase Key="LanguageTableNameInvalid" Text="'{table}' не может быть именем таблицы: из него получается имя класса"/>
+    <Phrase Key="LanguageNameInvalid" Text="'{language}' - не имя языка вроде en, ru или pt-BR"/>
+    <Phrase Key="LanguageFileRoot" Text="Языковой файл - это &lt;{root}&gt; с записями &lt;{phrase} Key=&quot;...&quot;&gt;"/>
+    <Phrase Key="LanguageRootAttribute" Text="У &lt;{root}&gt; нет атрибутов; '{attribute}' здесь не нужен"/>
+    <Phrase Key="LanguageFormatTwice" Text="В языковом файле один &lt;{format}&gt;"/>
+    <Phrase Key="LanguageStrayElement" Text="&lt;{element}&gt; не входит в языковой файл: в нём только &lt;{phrase}&gt; и один &lt;{format}&gt;"/>
+    <Phrase Key="PhraseNeedsKey" Text="&lt;{phrase}&gt; нужен Key"/>
+    <Phrase Key="PhraseKeyInvalid" Text="'{key}' не может быть ключом: из него получается имя свойства"/>
+    <Phrase Key="PhraseKeyTwice" Text="'{key}' уже есть в этом файле"/>
+    <Phrase Key="PhraseHoldsElements" Text="В '{key}' есть элементы; фраза - это текст"/>
+    <Phrase Key="PhraseTextTwice" Text="'{key}' задаёт текст дважды: в {text} и внутри тега"/>
+    <Phrase Key="PhraseCasesNeedChooser" Text="'{key}' задаёт варианты, поэтому {count} или {select} называет подстановку, по значению которой выбирается вариант: {count}=&quot;count&quot; для числа, {select}=&quot;state&quot; для любого другого значения"/>
+    <Phrase Key="PhraseStrayAttribute" Text="&lt;{phrase}&gt; принимает Key и {text} или {count}/{select} и варианты; '{attribute}' сюда не относится"/>
+    <Phrase Key="PhraseTextAndCases" Text="'{key}' задаёт и текст, и варианты: фраза, которая меняется со значением, всё говорит в вариантах"/>
+    <Phrase Key="ChooserInvalid" Text="{chooser} называет подстановку, по значению которой выбирается вариант: {chooser}=&quot;{example}&quot;"/>
+    <Phrase Key="NotAPluralForm" Text="'{name}' - не форма множественного числа; формы: {forms}"/>
+    <Phrase Key="PhraseNeedsOther" Text="'{key}' нужна форма {other}: для всех чисел, которые не берёт ни одна другая форма"/>
+    <Phrase Key="LanguageHasNoForm" Text="В языке {language} нет формы {form}; его формы: {forms}"/>
+    <Phrase Key="PhraseLacksForm" Text="У '{key}' нет формы {forms} языка {language}: вместо неё говорится {other}"/>
+    <Phrase Key="PhraseLacksForms" Text="У '{key}' нет форм {forms} языка {language}: вместо них говорится {other}"/>
+    <Phrase Key="PluralRulesUnknown" Text="Правила множественного числа для '{language}' неизвестны: для 1 говорится {one}, для остальных чисел - {other}"/>
+    <Phrase Key="CaseNameInvalid" Text="'{name}' не может быть именем варианта '{key}': вариант называется значением, которое он представляет - True, False или член перечисления, - а не своей фразой"/>
+    <Phrase Key="PhraseNoCases" Text="'{key}' выбирается по {{{chooser}}}, но не задаёт вариантов: True=&quot;...&quot; False=&quot;...&quot; или вариант на каждый член перечисления"/>
+    <Phrase Key="NotAFormat" Text="'{name}' - не формат; форматы: {formats}"/>
+    <Phrase Key="FirstDayOfWeekInvalid" Text="FirstDayOfWeek - это день вроде Monday, а не '{value}'"/>
+    <Phrase Key="LanguageInAnotherFile" Text="'{language}' для {table} уже есть в другом файле"/>
+    <Phrase Key="KeyIsTableMember" Text="'{key}' не может быть ключом {table}: у класса таблицы есть член с таким именем"/>
+    <Phrase Key="KeyNotInBase" Text="'{key}' нет в {file}: сначала добавьте его туда"/>
+    <Phrase Key="ChooserDiffers" Text="{key} выбирается по {{{chooser}}}, а в другом месте по {{{other}}}: вариант во всех языках выбирает одна подстановка"/>
+    <Phrase Key="KeyIsCaseName" Text="'{key}' не может быть ключом фразы с вариантом такого же имени"/>
+    <Phrase Key="LacksCase" Text="У {key} нет варианта {cases}, который есть в базовом тексте"/>
+    <Phrase Key="LacksCases" Text="У {key} нет вариантов {cases}, которые есть в базовом тексте"/>
+    <Phrase Key="TableNotFound" Text="Для {table} здесь нет {file} (базовый язык - {language}), и ни в одной подключённой сборке нет таблицы {table}"/>
+    <Phrase Key="TableAmbiguous" Text="Имя {table} подходит к нескольким таблицам: {tables}"/>
+    <Phrase Key="TableHasNoKey" Text="В {table} нет '{key}'"/>
+    <Phrase Key="FormatsInLibrary" Text="Как язык записывает даты и числа, задаёт только приложение; библиотека оставляет это приложению"/>
+    <Phrase Key="FormatsTwice" Text="Форматы '{language}' уже заданы в другом файле: их задаёт один файл на язык"/>
+    <Phrase Key="PlaceholdersExtra" Text="есть {names}, которых нет в базовом тексте"/>
+    <Phrase Key="PlaceholdersLacking" Text="нет {names}"/>
+    <Phrase Key="PlaceholderProblem" Text="{key}: {problem}"/>
+    <Phrase Key="PlaceholderProblems" Text="{key}: {first} и {second}"/>
+    <Phrase Key="LanguageLacksStrings" Text="В {file} нет {count} строк {table}: {shown}. Они показываются на языке {language}"/>
+    <Phrase Key="AndMore" Text="{shown} и ещё {count}"/>
+    <Phrase Key="BraceNotClosed" Text="У '{{' нет закрывающей '}}'; фигурная скобка пишется как '{{{{'"/>
+    <Phrase Key="PlaceholderNoName" Text="'{{{text}}}' не начинается с имени: подстановка - это {{name}}, {{name:format}} или {{name,width}}"/>
+    <Phrase Key="BraceNotOpened" Text="У '}}' нет открывающей '{{'; фигурная скобка пишется как '}}}}'"/>
+</Language>
