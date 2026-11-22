@@ -1022,6 +1022,8 @@ All packages share one version.
 
 ### Fixed
 
+- `EntityComponentCollection.CheckItems` did not call the base check, so one a parent gains would be passed by: it
+  calls `base.CheckItems` first.
 - `AdamantiumCollection.AddRange` and `InsertRange` copied their range into a new array, then put it in item by item,
   each taking the lock and checking again, an insertion in the middle moving the rest once an item; `RemoveRange`
   moved the rest once an item it removed. A range is taken whole before it goes in, through a pooled array, stored at
