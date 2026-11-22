@@ -11,6 +11,9 @@ All packages share one version.
   `KEYBDINPUT`, `KeyEventFlags`: keys put into the system's input, for an on-screen keyboard typing into another
   application. `MapVirtualKey` (`MapVirtualKeyType`) gives a key's scan code and whether it is of the extended set.
   `GetForegroundWindow`, `GetWindowText` and `GetWindowTextLength` name the window they go to.
+- `MathHelper.Arc`: how an arc's sweep is read, in degrees, the one rule an ellipse's mesh and a drawn arc follow -
+  `ReduceSweep` (what a sweep covers: past a turn what is left over whole turns, whole turns a turn),
+  `SweepRounding`, the degrees past whole turns taken as rounding, and `TurnInDegrees`.
 - `SPI.GetKeyboardDelay` and `SPI.GetKeyboardSpeed`: the user's key repeat delay and speed, for
   `SystemParametersInfo`.
 - Physics materials meet by rules: `PhysicsMaterial.FrictionCombine` and `RestitutionCombine` (`CombineRule`: `Average`,
@@ -975,8 +978,12 @@ All packages share one version.
 
 ### Fixed
 
+- The game host starts its game again: it gave the project's physics to the game's physics before the world had taken
+  its services in, found none and threw, so no game launched under the debugger. It gives it once the world is up to
+  date, just before the game starts.
 - `Shapes.Ellipse` swept whole turns either way is the whole ellipse: taken round the turn, 720 drew nothing. A sweep
-  past a turn still draws what is left over whole turns, 485 as 125.
+  past a turn still draws what is left over whole turns, 485 as 125; up to `MathHelper.Arc.SweepRounding`
+  (0.00001°) past whole turns is rounding, the whole ellipse.
 - A kinematic body moved to a pose in a frame of several steps is read there: it arrived in the first step and fell
   asleep in the next, and a body asleep before and after a run was not read again, so the caller saw it where it was.
 - A touch ended by a body's new shape is told with the old part's own (`ContactEventArgs.FirstPartData`): it was told
