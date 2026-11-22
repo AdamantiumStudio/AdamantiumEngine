@@ -303,11 +303,24 @@ public class PhysicsSimulationThreadTests
             simulation.RayCast(new WorldPosition(0, 10, 0), -Vector3F.UnitY, 20, out _);
         }
 
-        // A frame slow enough for every run the thread may leave unread to pile up.
+        // A frame once every run the thread may leave unread has piled up: as many results as ever go round, however
+        // slow the machine - a busy one runs fewer, longer runs in a given time.
         void SlowFrame()
         {
-            Thread.Sleep(700);
+            // Waited for without allocating, the last one being within what is measured. A thread that failed never
+            // piles them up: the frame's Update throws what stopped it.
+            var started = Stopwatch.GetTimestamp();
+            var held = false;
+            while (!held && Stopwatch.GetElapsedTime(started).TotalSeconds < 10)
+            {
+                held = simulation.IsHeldByUnreadResults;
+                if (!held)
+                    Thread.Sleep(5);
+            }
+
             Frame();
+            if (!held)
+                Assert.Fail("The thread did not pile up the runs it may leave unread.");
         }
 
         // Frames as a game's: its buffers grow to what that takes while warming, and no more after.
