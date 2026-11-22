@@ -1,0 +1,34 @@
+<Project>
+
+  <!-- Language files (Table.language.alang) become string tables: the files handed to the generator, and the build
+       properties it reads - the namespace and folder of the project, its base language, and whether it is an
+       application, which alone may set a language's formats. AdamantiumLanguageAutoInclude=false turns the automatic
+       list off; a project that lists its files itself keeps its list. -->
+  <ItemGroup Condition="'$(AdamantiumLanguageAutoInclude)' != 'false'">
+    <AdditionalFiles Include="**\*.alang"
+                     Exclude="@(AdditionalFiles);bin\**;obj\**;$(BaseIntermediateOutputPath)**;$(BaseOutputPath)**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <CompilerVisibleProperty Include="RootNamespace" />
+    <CompilerVisibleProperty Include="ProjectDir" />
+    <CompilerVisibleProperty Include="NeutralLanguage" />
+    <CompilerVisibleProperty Include="OutputType" />
+  </ItemGroup>
+
+  <!-- AdditionalFiles are not inputs of the compile or of Visual Studio's up-to-date check, so an edited language file
+       would leave the build "up to date" with the tables generated before. -->
+  <Target Name="AdamantiumLanguagesAreCompileInputs" BeforeTargets="_GenerateCompileDependencyCache">
+    <ItemGroup>
+      <CustomAdditionalCompileInputs Include="@(AdditionalFiles)" Condition="'%(Extension)' == '.alang'" />
+      <CoreCompileCache Include="@(AdditionalFiles)" Condition="'%(Extension)' == '.alang'" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="AdamantiumLanguagesAreUpToDateInputs" BeforeTargets="CollectUpToDateCheckInputDesignTime">
+    <ItemGroup>
+      <UpToDateCheckInput Include="@(AdditionalFiles)" Condition="'%(Extension)' == '.alang'" />
+    </ItemGroup>
+  </Target>
+
+</Project>

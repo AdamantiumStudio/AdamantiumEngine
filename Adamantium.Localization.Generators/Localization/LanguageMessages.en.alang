@@ -1,0 +1,50 @@
+<Language>
+    <Phrase Key="NoRootNamespace" Text="No RootNamespace: add &lt;CompilerVisibleProperty Include=&quot;RootNamespace&quot; /&gt; to the project"/>
+    <Phrase Key="LanguageFileUnnamed" Text="'{file}' does not name its language: a language file is &lt;Table&gt;.&lt;language&gt;{extension}, Strings.en{extension}"/>
+    <Phrase Key="LanguageTableNameInvalid" Text="'{table}' cannot name a table: it becomes a class name"/>
+    <Phrase Key="LanguageNameInvalid" Text="'{language}' is not a language name such as en, ru or pt-BR"/>
+    <Phrase Key="LanguageFileRoot" Text="A language file is &lt;{root}&gt; with &lt;{phrase} Key=&quot;...&quot;&gt; entries"/>
+    <Phrase Key="LanguageRootAttribute" Text="&lt;{root}&gt; takes no attributes; '{attribute}' is not one"/>
+    <Phrase Key="LanguageFormatTwice" Text="A language file has one &lt;{format}&gt;"/>
+    <Phrase Key="LanguageStrayElement" Text="&lt;{element}&gt; is not part of a language file: it holds &lt;{phrase}&gt; and one &lt;{format}&gt;"/>
+    <Phrase Key="PhraseNeedsKey" Text="&lt;{phrase}&gt; needs a Key"/>
+    <Phrase Key="PhraseKeyInvalid" Text="'{key}' cannot be a key: it becomes a property name"/>
+    <Phrase Key="PhraseKeyTwice" Text="'{key}' is already in this file"/>
+    <Phrase Key="PhraseHoldsElements" Text="'{key}' holds elements; a phrase is text"/>
+    <Phrase Key="PhraseTextTwice" Text="'{key}' gives its text twice: in {text} and inside the tag"/>
+    <Phrase Key="PhraseCasesNeedChooser" Text="'{key}' gives cases, so {count} or {select} names the placeholder whose value picks one: {count}=&quot;count&quot; for a number, {select}=&quot;state&quot; for any other value"/>
+    <Phrase Key="PhraseStrayAttribute" Text="&lt;{phrase}&gt; takes Key and {text}, or {count} or {select} and its cases; '{attribute}' is not one"/>
+    <Phrase Key="PhraseTextAndCases" Text="'{key}' gives a text and cases: a phrase that changes with a value says everything in its cases"/>
+    <Phrase Key="ChooserInvalid" Text="{chooser} names the placeholder whose value picks the case: {chooser}=&quot;{example}&quot;"/>
+    <Phrase Key="NotAPluralForm" Text="'{name}' is not a plural form; the forms are {forms}"/>
+    <Phrase Key="PhraseNeedsOther" Text="'{key}' needs an {other} form: the one for every number no other form takes"/>
+    <Phrase Key="LanguageHasNoForm" Text="{language} has no {form} form; its forms are {forms}"/>
+    <Phrase Key="PhraseLacksForm" Text="'{key}' lacks the {forms} form of {language}: {other} is said instead"/>
+    <Phrase Key="PhraseLacksForms" Text="'{key}' lacks the {forms} forms of {language}: {other} is said instead"/>
+    <Phrase Key="PluralRulesUnknown" Text="The plural rules of '{language}' are not known: {one} is said for 1 and {other} for every other number"/>
+    <Phrase Key="CaseNameInvalid" Text="'{name}' cannot name a case of '{key}': a case is named as the value it stands for, True, False or a member of an enum, and not as its phrase"/>
+    <Phrase Key="PhraseNoCases" Text="'{key}' is chosen by {{{chooser}}} but gives no cases: True=&quot;...&quot; False=&quot;...&quot;, or a case per member of an enum"/>
+    <Phrase Key="NotAFormat" Text="'{name}' is not a format; the formats are {formats}"/>
+    <Phrase Key="FirstDayOfWeekInvalid" Text="FirstDayOfWeek is a day such as Monday, not '{value}'"/>
+    <Phrase Key="LanguageInAnotherFile" Text="'{language}' of {table} is in another file already"/>
+    <Phrase Key="KeyIsTableMember" Text="'{key}' cannot be a key of {table}: the table class has a member of that name"/>
+    <Phrase Key="KeyNotInBase" Text="'{key}' is not in {file}: add it there first"/>
+    <Phrase Key="ChooserDiffers" Text="{key} is chosen by {{{chooser}}}, and by {{{other}}} elsewhere: one placeholder picks the case in every language"/>
+    <Phrase Key="KeyIsCaseName" Text="'{key}' cannot be the key of a phrase with a case of that name"/>
+    <Phrase Key="LacksCase" Text="{key} lacks the case {cases} the base text gives"/>
+    <Phrase Key="LacksCases" Text="{key} lacks the cases {cases} the base text gives"/>
+    <Phrase Key="TableNotFound" Text="{table} has no {file} here (the base language is {language}), and no referenced assembly has a table named {table}"/>
+    <Phrase Key="TableAmbiguous" Text="{table} names more than one table: {tables}"/>
+    <Phrase Key="TableHasNoKey" Text="{table} has no '{key}'"/>
+    <Phrase Key="FormatsInLibrary" Text="Only an application sets how a language writes dates and numbers; a library leaves it to the application"/>
+    <Phrase Key="FormatsTwice" Text="The formats of '{language}' are set in another file already: one file per language sets them"/>
+    <Phrase Key="PlaceholdersExtra" Text="has {names} the base text does not"/>
+    <Phrase Key="PlaceholdersLacking" Text="lacks {names}"/>
+    <Phrase Key="PlaceholderProblem" Text="{key} {problem}"/>
+    <Phrase Key="PlaceholderProblems" Text="{key} {first} and {second}"/>
+    <Phrase Key="LanguageLacksStrings" Text="{file} lacks {count} of {table}'s strings: {shown}. They are shown in {language}"/>
+    <Phrase Key="AndMore" Text="{shown} and {count} more"/>
+    <Phrase Key="BraceNotClosed" Text="'{{' has no closing '}}'; write '{{{{' for a brace"/>
+    <Phrase Key="PlaceholderNoName" Text="'{{{text}}}' does not start with a name: a placeholder is {{name}}, {{name:format}} or {{name,width}}"/>
+    <Phrase Key="BraceNotOpened" Text="'}}' has no opening '{{'; write '}}}}' for a brace"/>
+</Language>

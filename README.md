@@ -26,6 +26,7 @@ drawn by one renderer in one process.
 | `Adamantium.Engine` | Forward+ rendering, scene managers, cameras, selection, editing tools |
 | `Adamantium.ProceduralGeometry` | Rectangles, ellipses, arcs, polygons, lines, cubes, spheres, cylinders, cones, capsules, grids |
 | `Adamantium.MVVM` | View models with validation, sync and async commands |
+| `Adamantium.Localization` | String tables from `.alang` language files, the application's language, plural rules |
 | `Adamantium.Win32` | Windows, messages, system metrics, cursors, Shell dialogs |
 | `Adamantium.MacOS` | Application, windows and cursors through a native app wrapper (not yet verified, see below) |
 | `Adamantium.Wayland` | Wayland client bindings: the protocols generated from their XML, over libwayland-client |
@@ -34,6 +35,7 @@ drawn by one renderer in one process.
 | `Adamantium.GameInput` | Microsoft GameInput gamepads, with the native shim they need |
 | `Adamantium.Engine.Generators` | Source generator: a typed class for every `.fx` in the project |
 | `Adamantium.MVVM.Generators` | Source generator for `Adamantium.MVVM`: bindable properties and commands from attributes |
+| `Adamantium.Localization.Generators` | Source generator for `Adamantium.Localization`: a string table for every set of `.alang` files |
 | `Adamantium.Content.Build` | The content project: a library of assets, cooked at build and copied to every project that references it |
 | `Adamantium.Engine.Templates` | `dotnet new` templates: `adamantium-content`, a content project |
 
@@ -91,6 +93,30 @@ to see the files, the project's folder to find those folders, and where the Slan
 ```
 
 A shader that does not compile fails the build with the compiler's message.
+
+### Your own languages
+
+The words of a game or a tool live in language files, one per table and language: `Localization/Strings.en.alang` and
+`Localization/Strings.ru.alang` in an assembly whose root namespace is `MyGame` give the class
+`MyGame.Localization.Strings`, a property for each phrase and a method for each phrase with placeholders.
+
+```xml
+<ItemGroup>
+  <PackageReference Include="Adamantium.Localization" Version="0.1.0-alpha.5" />
+  <PackageReference Include="Adamantium.Localization.Generators" Version="0.1.0-alpha.5" PrivateAssets="all" />
+</ItemGroup>
+```
+
+```xml
+<Language>
+  <Phrase Key="Close" Text="Close"/>
+  <Phrase Key="Files" Count="count" One="{count} file" Other="{count} files"/>
+</Language>
+```
+
+`Languages.Current = "ru"` switches every table at once while the application runs; a phrase a language lacks is said
+in the base language, `NeutralLanguage` of the project or English. A phrase that changes with a number takes the form
+the language's own plural rules pick. A wrong file - a key twice, a placeholder a translation lacks - fails the build.
 
 ### Your own content
 
