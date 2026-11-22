@@ -1,0 +1,4 @@
+<Language>
+    <Phrase Key="Close" Text="Close"/>
+    <Phrase Key="Files" Count="count" One="{count} file" Other="{count} files"/>
+</Language>

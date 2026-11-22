@@ -1,0 +1,70 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <Configurations>Debug;Release</Configurations>
+        <Platforms>AnyCPU</Platforms>
+        <LangVersion>latest</LangVersion>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>disable</Nullable>
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <IsRoslynComponent>true</IsRoslynComponent>
+        <IsPackable>true</IsPackable>
+        <Description>Source generator for Adamantium.Localization: string tables from .alang language files, checked as they are built.</Description>
+        <PackageTags>adamantium;localization;sourcegenerator;alang</PackageTags>
+    </PropertyGroup>
+
+    <!-- An analyzer, not a library: the generator and Adamantium.Localization, which it loads, go to analyzers/dotnet/cs
+         and nothing to lib. -->
+    <PropertyGroup>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <DevelopmentDependency>true</DevelopmentDependency>
+        <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+        <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackAnalyzerAssembly</TargetsForTfmSpecificContentInPackage>
+    </PropertyGroup>
+
+    <!-- The assemblies the generator loads, handed to the compiler beside it by a project reference, as a package carries
+         them. They build to the same folder: all three are netstandard2.0. -->
+    <PropertyGroup>
+        <GetTargetPathDependsOn>$(GetTargetPathDependsOn);GetDependencyTargetPaths</GetTargetPathDependsOn>
+    </PropertyGroup>
+
+    <Target Name="GetDependencyTargetPaths">
+        <ItemGroup>
+            <TargetPathWithTargetPlatformMoniker Include="$(TargetDir)Adamantium.Localization.dll" IncludeRuntimeDependency="false" />
+            <TargetPathWithTargetPlatformMoniker Include="$(TargetDir)Adamantium.Core.Shared.dll" IncludeRuntimeDependency="false" />
+        </ItemGroup>
+    </Target>
+
+    <Target Name="PackAnalyzerAssembly" DependsOnTargets="GetDependencyTargetPaths">
+        <ItemGroup>
+            <TfmSpecificPackageFile Include="$(TargetPath)" PackagePath="analyzers/dotnet/cs" />
+            <TfmSpecificPackageFile Include="@(TargetPathWithTargetPlatformMoniker)" Condition="'%(TargetPathWithTargetPlatformMoniker.IncludeRuntimeDependency)' == 'false'" PackagePath="analyzers/dotnet/cs" />
+        </ItemGroup>
+    </Target>
+
+    <!-- What a project referencing the package needs for its language files to become tables. -->
+    <ItemGroup>
+        <None Include="build\Adamantium.Localization.Generators.targets" Pack="true" PackagePath="build\" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <EmbeddedResource Include="Localization\*.alang" LogicalName="Localization/%(Filename)%(Extension)" WithCulture="false" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" Version="5.3.0" PrivateAssets="all" />
+        <CompilerVisibleItemMetadata Include="AdditionalFiles" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Adamantium.Localization\Adamantium.Localization.csproj" PrivateAssets="all" />
+        <ProjectReference Include="..\Adamantium.Core.Shared\Adamantium.Core.Shared.csproj" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Adamantium.LocalizationTests" />
+    </ItemGroup>
+
+</Project>
