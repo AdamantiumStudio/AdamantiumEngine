@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- `Messages.ChangeWindowMessageFilterEx` with `CHANGEFILTERSTRUCT` (`MessageFilterAction`, `MessageFilterStatus`): a
+  message from processes of a lower integrity level let through to a window, as an elevated application needs to hear
+  the shell's `TaskbarCreated`.
 - `Win32Interop.ShellNotifyIcon` with `NOTIFYICONDATA` (`NotifyIconMessage`, `NotifyIconFlags`, `NotifyIconEvent`): an
   icon in the notification area, its tip, and what is done to it told to a window in the version 4 form.
 - `PhysicsLayers.DefaultName`: the default layer's name, `Default`, for an editor that offers it beside the project's.
