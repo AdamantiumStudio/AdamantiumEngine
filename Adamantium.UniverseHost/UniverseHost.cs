@@ -253,7 +253,6 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
         IReadOnlyDictionary<string, Adamantium.Graphics.Core.Models.SceneData> models)
     {
         var world = _universe.EntityWorld;
-        world.GetService<IPhysicsService>().Project = physics;
         foreach (var problem in SceneCode.Replace(world, [], assemblies))
             Console.Error.WriteLine("Game code: " + problem);
 
@@ -267,6 +266,9 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
         world.ForceUpdate();
         if (FindSceneCamera(world.MainScene, _output.OwnCamera) is { } camera)
             _universe.LookThrough(camera);
+
+        if (world.GetService<IPhysicsService>() is { } service)
+            service.Project = physics;
 
         _run = GameRun.Start(world.MainScene);
         _launched.TrySetResult();

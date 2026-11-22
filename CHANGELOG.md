@@ -974,6 +974,9 @@ All packages share one version.
 
 ### Fixed
 
+- The game host starts its game again: it gave the project's physics to the game's physics before the world had taken
+  its services in, found none and threw, so no game launched under the debugger. It gives it once the world is up to
+  date, just before the game starts.
 - `Shapes.Ellipse` swept whole turns either way is the whole ellipse: taken round the turn, 720 drew nothing. A sweep
   past a turn still draws what is left over whole turns, 485 as 125; up to `MathHelper.Arc.SweepRounding`
   (0.00001°) past whole turns is rounding, the whole ellipse.
