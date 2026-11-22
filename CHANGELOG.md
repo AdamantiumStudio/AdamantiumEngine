@@ -10,6 +10,9 @@ All packages share one version.
 - `AddableAttribute`: marks a component type an editor offers to add to an entity, in a group (`ComponentGroups`:
   `Physics`, `Joints`, or a name of the game's own) and with an icon by key. The rigid body, the colliders and the
   joints have it; a transform, a placeholder and what makes an entity a light or a shape do not.
+- `Messages.ChangeWindowMessageFilterEx` with `CHANGEFILTERSTRUCT` (`MessageFilterAction`, `MessageFilterStatus`): a
+  message from processes of a lower integrity level let through to a window, as an elevated application needs to hear
+  the shell's `TaskbarCreated`.
 - `Win32Interop.ShellNotifyIcon` with `NOTIFYICONDATA` (`NotifyIconMessage`, `NotifyIconFlags`, `NotifyIconEvent`): an
   icon in the notification area, its tip, and what is done to it told to a window in the version 4 form.
 - `PhysicsLayers.DefaultName`: the default layer's name, `Default`, for an editor that offers it beside the project's.

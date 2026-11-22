@@ -31,6 +31,12 @@ namespace Adamantium.Win32
       [DllImport("user32.dll")]
       public static extern uint RegisterWindowMessage(string message);
 
+      /// <summary>Lets <paramref name="message"/> from processes of a lower integrity level reach
+      /// <paramref name="window"/>, or stops it: an elevated process hears the shell only so.</summary>
+      [DllImport("user32.dll", SetLastError = true)]
+      [return: MarshalAs(UnmanagedType.Bool)]
+      public static extern bool ChangeWindowMessageFilterEx(IntPtr window, uint message, MessageFilterAction action,
+         ref CHANGEFILTERSTRUCT status);
 
       public static Vector2<double> PointFromLParam(IntPtr lParam)
       {

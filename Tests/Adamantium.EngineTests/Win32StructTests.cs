@@ -38,4 +38,14 @@ public class Win32StructTests
             Assert.That(Marshal.OffsetOf<NOTIFYICONDATA>(nameof(NOTIFYICONDATA.BalloonIcon)).ToInt32(), Is.EqualTo(968));
         });
     }
+
+    [Test]
+    public void AMessageFilterStatus_IsTheSizeWindowsExpects()
+    {
+        Assert.Multiple(() =>
+        {
+            Assert.That(Marshal.SizeOf<CHANGEFILTERSTRUCT>(), Is.EqualTo(8));
+            Assert.That(CHANGEFILTERSTRUCT.Create().Size, Is.EqualTo(8u));
+        });
+    }
 }
