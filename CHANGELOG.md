@@ -7,6 +7,8 @@ All packages share one version.
 
 ### Added
 
+- `Win32Interop.ShellNotifyIcon` with `NOTIFYICONDATA` (`NotifyIconMessage`, `NotifyIconFlags`, `NotifyIconEvent`): an
+  icon in the notification area, its tip, and what is done to it told to a window in the version 4 form.
 - `PhysicsLayers.DefaultName`: the default layer's name, `Default`, for an editor that offers it beside the project's.
 - `Win32Interop.SendInput` with `INPUT` (`INPUT.Key`, `INPUT.Character` for a character typed whatever the layout),
   `KEYBDINPUT`, `KeyEventFlags`: keys put into the system's input, for an on-screen keyboard typing into another
