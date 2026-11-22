@@ -17,15 +17,15 @@ internal static class SceneComponents
     private static readonly Func<Type, bool> IsMarkedAndUnsectioned = IsAddableWithoutSection;
 
     /// <summary>Whether the scene keeps a component of <paramref name="type"/> by its type: one of the game's, or one of
-    /// the engine's marked <see cref="AddableAttribute"/> - but a rigid body, a collider and a joint, which the entry
-    /// keeps in sections of its own.</summary>
+    /// the engine's - of the application's own assemblies, which never unload - marked <see cref="AddableAttribute"/>,
+    /// but a rigid body, a collider and a joint, which the entry keeps in sections of its own. Code that unloads keeps
+    /// only its game components so: those are what a new build of it takes the place of.</summary>
     public static bool IsKept(Type type)
     {
         if (typeof(GameComponent).IsAssignableFrom(type))
             return true;
 
-        // A type of code that unloads is asked each time: nothing here holds it.
-        return type.Assembly.IsCollectible ? IsAddableWithoutSection(type) : EngineTypesKept.GetOrAdd(type, IsMarkedAndUnsectioned);
+        return !type.Assembly.IsCollectible && EngineTypesKept.GetOrAdd(type, IsMarkedAndUnsectioned);
     }
 
     /// <summary>Whether <paramref name="entity"/> has a component the scene keeps by type, or keeps entries of ones not
@@ -194,14 +194,10 @@ internal static class SceneComponents
         return false;
     }
 
-    // The fields of the type's own, above the bases every component of its kind shares.
-    private static Type FieldsBelow(Type type)
-    {
-        if (typeof(GameComponent).IsAssignableFrom(type))
-            return typeof(GameComponent);
-
-        return typeof(ActivatableComponent).IsAssignableFrom(type) ? typeof(ActivatableComponent) : typeof(Component);
-    }
+    // The fields above the base every component shares: a game component's from its own type down, an engine one's
+    // whether it is enabled too.
+    private static Type FieldsBelow(Type type) =>
+        typeof(GameComponent).IsAssignableFrom(type) ? typeof(GameComponent) : typeof(Component);
 
     private static bool IsAddableWithoutSection(Type type) =>
         type.IsDefined(typeof(AddableAttribute), false) && !typeof(RigidBody).IsAssignableFrom(type) &&

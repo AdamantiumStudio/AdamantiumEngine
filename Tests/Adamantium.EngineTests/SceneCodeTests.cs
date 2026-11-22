@@ -319,6 +319,16 @@ public class SceneCodeTests
         });
     }
 
+    // Code that unloads keeps only its game components by type: a type of it marked addable but no game component would
+    // stay on its entities when the code is replaced, holding the old build.
+    [Test]
+    public void AnAddableTypeOfCodeThatUnloads_ThatIsNoGameComponent_IsNotKeptByType()
+    {
+        var assembly = new TestGameCode("Game.Marked").AddAddableComponent("Game.Glow").Assembly;
+
+        Assert.That(SceneCode.KeepsByType(assembly.GetType("Game.Glow")), Is.False);
+    }
+
     // A copy of an entity keeps the components whose code is not loaded, written on the copy.
     [Test]
     public async Task ACopiedEntity_KeepsItsComponentsNotLoaded()

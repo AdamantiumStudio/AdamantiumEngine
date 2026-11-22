@@ -450,6 +450,25 @@ public class SceneBuilderTests
     }
 
     [Test]
+    public async Task AnAddableComponentTurnedOff_IsKeptOff()
+    {
+        var scene = new SceneFile();
+        scene.Markers.Add(new SceneMarker { Uid = 1, Name = "Post" });
+        var entry = new SceneComponent { On = 1, Type = typeof(Lantern).FullName };
+        entry.Values.Add(new SceneValue(nameof(Lantern.IsEnabled), "False"));
+        scene.Components.Add(entry);
+
+        var entities = await Build(scene);
+        var back = SceneCapture.Capture(universe.EntityWorld.MainScene).Components.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(entities.Single().GetComponent<Lantern>().IsEnabled, Is.False);
+            Assert.That(back.Values, Does.Contain(new SceneValue(nameof(Lantern.IsEnabled), "False")));
+        });
+    }
+
+    [Test]
     public async Task AComponentWithASectionOfItsOwn_NamedAmongTheComponents_IsKeptAsItWasRead()
     {
         var scene = new SceneFile();

@@ -270,10 +270,13 @@ public sealed class SceneBuilder
         List<GameComponentProblem> problems)
     {
         var existing = KeptComponentsOf(entity);
-        foreach (var component in existing)
+        if (existing != null)
         {
-            if (!HasEntryOfType(entries, component.GetType().FullName))
-                entity.RemoveComponent(component);
+            foreach (var component in existing)
+            {
+                if (!HasEntryOfType(entries, component.GetType().FullName))
+                    entity.RemoveComponent(component);
+            }
         }
 
         if (entries == null)
@@ -299,13 +302,14 @@ public sealed class SceneBuilder
         }
     }
 
+    // Null when there are none: most entities have none, and a game stopping puts every one back.
     private static List<Component> KeptComponentsOf(Entity entity)
     {
-        var kept = new List<Component>();
+        List<Component> kept = null;
         foreach (var component in entity.Components)
         {
             if (component is Component each && SceneComponents.IsKept(each.GetType()))
-                kept.Add(each);
+                (kept ??= []).Add(each);
         }
 
         return kept;
@@ -327,6 +331,9 @@ public sealed class SceneBuilder
 
     private static Component FindOfType(List<Component> components, string type)
     {
+        if (components == null)
+            return null;
+
         foreach (var component in components)
         {
             if (component.GetType().FullName == type)
