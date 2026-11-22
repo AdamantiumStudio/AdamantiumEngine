@@ -5,35 +5,40 @@ using VulkanBuffer = Adamantium.Vulkan.Core.Buffer;
 
 namespace Adamantium.Graphics;
 
-/// <summary>The consumer's side of a <see cref="SharedHandleType.HostMemory"/> ring on a device: copies the newest frame
-/// into a surface on the GPU - from its slot imported as a buffer where the device takes memory of the process, else
-/// through a staging buffer - and gives the slot back once the copy is done.</summary>
+/// <summary>A surface's side of a <see cref="SharedHandleType.HostMemory"/> ring on a device: copies the newest frame
+/// of the surface's size into it on the GPU - from the ring's slot imported as a buffer where the device takes memory of
+/// the process, else through a staging buffer - and gives the slot back once the copy is done. The ring itself is held
+/// in <see cref="MainGraphicsDevice.HostFrameRings"/>, shared with the surfaces of its other sizes.</summary>
 internal sealed class HostFrameImport : IDisposable
 {
     private readonly IGraphicsDevice _device;
-    private readonly HostFrameReader _reader;
-    private readonly HostSlotBuffer[] _slots;
+    private readonly ImportedFrameRing _ring;
+    private readonly uint _width;
+    private readonly uint _height;
     private readonly Buffer _staging;
     private readonly Semaphore _copies;
     private ulong _copyValue;
+    private ulong _latest;
+    private int _copiedSlot = -1;
     private ulong _copiedFrame;
-    private ulong _givenBack;
+    private bool _disposed;
 
     public HostFrameImport(IGraphicsDevice device, SharedSurfaceDescriptor descriptor, bool importSlots = true)
     {
         _device = device;
-        _reader = new HostFrameReader(descriptor);
+        _width = descriptor.Width;
+        _height = descriptor.Height;
+        _ring = device.MainDevice.HostFrameRings.Hold(device, descriptor);
         try
         {
             _copies = device.LogicalDevice.CreateSemaphore(new SemaphoreCreateInfo
             {
                 PNext = new SemaphoreTypeCreateInfo { SemaphoreType = SemaphoreType.Timeline, InitialValue = 0 }
             });
-            _slots = importSlots ? TryImportSlots() : null;
-            if (_slots == null)
+            if (!importSlots || _ring.Slots == null)
             {
-                _staging = Buffer.New(device, (ulong)_reader.Pixels(0).Length, BufferUsageFlags.TransferSrc,
-                    MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent);
+                _staging = Buffer.New(device, (ulong)_ring.Reader.Pixels(0, _width, _height).Length,
+                    BufferUsageFlags.TransferSrc, MemoryPropertyFlags.HostVisible | MemoryPropertyFlags.HostCoherent);
             }
         }
         catch
@@ -44,11 +49,11 @@ internal sealed class HostFrameImport : IDisposable
     }
 
     /// <summary>Whether the frames are copied from the slots themselves, not through a staging buffer.</summary>
-    public bool ImportsSlots => _slots != null;
+    public bool ImportsSlots => _staging == null;
 
-    /// <summary>Copies the newest frame finished since the last into <paramref name="target"/>, submitted on its own on
-    /// <paramref name="device"/> ahead of its frame; gives the frame, or 0 when none is new or the last copy still runs.
-    /// </summary>
+    /// <summary>Copies the newest frame of the surface's size finished since the last into <paramref name="target"/>,
+    /// submitted on its own on <paramref name="device"/> ahead of its frame; gives the frame, or 0 when none is new or
+    /// the last copy still runs.</summary>
     public ulong LatchInto(IGraphicsDevice device, ITexture target)
     {
         if (CopiesDone() < _copyValue)
@@ -56,23 +61,25 @@ internal sealed class HostFrameImport : IDisposable
             return 0;
         }
 
-        GiveBackCopied();
-        if (!_reader.TryTakeNewest(out var slot, out var frame))
+        EndCopy();
+        if (!_ring.Reader.TryTakeNewest(_latest, _width, _height, out var slot, out var frame))
         {
             return 0;
         }
 
+        _latest = frame;
+        // The older frames are never taken now: their slots go back at once, but those another surface still copies from.
+        _ring.GiveBack(frame - 1);
         VulkanBuffer source;
-        if (_slots != null)
+        if (_staging == null)
         {
-            source = _slots[slot].Buffer;
+            source = _ring.Slots[slot].Buffer;
         }
         else
         {
-            _staging.SetData(_reader.Pixels(slot));
+            _staging.SetData(_ring.Reader.Pixels(slot, _width, _height));
             source = _staging;
-            _reader.GiveBack(frame);
-            _givenBack = frame;
+            _ring.GiveBack(frame);
         }
 
         var copy = _copyValue + 1;
@@ -84,96 +91,53 @@ internal sealed class HostFrameImport : IDisposable
         }
 
         _copyValue = copy;
-        _copiedFrame = frame;
+        target.ImageLayout = ImageLayout.ShaderReadOnlyOptimal;
+        if (_staging == null)
+        {
+            _ring.BeginCopy(slot);
+            _copiedSlot = slot;
+            _copiedFrame = frame;
+        }
+
         return frame;
     }
 
     public void Dispose()
     {
+        if (_disposed)
+        {
+            return;
+        }
+
+        _disposed = true;
         if (_copies != null)
         {
             WaitForCopies();
             _device.Destroy(_copies);
         }
 
-        if (_slots != null)
-        {
-            foreach (var slot in _slots)
-            {
-                slot?.Dispose();
-            }
-        }
-
+        EndCopy();
         _staging?.Dispose();
-        _reader.Dispose();
+        _ring.Release();
     }
 
-    private HostSlotBuffer[] TryImportSlots()
-    {
-        if (!HostFrameRing.CanImport(_device) || !IsAligned())
-        {
-            return null;
-        }
-
-        var slots = new HostSlotBuffer[_reader.SlotCount];
-        try
-        {
-            for (var slot = 0; slot < slots.Length; slot++)
-            {
-                slots[slot] = HostSlotBuffer.Import(_device, _reader.SlotAddress(slot), _reader.SlotSize,
-                    BufferUsageFlagBits.TransferSrcBit);
-            }
-        }
-        catch (Exception exception)
-        {
-            foreach (var slot in slots)
-            {
-                slot?.Dispose();
-            }
-
-            if (exception is NotSupportedException)
-            {
-                return null;
-            }
-
-            throw;
-        }
-
-        return slots;
-    }
-
-    private bool IsAligned()
-    {
-        var alignment = _device.Adapter.HostPointerAlignment;
-        if (_reader.SlotSize % alignment != 0)
-        {
-            return false;
-        }
-
-        for (var slot = 0; slot < _reader.SlotCount; slot++)
-        {
-            if (_reader.SlotAddress(slot) % alignment != 0)
-            {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
+    // A target sampled since the copy before, or - nothing in it yet, before the first copy - in no layout at all: the
+    // copy takes it from there, with no transition of its own submitted and waited for.
     private void RecordCopy(IGraphicsDevice device, CommandBuffer commandBuffer, VulkanBuffer source, ITexture target)
     {
+        var sampled = target.ImageLayout == ImageLayout.ShaderReadOnlyOptimal;
         device.InsertImageMemoryBarrier(commandBuffer, target,
-            AccessFlagBits2.ShaderReadBit, AccessFlagBits2.TransferWriteBit,
-            ImageLayout.ShaderReadOnlyOptimal, ImageLayout.TransferDstOptimal,
-            PipelineStageFlagBits2.FragmentShaderBit, PipelineStageFlagBits2.AllTransferBit);
+            sampled ? AccessFlagBits2.ShaderReadBit : AccessFlagBits2.None, AccessFlagBits2.TransferWriteBit,
+            sampled ? ImageLayout.ShaderReadOnlyOptimal : ImageLayout.Undefined, ImageLayout.TransferDstOptimal,
+            sampled ? PipelineStageFlagBits2.FragmentShaderBit : PipelineStageFlagBits2.None,
+            PipelineStageFlagBits2.AllTransferBit);
         var region = new BufferImageCopy
         {
-            BufferRowLength = _reader.Width,
-            BufferImageHeight = _reader.Height,
+            BufferRowLength = _width,
+            BufferImageHeight = _height,
             ImageSubresource = new ImageSubresourceLayers { AspectMask = ImageAspectFlagBits.ColorBit, LayerCount = 1 },
             ImageOffset = new Offset3D(),
-            ImageExtent = new Extent3D { Width = _reader.Width, Height = _reader.Height, Depth = 1 }
+            ImageExtent = new Extent3D { Width = _width, Height = _height, Depth = 1 }
         };
         commandBuffer.CopyBufferToImage(source, target.GetImage(), ImageLayout.TransferDstOptimal, 1, region);
         device.InsertImageMemoryBarrier(commandBuffer, target,
@@ -182,13 +146,16 @@ internal sealed class HostFrameImport : IDisposable
             PipelineStageFlagBits2.AllTransferBit, PipelineStageFlagBits2.FragmentShaderBit);
     }
 
-    private void GiveBackCopied()
+    // The copy from a slot done: the slot, and the older frames no surface still copies from, given back.
+    private void EndCopy()
     {
-        if (_copiedFrame > _givenBack)
+        if (_copiedSlot < 0)
         {
-            _reader.GiveBack(_copiedFrame);
-            _givenBack = _copiedFrame;
+            return;
         }
+
+        _ring.EndCopy(_copiedSlot, _copiedFrame);
+        _copiedSlot = -1;
     }
 
     private ulong CopiesDone()
