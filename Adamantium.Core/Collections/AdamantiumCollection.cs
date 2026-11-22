@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 
 namespace Adamantium.Core.Collections
@@ -318,16 +320,87 @@ namespace Adamantium.Core.Collections
 
             lock (SyncRoot)
             {
-                var itemsToAdd = range.ToArray();
-                if (currentIndex + itemsToAdd.Length > Capacity)
+                // Taken whole first: a handler of the adds may change the source, and a lazy sequence may read this
+                // very collection.
+                if (range is ICollection<T> collection)
                 {
-                    Capacity = Math.Max(currentIndex + itemsToAdd.Length, Capacity * 2);
+                    AppendCopyOf(collection);
                 }
+                else
+                {
+                    AppendItems(range.ToArray());
+                }
+            }
+        }
 
-                for (var i = 0; i < itemsToAdd.Length; ++i)
+        /// <summary>
+        /// Adds all items of <paramref name="range"/> to <see cref="AdamantiumCollection{T}"/>
+        /// </summary>
+        /// <param name="range">The items to add, in order</param>
+        public void AddRange(ReadOnlySpan<T> range)
+        {
+            if (IsFixedSize)
+                throw new InvalidOperationException("Cannot add items to a fixed-size collection.");
+
+            if (range.IsEmpty)
+            {
+                return;
+            }
+
+            lock (SyncRoot)
+            {
+                // Taken whole first, as an array passed here may be what a handler of the adds changes.
+                var copy = ArrayPool<T>.Shared.Rent(range.Length);
+                try
                 {
-                    Insert(currentIndex, itemsToAdd[i]);
+                    range.CopyTo(copy);
+                    AppendItems(new ReadOnlySpan<T>(copy, 0, range.Length));
                 }
+                finally
+                {
+                    ReturnCopy(copy);
+                }
+            }
+        }
+
+        // A collection's items are copied through a pooled array, not a new one each time.
+        private void AppendCopyOf(ICollection<T> collection)
+        {
+            var count = collection.Count;
+            if (count == 0)
+            {
+                return;
+            }
+
+            var copy = ArrayPool<T>.Shared.Rent(count);
+            try
+            {
+                collection.CopyTo(copy, 0);
+                AppendItems(new ReadOnlySpan<T>(copy, 0, count));
+            }
+            finally
+            {
+                ReturnCopy(copy);
+            }
+        }
+
+        private static void ReturnCopy(T[] copy) =>
+            ArrayPool<T>.Shared.Return(copy, RuntimeHelpers.IsReferenceOrContainsReferences<T>());
+
+        // Each item still goes through InsertItem and OnInsert, as Add takes it, so a collection that checks, owns or
+        // reports its items sees every one; only the room is made once, under one lock.
+        private void AppendItems(ReadOnlySpan<T> range)
+        {
+            if (currentIndex + range.Length > Capacity)
+            {
+                Capacity = Math.Max(currentIndex + range.Length, Capacity * 2);
+            }
+
+            foreach (var item in range)
+            {
+                var index = currentIndex;
+                InsertItem(index, item);
+                OnInsert(index, item);
             }
         }
 

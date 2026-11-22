@@ -135,6 +135,90 @@ public class AdamantiumCollectionTests
     }
 
     [Test]
+    public void AddRange_OfAnyKindOfSource_AppendsItsItemsInOrder()
+    {
+        var c = Of("A");
+
+        c.AddRange((IEnumerable<string>)new[] { "B", "C" });
+        c.AddRange(new List<string> { "D" });
+        c.AddRange(new LinkedList<string>(["E", "F"]));
+        c.AddRange(Enumerable.Range(0, 2).Select(i => "G" + i));
+        c.AddRange("H I".Split(' ').AsSpan());
+        c.AddRange((IEnumerable<string>)null);
+
+        Assert.That(c, Is.EqualTo(new[] { "A", "B", "C", "D", "E", "F", "G0", "G1", "H", "I" }));
+    }
+
+    [Test]
+    public void AddRange_OfASpan_TellsEachItemAddedAtItsIndex()
+    {
+        var c = Of("A");
+        var added = new List<string>();
+        c.CollectionChanged += (_, e) => added.Add(e.NewStartingIndex + ":" + e.NewItems![0]);
+
+        c.AddRange(["B", "C"]);
+
+        Assert.That(added, Is.EqualTo(new[] { "1:B", "2:C" }));
+    }
+
+    // What was passed is added, though a handler of the adds changes the array it came in.
+    [Test]
+    public void AddRange_OfAnArrayAHandlerChanges_AddsWhatWasPassed()
+    {
+        var c = Of("A");
+        string[] buffer = ["B", "C", "D"];
+        c.CollectionChanged += (_, _) => Array.Fill(buffer, "X");
+
+        c.AddRange(buffer);
+        c.AddRange((IEnumerable<string>)new[] { "E", "F" });
+
+        Assert.That(c, Is.EqualTo(new[] { "A", "B", "C", "D", "E", "F" }));
+    }
+
+    [Test]
+    public void AddRange_OnAFixedSizeCollection_Throws_HoweverItIsPassed()
+    {
+        var c = new AdamantiumCollection<int>(4);
+
+        Assert.Multiple(() =>
+        {
+            Assert.Throws<InvalidOperationException>(() => c.AddRange(Array.Empty<int>()));
+            Assert.Throws<InvalidOperationException>(() => c.AddRange(new List<int>()));
+        });
+    }
+
+    // A collection that checks its items still sees every one of a range, each at the end it has grown to.
+    [Test]
+    public void AddRange_GoesThroughInsertItem_ItemByItem()
+    {
+        var c = new OnlyEven();
+
+        c.AddRange(new List<int> { 1, 2, 3, 4, 6 });
+        c.AddRange([7, 8]);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(c, Is.EqualTo(new[] { 2, 4, 6, 8 }));
+            Assert.That(c.Told, Is.EqualTo(new[] { "0:2", "1:4", "2:6", "3:8" }));
+        });
+    }
+
+    private sealed class OnlyEven : AdamantiumCollection<int>
+    {
+        public List<string> Told { get; } = [];
+
+        protected override void InsertItem(int index, int item)
+        {
+            if (item % 2 == 0) base.InsertItem(index, item);
+        }
+
+        protected override void OnInsert(int index, int item)
+        {
+            if (item % 2 == 0) Told.Add(index + ":" + item);
+        }
+    }
+
+    [Test]
     public void ARemoveWatched_TellsTheItemRemoved()
     {
         var c = Of("A", "B");

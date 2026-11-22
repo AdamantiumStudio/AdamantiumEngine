@@ -1005,6 +1005,11 @@ All packages share one version.
 
 ### Fixed
 
+- `AdamantiumCollection.AddRange` copied its range into a new array, then added it item by item, each taking the lock
+  and checking again: a range of a collection, or of a span (`AddRange(ReadOnlySpan<T>)`, which an array now binds
+  to), is copied through a pooled array, still taken whole before the first item is added; the room is made once, and
+  each item still goes through `InsertItem` and `OnInsert` as `Add` takes it. A `TrackingCollection` made from a list
+  of 2,000 points takes 4.8 ns a point, not 16.2, and half the memory.
 - Reading a PDF content stream lexed every number operand twice - an integer up to four times, looking ahead for a
   reference - though most of a page of maps is numbers: `PdfContentReader` takes a number from the token it has just
   looked at (`PdfObjectParser.ReadNumber`), read as before. Writing the geologic map of Alaska's page takes 0.3 s
