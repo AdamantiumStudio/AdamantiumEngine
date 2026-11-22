@@ -7,7 +7,7 @@ All packages share one version.
 
 ### Added
 
-- `AddableAttribute`: marks a component type an editor offers to add to an entity, in a group (`ComponentGroups`:
+- `InspectorComponentAttribute`: marks a component type an editor's inspector shows and offers to add, in a group (`ComponentGroups`:
   `Physics`, `Joints`, or a name of the game's own) and with an icon by key. The rigid body, the colliders and the
   joints have it; a transform, a placeholder and what makes an entity a light or a shape do not.
 - `Messages.ChangeWindowMessageFilterEx` with `CHANGEFILTERSTRUCT` (`MessageFilterAction`, `MessageFilterStatus`): a
@@ -789,7 +789,7 @@ All packages share one version.
 ### Changed
 
 - A scene file keeps components by their type and fields in one section, `Components` (`SceneFile.Components`,
-  `SceneComponent`): the game's, as `GameComponents` did, and any of the engine's marked `[Addable]` that no section of
+  `SceneComponent`): the game's, as `GameComponents` did, and any of the engine's marked `[InspectorComponent]` that no section of
   an entry keeps - a rigid body, a collider and a joint keep theirs. A new such component is saved with nothing more
   written for it. `GameComponents` of a file before is read into `Components`; the format is version 2, so an engine
   that reads 1 refuses the file rather than drop them, and a file is always written in this engine's version. Renamed

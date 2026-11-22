@@ -424,7 +424,7 @@ public class SceneBuilderTests
     }
 
     [Test]
-    public async Task AnAddableComponentOfTheEngine_IsKeptByItsTypeAndFields_LikeTheGames()
+    public async Task AnInspectorComponentOfTheEngine_IsKeptByItsTypeAndFields_LikeTheGames()
     {
         var scene = new SceneFile();
         scene.Markers.Add(new SceneMarker { Uid = 1, Name = "Mast" });
@@ -450,7 +450,7 @@ public class SceneBuilderTests
     }
 
     [Test]
-    public async Task AnAddableComponentTurnedOff_IsKeptOff()
+    public async Task AnInspectorComponentTurnedOff_IsKeptOff()
     {
         var scene = new SceneFile();
         scene.Markers.Add(new SceneMarker { Uid = 1, Name = "Post" });

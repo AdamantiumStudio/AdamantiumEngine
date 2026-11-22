@@ -9,15 +9,16 @@ using Serilog;
 namespace Adamantium.Engine.Scenes;
 
 /// <summary>Moves the components a scene keeps by type (<see cref="SceneComponent"/>) between an entity and their scene
-/// entries: the game's, and the engine's addable ones that no section of an entry keeps.</summary>
+/// entries: the game's, and the engine's inspector components that no section of an entry keeps.</summary>
 internal static class SceneComponents
 {
     // Whether each engine type is kept by type: an engine type never unloads, so what it is is remembered.
     private static readonly ConcurrentDictionary<Type, bool> EngineTypesKept = new();
-    private static readonly Func<Type, bool> IsMarkedAndUnsectioned = IsAddableWithoutSection;
+    private static readonly Func<Type, bool> IsMarkedAndUnsectioned = IsInspectorComponentWithoutSection;
 
     /// <summary>Whether the scene keeps a component of <paramref name="type"/> by its type: one of the game's, or one of
-    /// the engine's - of the application's own assemblies, which never unload - marked <see cref="AddableAttribute"/>,
+    /// the engine's - of the application's own assemblies, which never unload - marked
+    /// <see cref="InspectorComponentAttribute"/>,
     /// but a rigid body, a collider and a joint, which the entry keeps in sections of its own. Code that unloads keeps
     /// only its game components so: those are what a new build of it takes the place of.</summary>
     public static bool IsKept(Type type)
@@ -199,7 +200,7 @@ internal static class SceneComponents
     private static Type FieldsBelow(Type type) =>
         typeof(GameComponent).IsAssignableFrom(type) ? typeof(GameComponent) : typeof(Component);
 
-    private static bool IsAddableWithoutSection(Type type) =>
-        type.IsDefined(typeof(AddableAttribute), false) && !typeof(RigidBody).IsAssignableFrom(type) &&
+    private static bool IsInspectorComponentWithoutSection(Type type) =>
+        type.IsDefined(typeof(InspectorComponentAttribute), false) && !typeof(RigidBody).IsAssignableFrom(type) &&
         !typeof(Collider).IsAssignableFrom(type) && !typeof(Joint).IsAssignableFrom(type);
 }

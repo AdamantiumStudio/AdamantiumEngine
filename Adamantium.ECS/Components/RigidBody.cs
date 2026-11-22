@@ -9,7 +9,7 @@ namespace Adamantium.ECS.Components;
 /// <summary>Makes its entity a body the physics moves while a game plays, colliding with the colliders on the entity and
 /// on the entities below it that have no rigid body of their own: boxes, spheres, capsules and convex hulls.</summary>
 [ViewModel]
-[Addable(ComponentGroups.Physics, Icon = "PhysicsDynamicIcon")]
+[InspectorComponent(ComponentGroups.Physics, Icon = "PhysicsDynamicIcon")]
 public partial class RigidBody : Component
 {
     public RigidBody()

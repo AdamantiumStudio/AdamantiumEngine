@@ -62,14 +62,14 @@ internal sealed class TestGameCode
         return this;
     }
 
-    /// <summary>Adds a component named <paramref name="fullName"/> marked <see cref="AddableAttribute"/> that is no
-    /// <see cref="GameComponent"/>: deriving from <see cref="Component"/> itself.</summary>
-    public TestGameCode AddAddableComponent(string fullName)
+    /// <summary>Adds a component named <paramref name="fullName"/> marked <see cref="InspectorComponentAttribute"/> that
+    /// is no <see cref="GameComponent"/>: deriving from <see cref="Component"/> itself.</summary>
+    public TestGameCode AddInspectorComponent(string fullName)
     {
         var type = _module.DefineType(fullName, TypeAttributes.Public | TypeAttributes.Class | TypeAttributes.Sealed,
             typeof(Component));
         type.SetCustomAttribute(new CustomAttributeBuilder(
-            typeof(AddableAttribute).GetConstructor([typeof(string)])!, ["Game"]));
+            typeof(InspectorComponentAttribute).GetConstructor([typeof(string)])!, ["Game"]));
         type.DefineDefaultConstructor(MethodAttributes.Public);
         Assembly = type.CreateType().Assembly;
         return this;

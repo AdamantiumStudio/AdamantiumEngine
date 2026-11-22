@@ -5,7 +5,7 @@ namespace Adamantium.ECS.Components;
 
 /// <summary>A ball in a socket at its anchor: the bodies share the point and turn freely about it.</summary>
 [ViewModel]
-[Addable(ComponentGroups.Joints, Icon = "BallJointIcon")]
+[InspectorComponent(ComponentGroups.Joints, Icon = "BallJointIcon")]
 public partial class BallJoint : Joint
 {
     public override JointKind Kind => JointKind.Ball;

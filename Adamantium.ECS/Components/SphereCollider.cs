@@ -11,7 +11,7 @@ namespace Adamantium.ECS.Components
     /// <summary>A sphere round an entity: <see cref="Radius"/> about the collider's <see cref="Collider.Position"/>,
     /// grown by the largest of its <see cref="Collider.Scale"/>.</summary>
     [ViewModel]
-    [Addable(ComponentGroups.Physics, Icon = "PhysicsSphereIcon")]
+    [InspectorComponent(ComponentGroups.Physics, Icon = "PhysicsSphereIcon")]
     public partial class SphereCollider : Collider
     {
         private BoundingSphere<float> sphere;

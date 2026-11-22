@@ -7,7 +7,7 @@ namespace Adamantium.ECS.Components;
 /// <summary>A rod, a rope or a spring from its anchor to a point of the other body: their distance kept as it was when
 /// the game started, held between limits, or pulled toward it by a spring.</summary>
 [ViewModel]
-[Addable(ComponentGroups.Joints, Icon = "DistanceJointIcon")]
+[InspectorComponent(ComponentGroups.Joints, Icon = "DistanceJointIcon")]
 public partial class DistanceJoint : Joint
 {
     public DistanceJoint()

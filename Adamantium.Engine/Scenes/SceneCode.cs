@@ -84,7 +84,7 @@ public static class SceneCode
     }
 
     /// <summary>Whether a scene keeps a component of <paramref name="type"/> by its type: one of the game's, or one of the
-    /// engine's marked <see cref="AddableAttribute"/> that no section of an entry keeps - not a rigid body, a collider or
+    /// engine's marked <see cref="InspectorComponentAttribute"/> that no section of an entry keeps - not a rigid body, a collider or
     /// a joint.</summary>
     public static bool KeepsByType(Type type)
     {

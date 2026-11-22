@@ -299,9 +299,9 @@ public class SceneCodeTests
         });
     }
 
-    // The engine's addable components are put on as the game's are; one kept in a section of the entry's own is not.
+    // The engine's inspector components are put on as the game's are; one kept in a section of the entry's own is not.
     [Test]
-    public async Task AnAddableComponentOfTheEngine_IsAdded_ButOneWithASectionOfItsOwnIsNot()
+    public async Task AnInspectorComponentOfTheEngine_IsAdded_ButOneWithASectionOfItsOwnIsNot()
     {
         await Build(PatrolAtStart());
 
@@ -319,12 +319,12 @@ public class SceneCodeTests
         });
     }
 
-    // Code that unloads keeps only its game components by type: a type of it marked addable but no game component would
-    // stay on its entities when the code is replaced, holding the old build.
+    // Code that unloads keeps only its game components by type: a type of it marked for the inspector but no game
+    // component would stay on its entities when the code is replaced, holding the old build.
     [Test]
-    public void AnAddableTypeOfCodeThatUnloads_ThatIsNoGameComponent_IsNotKeptByType()
+    public void AnInspectorTypeOfCodeThatUnloads_ThatIsNoGameComponent_IsNotKeptByType()
     {
-        var assembly = new TestGameCode("Game.Marked").AddAddableComponent("Game.Glow").Assembly;
+        var assembly = new TestGameCode("Game.Marked").AddInspectorComponent("Game.Glow").Assembly;
 
         Assert.That(SceneCode.KeepsByType(assembly.GetType("Game.Glow")), Is.False);
     }

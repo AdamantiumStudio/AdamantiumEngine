@@ -7,7 +7,7 @@ namespace Adamantium.ECS.Components;
 /// <summary>A slider: the bodies keep their turn and slide along its axis alone - a drawer, a piston - within limits,
 /// and driven by a motor if it has one.</summary>
 [ViewModel]
-[Addable(ComponentGroups.Joints, Icon = "SliderJointIcon")]
+[InspectorComponent(ComponentGroups.Joints, Icon = "SliderJointIcon")]
 public partial class SliderJoint : Joint
 {
     public SliderJoint()

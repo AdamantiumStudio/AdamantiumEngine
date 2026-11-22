@@ -73,7 +73,7 @@ public class SceneSnapshotTests
     // A component of the engine's kept by type goes back as a game's does: the one the scene had gets its values, the
     // one a game added goes.
     [Test]
-    public void AnAddableComponentOfTheEngine_GoesBack_AndOneAddedInAGameGoes()
+    public void AnInspectorComponentOfTheEngine_GoesBack_AndOneAddedInAGameGoes()
     {
         var beacon = new Beacon { Range = 2 };
         _body.AddComponent(beacon);

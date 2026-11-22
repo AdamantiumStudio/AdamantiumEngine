@@ -11,7 +11,7 @@ namespace Adamantium.ECS.Components
 {
     /// <summary>A box round an entity: <see cref="Size"/> on its own axes, placed by the collider's placement.</summary>
     [ViewModel]
-    [Addable(ComponentGroups.Physics, Icon = "PhysicsBoxIcon")]
+    [InspectorComponent(ComponentGroups.Physics, Icon = "PhysicsBoxIcon")]
     public partial class BoxCollider : Collider
     {
         private OrientedBoundingBox<float> obb;
