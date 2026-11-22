@@ -78,16 +78,16 @@ public class SceneBuilderTests
         crate.Values.Add(new SceneValue(nameof(CubeShape.Size), "1, 0.5, 1"));
         scene.Shapes.Add(crate);
         scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = 30, Name = "Start", Position = new Vector3<double>(0, 0, 5) });
-        var patrol = new SceneGameComponent { On = 1, Type = typeof(Patrol).FullName };
+        var patrol = new SceneComponent { On = 1, Type = typeof(Patrol).FullName };
         patrol.Values.Add(new SceneValue(nameof(Patrol.Speed), "2.5"));
         patrol.Values.Add(new SceneValue(nameof(Patrol.Route), "A, B"));
         patrol.Values.Add(new SceneValue(nameof(Patrol.Goal), "1, 2, 3"));
         patrol.Values.Add(new SceneValue(nameof(Patrol.Post), "1000000000.001, 0, 2"));
         patrol.Values.Add(new SceneValue(nameof(Patrol.Mode), nameof(PatrolMode.Loop)));
-        scene.GameComponents.Add(patrol);
-        var unloaded = new SceneGameComponent { On = 30, Type = "SomeMod.Unknown" };
+        scene.Components.Add(patrol);
+        var unloaded = new SceneComponent { On = 30, Type = "SomeMod.Unknown" };
         unloaded.Values.Add(new SceneValue("Glow", "0, 1, 0"));
-        scene.GameComponents.Add(unloaded);
+        scene.Components.Add(unloaded);
         return scene;
     }
 
@@ -267,7 +267,7 @@ public class SceneBuilderTests
 
             Assert.That(back.SpawnPoints.Single().Position, Is.EqualTo(new Vector3<double>(0, 0, 5)));
 
-            var patrol = back.GameComponents.Single(entry => entry.Type == typeof(Patrol).FullName);
+            var patrol = back.Components.Single(entry => entry.Type == typeof(Patrol).FullName);
             Assert.That(patrol.On, Is.EqualTo((UInt128)1));
             Assert.That(patrol.Values, Is.EquivalentTo(new[]
             {
@@ -276,7 +276,7 @@ public class SceneBuilderTests
                 new SceneValue(nameof(Patrol.Mode), "Loop")
             }));
 
-            var unloaded = back.GameComponents.Single(entry => entry.Type == "SomeMod.Unknown");
+            var unloaded = back.Components.Single(entry => entry.Type == "SomeMod.Unknown");
             Assert.That((unloaded.On, unloaded.Values.Single()), Is.EqualTo(((UInt128)30, new SceneValue("Glow", "0, 1, 0"))));
         });
     }
@@ -414,13 +414,59 @@ public class SceneBuilderTests
     {
         var scene = new SceneFile();
         scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = 1, Name = "Start" });
-        scene.GameComponents.Add(new SceneGameComponent { On = 1, Type = "ModA.Glow" });
-        scene.GameComponents.Add(new SceneGameComponent { On = 1, Type = "ModB.Hum" });
+        scene.Components.Add(new SceneComponent { On = 1, Type = "ModA.Glow" });
+        scene.Components.Add(new SceneComponent { On = 1, Type = "ModB.Hum" });
 
         await Build(scene);
         var back = SceneCapture.Capture(universe.EntityWorld.MainScene);
 
-        Assert.That(back.GameComponents.Select(entry => entry.Type), Is.EqualTo(new[] { "ModA.Glow", "ModB.Hum" }));
+        Assert.That(back.Components.Select(entry => entry.Type), Is.EqualTo(new[] { "ModA.Glow", "ModB.Hum" }));
+    }
+
+    [Test]
+    public async Task AnAddableComponentOfTheEngine_IsKeptByItsTypeAndFields_LikeTheGames()
+    {
+        var scene = new SceneFile();
+        scene.Markers.Add(new SceneMarker { Uid = 1, Name = "Mast" });
+        var entry = new SceneComponent { On = 1, Type = typeof(Beacon).FullName };
+        entry.Values.Add(new SceneValue(nameof(Beacon.Range), "3.5"));
+        entry.Values.Add(new SceneValue(nameof(Beacon.Signal), "SOS"));
+        scene.Components.Add(entry);
+
+        var entities = await Build(scene);
+        var beacon = entities.Single().GetComponent<Beacon>();
+        beacon.Range = 4;
+        var back = SceneCapture.Capture(universe.EntityWorld.MainScene).Components.Single();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(beacon.Signal, Is.EqualTo("SOS"));
+            Assert.That(back.Type, Is.EqualTo(typeof(Beacon).FullName));
+            Assert.That(back.Values, Is.EquivalentTo(new[]
+            {
+                new SceneValue(nameof(Beacon.Range), "4"), new SceneValue(nameof(Beacon.Signal), "SOS")
+            }));
+        });
+    }
+
+    [Test]
+    public async Task AComponentWithASectionOfItsOwn_NamedAmongTheComponents_IsKeptAsItWasRead()
+    {
+        var scene = new SceneFile();
+        scene.Markers.Add(new SceneMarker { Uid = 1, Name = "Mast" });
+        scene.Components.Add(new SceneComponent { On = 1, Type = typeof(RigidBody).FullName });
+        scene.Components.Add(new SceneComponent { On = 1, Type = typeof(Transform).FullName });
+
+        var entities = await Build(scene);
+        var back = SceneCapture.Capture(universe.EntityWorld.MainScene);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(entities.Single().ContainsComponent<RigidBody>(), Is.False);
+            Assert.That(back.Components.Select(each => each.Type),
+                Is.EqualTo(new[] { typeof(RigidBody).FullName, typeof(Transform).FullName }));
+            Assert.That(back.Markers.Single().Body, Is.Null);
+        });
     }
 
     [Test]
@@ -428,16 +474,16 @@ public class SceneBuilderTests
     {
         var scene = new SceneFile();
         scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = 1, Name = "Start" });
-        var entry = new SceneGameComponent { On = 1, Type = typeof(FastWalker).FullName };
+        var entry = new SceneComponent { On = 1, Type = typeof(FastWalker).FullName };
         entry.Values.Add(new SceneValue(nameof(FastWalker.Speed), "7"));
-        scene.GameComponents.Add(entry);
+        scene.Components.Add(entry);
         await Build(scene);
 
         var back = SceneCapture.Capture(universe.EntityWorld.MainScene);
         using var stream = new MemoryStream();
         back.Write(stream);
 
-        Assert.That(back.GameComponents.Single().Values.Select(value => value.Name),
+        Assert.That(back.Components.Single().Values.Select(value => value.Name),
             Is.EquivalentTo(new[] { nameof(FastWalker.Speed) }));
     }
 

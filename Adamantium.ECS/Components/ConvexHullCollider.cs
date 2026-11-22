@@ -13,6 +13,7 @@ namespace Adamantium.ECS.Components;
 /// is fitted only; the collider's placement moves, turns and stretches it.
 /// </summary>
 [ViewModel]
+[Addable(ComponentGroups.Physics, Icon = "PhysicsConvexHullIcon")]
 public partial class ConvexHullCollider : Collider
 {
     private readonly Dictionary<CameraBase, PlacedCorners> colliderData = new();

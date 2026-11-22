@@ -7,6 +7,7 @@ namespace Adamantium.ECS.Components;
 /// <summary>A hinge at its anchor: the bodies turn about its axis alone - a door, a wheel - within limits, and driven by
 /// a motor if it has one.</summary>
 [ViewModel]
+[Addable(ComponentGroups.Joints, Icon = "HingeJointIcon")]
 public partial class HingeJoint : Joint
 {
     public HingeJoint()

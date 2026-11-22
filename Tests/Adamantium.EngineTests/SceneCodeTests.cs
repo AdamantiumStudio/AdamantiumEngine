@@ -35,9 +35,9 @@ public class SceneCodeTests
     {
         var scene = new SceneFile();
         scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = Start, Name = "Start" });
-        var patrol = new SceneGameComponent { On = Start, Type = PatrolType };
+        var patrol = new SceneComponent { On = Start, Type = PatrolType };
         patrol.Values.AddRange(values);
-        scene.GameComponents.Add(patrol);
+        scene.Components.Add(patrol);
         return scene;
     }
 
@@ -71,7 +71,7 @@ public class SceneCodeTests
             Assert.That(problems, Is.Empty);
             Assert.That(patrol.GetType().Assembly, Is.SameAs(second));
             Assert.That(patrol.GetType().GetProperty("Speed").GetValue(patrol), Is.EqualTo(2.5));
-            Assert.That(StartPoint().ContainsComponent<UnloadedGameComponents>(), Is.False);
+            Assert.That(StartPoint().ContainsComponent<UnloadedComponents>(), Is.False);
         });
     }
 
@@ -85,7 +85,7 @@ public class SceneCodeTests
 
         SceneCode.Replace(_world, [first], [second]);
 
-        var back = SceneCapture.Capture(_world.MainScene).GameComponents.Single();
+        var back = SceneCapture.Capture(_world.MainScene).Components.Single();
         Assert.Multiple(() =>
         {
             Assert.That(StartPoint().Components.OfType<GameComponent>(), Is.Empty);
@@ -99,7 +99,7 @@ public class SceneCodeTests
     public async Task ASceneReadBeforeTheCodeIsBuilt_GetsItsComponents_WhenTheCodeComes()
     {
         await Build(PatrolAtStart(new SceneValue("Speed", "4")));
-        Assert.That(StartPoint().ContainsComponent<UnloadedGameComponents>(), Is.True);
+        Assert.That(StartPoint().ContainsComponent<UnloadedComponents>(), Is.True);
         var code = Code("Game.First", new TestGameField("Speed", typeof(double))).Assembly;
 
         SceneCode.Replace(_world, [], [code]);
@@ -122,7 +122,7 @@ public class SceneCodeTests
         {
             Assert.That(problems, Is.Empty);
             Assert.That(StartPoint().Components.OfType<GameComponent>().Single().GetType().Assembly, Is.SameAs(second));
-            Assert.That(SceneCapture.Capture(_world.MainScene).GameComponents.Single().Values, Is.Empty);
+            Assert.That(SceneCapture.Capture(_world.MainScene).Components.Single().Values, Is.Empty);
         });
     }
 
@@ -142,7 +142,7 @@ public class SceneCodeTests
             Assert.That(builder.Problems.Select(problem => problem.Type), Is.EqualTo(new[] { PatrolType }));
             Assert.That(builder.Problems[0].Exception, Is.InstanceOf<InvalidOperationException>());
             Assert.That(back.SpawnPoints.Select(point => point.Name), Is.EquivalentTo(new[] { "Start", "Exit" }));
-            Assert.That(back.GameComponents.Single().Values, Is.EqualTo(new[] { new SceneValue("Speed", "2.5") }));
+            Assert.That(back.Components.Single().Values, Is.EqualTo(new[] { new SceneValue("Speed", "2.5") }));
         });
     }
 
@@ -151,16 +151,16 @@ public class SceneCodeTests
     {
         var scene = new SceneFile();
         scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = Start, Name = "Start" });
-        var first = new SceneGameComponent { On = Start, Type = typeof(Patrol).FullName };
+        var first = new SceneComponent { On = Start, Type = typeof(Patrol).FullName };
         first.Values.Add(new SceneValue(nameof(Patrol.Speed), "1"));
-        var second = new SceneGameComponent { On = Start, Type = typeof(Patrol).FullName };
+        var second = new SceneComponent { On = Start, Type = typeof(Patrol).FullName };
         second.Values.Add(new SceneValue(nameof(Patrol.Speed), "2"));
-        scene.GameComponents.Add(first);
-        scene.GameComponents.Add(second);
+        scene.Components.Add(first);
+        scene.Components.Add(second);
 
         await Build(scene);
 
-        var speeds = SceneCapture.Capture(_world.MainScene).GameComponents
+        var speeds = SceneCapture.Capture(_world.MainScene).Components
             .Select(entry => entry.Values.Single(value => value.Name == nameof(Patrol.Speed)).Text);
         Assert.That(speeds, Is.EquivalentTo(new[] { "1", "2" }));
     }
@@ -179,7 +179,7 @@ public class SceneCodeTests
         SceneCode.Replace(_world, [first], [second]);
 
         var guard = StartPoint().Components.OfType<GameComponent>().Single();
-        var back = SceneCapture.Capture(_world.MainScene).GameComponents.Single();
+        var back = SceneCapture.Capture(_world.MainScene).Components.Single();
         Assert.Multiple(() =>
         {
             Assert.That(guard.GetType().FullName, Is.EqualTo("Game.AI.Guard"));
@@ -220,7 +220,7 @@ public class SceneCodeTests
         await Build(PatrolAtStart(new SceneValue("Speed", "3"), new SceneValue("Route", "A")));
         var code = new TestGameCode("Game.Renamed").AddComponent("Game.Guard", new TestGameField("Speed", typeof(double))).Assembly;
         _code.Replace([], [code]);
-        var entry = StartPoint().GetComponent<UnloadedGameComponents>().Entries.Single();
+        var entry = StartPoint().GetComponent<UnloadedComponents>().Entries.Single();
 
         var problem = SceneCode.Load(StartPoint(), entry, _code.FindType<GameComponent>("Game.Guard"));
 
@@ -229,7 +229,7 @@ public class SceneCodeTests
         {
             Assert.That(problem, Is.Null);
             Assert.That(guard.GetType().GetProperty("Speed").GetValue(guard), Is.EqualTo(3.0));
-            Assert.That(StartPoint().ContainsComponent<UnloadedGameComponents>(), Is.False);
+            Assert.That(StartPoint().ContainsComponent<UnloadedComponents>(), Is.False);
         });
     }
 
@@ -240,14 +240,14 @@ public class SceneCodeTests
         await Build(PatrolAtStart(new SceneValue("Speed", "3")));
         var code = new TestGameCode("Game.Failing").AddThrowingComponent("Game.Guard").Assembly;
         _code.Replace([], [code]);
-        var entry = StartPoint().GetComponent<UnloadedGameComponents>().Entries.Single();
+        var entry = StartPoint().GetComponent<UnloadedComponents>().Entries.Single();
 
         var problem = SceneCode.Load(StartPoint(), entry, _code.FindType<GameComponent>("Game.Guard"));
 
         Assert.Multiple(() =>
         {
             Assert.That(problem?.Exception, Is.InstanceOf<InvalidOperationException>());
-            Assert.That(StartPoint().GetComponent<UnloadedGameComponents>().Entries, Is.EqualTo(new[] { entry }));
+            Assert.That(StartPoint().GetComponent<UnloadedComponents>().Entries, Is.EqualTo(new[] { entry }));
             Assert.That(StartPoint().Components.OfType<GameComponent>(), Is.Empty);
         });
     }
@@ -258,9 +258,9 @@ public class SceneCodeTests
     public async Task AComponentThatThrowsAsItIsAdded_KeepsItsEntry_AndTheRestMove()
     {
         var scene = PatrolAtStart(new SceneValue("Speed", "2.5"));
-        scene.GameComponents.Add(new SceneGameComponent { On = Start, Type = "Game.Spinner" });
+        scene.Components.Add(new SceneComponent { On = Start, Type = "Game.Spinner" });
         scene.SpawnPoints.Add(new SceneSpawnPoint { Uid = 2, Name = "Exit" });
-        scene.GameComponents.Add(new SceneGameComponent { On = 2, Type = "Game.Spinner" });
+        scene.Components.Add(new SceneComponent { On = 2, Type = "Game.Spinner" });
         await Build(scene);
         var code = new TestGameCode("Game.Failing")
             .AddComponentThrowingOnInitialize(PatrolType, new TestGameField("Speed", typeof(double)))
@@ -269,7 +269,7 @@ public class SceneCodeTests
         var problems = SceneCode.Replace(_world, [], [code]);
 
         var exit = _world.MainScene.RootEntities.Single(entity => entity.Uid == 2);
-        var back = SceneCapture.Capture(_world.MainScene).GameComponents;
+        var back = SceneCapture.Capture(_world.MainScene).Components;
         Assert.Multiple(() =>
         {
             Assert.That(problems.Select(problem => problem.Type), Is.EqualTo(new[] { PatrolType }));
@@ -299,13 +299,33 @@ public class SceneCodeTests
         });
     }
 
+    // The engine's addable components are put on as the game's are; one kept in a section of the entry's own is not.
+    [Test]
+    public async Task AnAddableComponentOfTheEngine_IsAdded_ButOneWithASectionOfItsOwnIsNot()
+    {
+        await Build(PatrolAtStart());
+
+        var problem = SceneCode.Add(StartPoint(), typeof(Beacon));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(problem, Is.Null);
+            Assert.That(StartPoint().ContainsComponent<Beacon>(), Is.True);
+            Assert.That(SceneCode.KeepsByType(typeof(Beacon)), Is.True);
+            Assert.That(SceneCode.KeepsByType(typeof(RigidBody)), Is.False);
+            Assert.That(SceneCode.KeepsByType(typeof(HingeJoint)), Is.False);
+            Assert.That(SceneCode.KeepsByType(typeof(Transform)), Is.False);
+            Assert.That(() => SceneCode.Add(StartPoint(), typeof(RigidBody)), Throws.ArgumentException);
+        });
+    }
+
     // A copy of an entity keeps the components whose code is not loaded, written on the copy.
     [Test]
     public async Task ACopiedEntity_KeepsItsComponentsNotLoaded()
     {
         await Build(PatrolAtStart(new SceneValue("Speed", "2.5")));
 
-        var copy = (UnloadedGameComponents)StartPoint().GetComponent<UnloadedGameComponents>().Clone();
+        var copy = (UnloadedComponents)StartPoint().GetComponent<UnloadedComponents>().Clone();
 
         Assert.That(copy.Entries.Single().Values, Is.EqualTo(new[] { new SceneValue("Speed", "2.5") }));
     }

@@ -35,9 +35,9 @@ public class SceneSnapshotTests
         file.Markers.Add(new SceneMarker { Uid = 1, Name = "Group", Kind = SceneMarkerKind.Group, Position = new Vector3<double>(1, 0, 0) });
         file.Markers.Add(new SceneMarker { Uid = 2, Name = "Body", Parent = 1, Position = new Vector3<double>(0, 2, 0) });
         file.Lights.Add(new SceneLight { Uid = 3, Name = "Lamp", Type = LightType.Point, Intensity = 3, Range = 10 });
-        var pushed = new SceneGameComponent { On = 2, Type = typeof(Pushed).FullName };
+        var pushed = new SceneComponent { On = 2, Type = typeof(Pushed).FullName };
         pushed.Values.Add(new SceneValue(nameof(Pushed.Speed), "2"));
-        file.GameComponents.Add(pushed);
+        file.Components.Add(pushed);
         await new SceneBuilder(_scene, new CountingAssets()).Build(file);
         _world.ForceUpdate();
         _group = Named("Group");
@@ -67,6 +67,30 @@ public class SceneSnapshotTests
             Assert.That(_body.IsEnabled, Is.True);
             Assert.That(_body.Owner, Is.SameAs(_group));
             Assert.That(_body.Transform.Position, Is.EqualTo(new WorldPosition(0, 2, 0)));
+        });
+    }
+
+    // A component of the engine's kept by type goes back as a game's does: the one the scene had gets its values, the
+    // one a game added goes.
+    [Test]
+    public void AnAddableComponentOfTheEngine_GoesBack_AndOneAddedInAGameGoes()
+    {
+        var beacon = new Beacon { Range = 2 };
+        _body.AddComponent(beacon);
+        _world.ForceUpdate();
+        var snapshot = SceneSnapshot.Take(_scene);
+        beacon.Range = 9;
+        _group.AddComponent(new Beacon());
+        _world.ForceUpdate();
+
+        snapshot.Restore();
+        _world.ForceUpdate();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(_body.GetComponent<Beacon>(), Is.SameAs(beacon));
+            Assert.That(beacon.Range, Is.EqualTo(2));
+            Assert.That(_group.ContainsComponent<Beacon>(), Is.False);
         });
     }
 

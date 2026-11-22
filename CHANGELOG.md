@@ -7,6 +7,9 @@ All packages share one version.
 
 ### Added
 
+- `AddableAttribute`: marks a component type an editor offers to add to an entity, in a group (`ComponentGroups`:
+  `Physics`, `Joints`, or a name of the game's own) and with an icon by key. The rigid body, the colliders and the
+  joints have it; a transform, a placeholder and what makes an entity a light or a shape do not.
 - `Win32Interop.ShellNotifyIcon` with `NOTIFYICONDATA` (`NotifyIconMessage`, `NotifyIconFlags`, `NotifyIconEvent`): an
   icon in the notification area, its tip, and what is done to it told to a window in the version 4 form.
 - `PhysicsLayers.DefaultName`: the default layer's name, `Default`, for an editor that offers it beside the project's.
@@ -782,6 +785,13 @@ All packages share one version.
 
 ### Changed
 
+- A scene file keeps components by their type and fields in one section, `Components` (`SceneFile.Components`,
+  `SceneComponent`): the game's, as `GameComponents` did, and any of the engine's marked `[Addable]` that no section of
+  an entry keeps - a rigid body, a collider and a joint keep theirs. A new such component is saved with nothing more
+  written for it. `GameComponents` of a file before is read into `Components`; the format is version 2, so an engine
+  that reads 1 refuses the file rather than drop them, and a file is always written in this engine's version. Renamed
+  with it: `SceneGameComponent` to `SceneComponent`, `UnloadedGameComponents` to `UnloadedComponents`. `SceneCode.Add`
+  and `Load` take the engine's components kept by type as well; `SceneCode.KeepsByType` says which those are.
 - `PdfDocument.Authenticate` keeps what was read when the key stays the same - the owner's password after the user's
   opens with the user's key: only the rights change, nothing is read anew. After the owner's password another is only
   checked: the owner's access stays, and the owner's password is the one a copy and the file saved again take.

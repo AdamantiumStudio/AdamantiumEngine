@@ -11,7 +11,7 @@ namespace Adamantium.Engine.Scenes;
 /// <summary>
 /// A scene as its file (<c>.ascene</c>) holds it, in readable XML: what is put in the scene, where and which way it
 /// faces - the models by their asset names, nothing more of them; what no file holds - lights, cameras, spawn points,
-/// groups and empty entities, procedural shapes by their recipes, the components of the game's code - described whole.
+/// groups and empty entities, procedural shapes by their recipes, components by their type and fields - described whole.
 /// Each kind has a section of its own. Every entry has an id the others and the patches of mods refer to it by; an
 /// entry stands in another by that one's id, so the file stays flat however deep the scene.
 /// </summary>
@@ -21,13 +21,23 @@ public sealed class SceneFile
     /// <summary>The extension of a scene file.</summary>
     public const string FileExtension = Graphics.Core.Assets.AssetFileInfo.SceneExtension;
 
-    /// <summary>The version of the format this engine writes; a file of a later one is refused.</summary>
-    public const int FormatVersion = 1;
+    /// <summary>The version of the format this engine writes; a file of a later one is refused. 2 keeps components by
+    /// type in <see cref="Components"/>, which a reader of 1 would drop unread.</summary>
+    public const int FormatVersion = 2;
 
     private static readonly XmlSerializer Serializer = new(typeof(SceneFile));
 
-    [XmlAttribute]
+    /// <summary>The version the file was read in; <see cref="FormatVersion"/> for one made here. Written always as
+    /// <see cref="FormatVersion"/>: what this engine writes is of its own format, whatever it read.</summary>
+    [XmlIgnore]
     public int Version { get; set; } = FormatVersion;
+
+    [XmlAttribute("Version"), EditorBrowsable(EditorBrowsableState.Never)]
+    public int WrittenVersion
+    {
+        get => FormatVersion;
+        set => Version = value;
+    }
 
     /// <summary>The scene's own id, which it keeps across saving: the scene shown from the file is made with it. Null
     /// for a file without one - a new scene's - whose scene gets a new id.</summary>
@@ -62,8 +72,15 @@ public sealed class SceneFile
     [XmlArray("Shapes"), XmlArrayItem("Shape")]
     public List<SceneShape> Shapes { get; set; } = [];
 
-    [XmlArray("GameComponents"), XmlArrayItem("GameComponent")]
-    public List<SceneGameComponent> GameComponents { get; set; } = [];
+    /// <summary>The components kept by their type and fields: the game's, and the engine's that no section of an entry
+    /// keeps.</summary>
+    [XmlArray("Components"), XmlArrayItem("Component")]
+    public List<SceneComponent> Components { get; } = [];
+
+    /// <summary>The section the components of the game's code had before <see cref="Components"/>: read into it, never
+    /// written.</summary>
+    [XmlArray("GameComponents"), XmlArrayItem("GameComponent"), EditorBrowsable(EditorBrowsableState.Never)]
+    public List<SceneComponent> FormerGameComponents => Components;
 
     /// <summary>What the editor keeps of how the scene was worked on - its views' cameras, the selection - last in the
     /// file, as the editor wrote it; nothing of the engine's, which neither reads nor writes it. Null for none.</summary>
@@ -92,7 +109,10 @@ public sealed class SceneFile
     public bool ShouldSerializeSpawnPoints() => SpawnPoints.Count > 0;
 
     [EditorBrowsable(EditorBrowsableState.Never)]
-    public bool ShouldSerializeGameComponents() => GameComponents.Count > 0;
+    public bool ShouldSerializeComponents() => Components.Count > 0;
+
+    [EditorBrowsable(EditorBrowsableState.Never)]
+    public bool ShouldSerializeFormerGameComponents() => false;
 
     /// <summary>Reads the scene file at <paramref name="path"/>.</summary>
     /// <exception cref="InvalidDataException">The file is not a scene file, or one of a later version.</exception>

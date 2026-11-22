@@ -44,30 +44,30 @@ public static class SceneCode
     /// does not have, renamed, say - a component of <paramref name="type"/>: the fields of the entry that type has, by
     /// name; the entry is no longer kept. On the world's thread. Returns the problem when the type's code throws; the
     /// entry stays then.</summary>
-    /// <exception cref="ArgumentException"><paramref name="type"/> is no component of the game's code, or the entity has
-    /// one of it already.</exception>
-    public static GameComponentProblem Load(Entity entity, SceneGameComponent entry, Type type)
+    /// <exception cref="ArgumentException"><paramref name="type"/> is no component a scene keeps by type, or the entity
+    /// has one of it already.</exception>
+    public static GameComponentProblem Load(Entity entity, SceneComponent entry, Type type)
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(entry);
         ArgumentNullException.ThrowIfNull(type);
         CheckMadeType(entity, type);
-        if (!SceneGameComponents.Keeps(entity, entry))
+        if (!SceneComponents.Keeps(entity, entry))
             throw new ArgumentException($"{entity.Name} does not keep that entry.", nameof(entry));
 
         var problems = new List<GameComponentProblem>(1);
-        var gameComponent = SceneGameComponents.Make(entity, entry, type, problems);
-        if (gameComponent == null || !SceneGameComponents.TryAdd(entity, gameComponent, type.FullName, problems))
+        var component = SceneComponents.Make(entity, entry, type, problems);
+        if (component == null || !SceneComponents.TryAdd(entity, component, type.FullName, problems))
             return problems[0];
 
-        SceneGameComponents.Drop(entity, entry);
+        SceneComponents.Drop(entity, entry);
         return null;
     }
 
     /// <summary>Puts a new component of <paramref name="type"/> on <paramref name="entity"/>, its fields as its code
-    /// sets them. On the world's thread. Returns the problem when the type's code throws; the entity is left as it was.
-    /// </summary>
-    /// <exception cref="ArgumentException"><paramref name="type"/> is no component of the game's code that can be
+    /// sets them: one of the game's, or one of the engine's a scene keeps by type. On the world's thread. Returns the
+    /// problem when the type's code throws; the entity is left as it was.</summary>
+    /// <exception cref="ArgumentException"><paramref name="type"/> is no component a scene keeps by type that can be
     /// made, or the entity has one of it already.</exception>
     public static GameComponentProblem Add(Entity entity, Type type)
     {
@@ -76,40 +76,49 @@ public static class SceneCode
         CheckMadeType(entity, type);
 
         var problems = new List<GameComponentProblem>(1);
-        var gameComponent = SceneGameComponents.Make(entity, new SceneGameComponent { On = entity.Uid, Type = type.FullName }, type, problems);
-        if (gameComponent == null || !SceneGameComponents.TryAdd(entity, gameComponent, type.FullName, problems))
+        var component = SceneComponents.Make(entity, new SceneComponent { On = entity.Uid, Type = type.FullName }, type, problems);
+        if (component == null || !SceneComponents.TryAdd(entity, component, type.FullName, problems))
             return problems[0];
 
         return null;
     }
 
+    /// <summary>Whether a scene keeps a component of <paramref name="type"/> by its type: one of the game's, or one of the
+    /// engine's marked <see cref="AddableAttribute"/> that no section of an entry keeps - not a rigid body, a collider or
+    /// a joint.</summary>
+    public static bool KeepsByType(Type type)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        return typeof(Component).IsAssignableFrom(type) && SceneComponents.IsKept(type);
+    }
+
     /// <summary>Takes off <paramref name="entity"/> the entry it keeps for a component whose code is not loaded: the
     /// component is gone from the scene. On the world's thread.</summary>
-    public static void Remove(Entity entity, SceneGameComponent entry)
+    public static void Remove(Entity entity, SceneComponent entry)
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(entry);
-        SceneGameComponents.Drop(entity, entry);
+        SceneComponents.Drop(entity, entry);
     }
 
     /// <summary>Puts back on <paramref name="entity"/> the entry taken off with <see cref="Remove"/> or made a component
     /// with <see cref="Load"/> - as an undo does: the component whose code is not loaded is in the scene again. On the
     /// world's thread. Nothing for an entry the entity keeps already.</summary>
-    public static void Restore(Entity entity, SceneGameComponent entry)
+    public static void Restore(Entity entity, SceneComponent entry)
     {
         ArgumentNullException.ThrowIfNull(entity);
         ArgumentNullException.ThrowIfNull(entry);
-        if (!SceneGameComponents.Keeps(entity, entry))
+        if (!SceneComponents.Keeps(entity, entry))
         {
-            SceneGameComponents.Keep(entity, entry);
+            SceneComponents.Keep(entity, entry);
         }
     }
 
     private static void CheckMadeType(Entity entity, Type type)
     {
-        if (!typeof(GameComponent).IsAssignableFrom(type) || type.IsAbstract || type.ContainsGenericParameters ||
+        if (!KeepsByType(type) || type.IsAbstract || type.ContainsGenericParameters ||
             type.GetConstructor(Type.EmptyTypes) == null)
-            throw new ArgumentException($"{type.FullName} is not a component of the game's code that can be made.", nameof(type));
+            throw new ArgumentException($"{type.FullName} is not a component a scene keeps by type that can be made.", nameof(type));
 
         if (entity.ContainsComponent(type))
             throw new ArgumentException($"{entity.Name} already has a {type.FullName}.", nameof(type));
@@ -157,7 +166,7 @@ public static class SceneCode
 
         foreach (var gameComponent in leavingGameComponents)
         {
-            SceneGameComponents.Keep(entity, SceneGameComponents.Write(gameComponent, entity.Uid));
+            SceneComponents.Keep(entity, SceneComponents.Write(gameComponent, entity.Uid));
             entity.RemoveComponent(gameComponent);
         }
     }
@@ -198,14 +207,14 @@ public static class SceneCode
 
     private static void Reattach(Entity entity, IWorldCode code, List<GameComponentProblem> problems)
     {
-        var unloaded = entity.GetComponent<UnloadedGameComponents>();
+        var unloaded = entity.GetComponent<UnloadedComponents>();
         if (unloaded == null)
             return;
 
         entity.RemoveComponent(unloaded);
         foreach (var entry in unloaded.Entries)
         {
-            SceneGameComponents.Attach(entity, entry, code, problems);
+            SceneComponents.Attach(entity, entry, code, problems);
         }
     }
 

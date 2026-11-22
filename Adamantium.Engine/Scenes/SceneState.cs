@@ -75,7 +75,7 @@ internal sealed class SceneState
         AddWithWhatTheyHold(toPut, returned);
         Dictionary<UInt128, ScenePlacement> entries = null;
         Dictionary<UInt128, Entity> entities = null;
-        Dictionary<UInt128, List<SceneGameComponent>> components = null;
+        Dictionary<UInt128, List<SceneComponent>> components = null;
         var code = Scene.World.Satellites.Get<IWorldCode>();
         var problems = new List<GameComponentProblem>();
         var reorder = new HashSet<Entity>();
@@ -94,8 +94,8 @@ internal sealed class SceneState
                     entities ??= GetEntitiesById();
                     SceneBuilder.ApplyJoints(entity, entry, entities);
                 }
-                components ??= GetGameComponentsById();
-                SceneBuilder.ApplyGameComponents(entity, components.GetValueOrDefault(entity.Uid), code, problems);
+                components ??= GetComponentsById();
+                SceneBuilder.ApplyComponents(entity, components.GetValueOrDefault(entity.Uid), code, problems);
             }
 
             var isComingBack = returned.Contains(entity);
@@ -277,10 +277,10 @@ internal sealed class SceneState
         }
     }
 
-    private Dictionary<UInt128, List<SceneGameComponent>> GetGameComponentsById()
+    private Dictionary<UInt128, List<SceneComponent>> GetComponentsById()
     {
-        var byId = new Dictionary<UInt128, List<SceneGameComponent>>();
-        foreach (var entry in _file.GameComponents)
+        var byId = new Dictionary<UInt128, List<SceneComponent>>();
+        foreach (var entry in _file.Components)
         {
             if (!byId.TryGetValue(entry.On, out var list))
             {

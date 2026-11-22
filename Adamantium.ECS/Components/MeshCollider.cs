@@ -13,6 +13,7 @@ namespace Adamantium.ECS.Components;
 /// The collider's placement carries the mesh from its center, which a fit makes <see cref="Collider.Position"/>.
 /// </summary>
 [ViewModel]
+[Addable(ComponentGroups.Physics, Icon = "PhysicsMeshIcon")]
 public partial class MeshCollider : Collider
 {
     private readonly Dictionary<CameraBase, PlacedCorners> colliderData = new();
