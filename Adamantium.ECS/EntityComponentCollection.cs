@@ -225,6 +225,8 @@ namespace Adamantium.ECS
         // A component twice - already in, or earlier in the range - refuses the range before any of it is in.
         protected override void CheckItems(ReadOnlySpan<IComponent> range)
         {
+            base.CheckItems(range);
+
             for (var i = 0; i < range.Length; i++)
             {
                 var component = range[i];
