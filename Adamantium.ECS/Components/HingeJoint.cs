@@ -27,11 +27,14 @@ public partial class HingeJoint : Joint
     [Bindable]
     public partial bool UsesLimits { get; set; }
 
-    /// <summary>How far it may turn back from where it stood when the game started, in degrees, to -180.</summary>
+    /// <summary>How far it may turn back from where it stood when the game started, in degrees, to -180. Set above
+    /// <see cref="UpperAngle"/>, it takes that along: limits the wrong way round are no hinge the physics can make.
+    /// </summary>
     [Bindable]
     public partial float LowerAngle { get; set; }
 
-    /// <summary>How far it may turn on, in degrees, to 180.</summary>
+    /// <summary>How far it may turn on, in degrees, to 180. Set below <see cref="LowerAngle"/>, it takes that along.
+    /// </summary>
     [Bindable]
     public partial float UpperAngle { get; set; }
 
@@ -46,4 +49,16 @@ public partial class HingeJoint : Joint
     /// <summary>The most torque the motor gives, in newton meters.</summary>
     [Bindable]
     public partial float MaxMotorTorque { get; set; }
+
+    partial void OnLowerAngleChanged(float value)
+    {
+        if (value > UpperAngle)
+            UpperAngle = value;
+    }
+
+    partial void OnUpperAngleChanged(float value)
+    {
+        if (value < LowerAngle)
+            LowerAngle = value;
+    }
 }

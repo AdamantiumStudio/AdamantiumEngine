@@ -792,6 +792,9 @@ All packages share one version.
   that reads 1 refuses the file rather than drop them, and a file is always written in this engine's version. Renamed
   with it: `SceneGameComponent` to `SceneComponent`, `UnloadedGameComponents` to `UnloadedComponents`. `SceneCode.Add`
   and `Load` take the engine's components kept by type as well; `SceneCode.KeepsByType` says which those are.
+- A joint's limits are never the wrong way round: `HingeJoint.LowerAngle`, `SliderJoint.LowerLimit` and
+  `DistanceJoint.MinDistance` set past the other limit take it along, and the other way. Before, such a joint was
+  refused when its scene was read, and lost.
 - `PdfDocument.Authenticate` keeps what was read when the key stays the same - the owner's password after the user's
   opens with the user's key: only the rights change, nothing is read anew. After the owner's password another is only
   checked: the owner's access stays, and the owner's password is the one a copy and the file saved again take.
