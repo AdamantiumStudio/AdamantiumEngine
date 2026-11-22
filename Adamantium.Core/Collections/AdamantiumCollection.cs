@@ -1,9 +1,11 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Threading;
 
 namespace Adamantium.Core.Collections
@@ -165,17 +167,33 @@ namespace Adamantium.Core.Collections
         /// <param name="range"><see cref="IEnumerable{T}"/> of items to insert</param>
         public void InsertRange(int index, IEnumerable<T> range)
         {
+            ArgumentNullException.ThrowIfNull(range);
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
+
             if (IsFixedSize)
                 throw new InvalidOperationException("Cannot add items to a fixed-size collection.");
-            
+
             lock (SyncRoot)
             {
-                var enumerable = range as T[] ?? range.ToArray();
-                for (var i = 0; i < enumerable.Length; i++)
-                {
-                    var element = enumerable[i];
-                    Insert(index + i, element);
-                }
+                InsertCopyOf(index, range);
+            }
+        }
+
+        /// <summary>
+        /// Inserts the items of <paramref name="range"/> in the <see cref="AdamantiumCollection{T}"/>
+        /// </summary>
+        /// <param name="index">The zero-based index at which the first item should be inserted.</param>
+        /// <param name="range">The items to insert, in order</param>
+        public void InsertRange(int index, ReadOnlySpan<T> range)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
+
+            if (IsFixedSize)
+                throw new InvalidOperationException("Cannot add items to a fixed-size collection.");
+
+            lock (SyncRoot)
+            {
+                InsertCopyOf(index, range);
             }
         }
 
@@ -290,14 +308,31 @@ namespace Adamantium.Core.Collections
             {
                 if (index < 0 || index >= currentIndex || count <= 0) return;
 
-                // Remove at the SAME index `count` times: each RemoveInternal shifts the rest down, so `index` is always
-                // the next item to drop. (The old `RemoveInternal(i)` for i in [index, index+count) removed every other
-                // element and could run off the end as currentIndex shrank.)
-                count = Math.Min(count, currentIndex - index);
-                for (var i = 0; i < count; i++)
-                {
-                    RemoveInternal(index);
-                }
+                RemoveWhole(index, Math.Min(count, currentIndex - index));
+            }
+        }
+
+        // Taken out at once, then told at once, with what left.
+        private void RemoveWhole(int index, int count)
+        {
+            if (count == 1)
+            {
+                var item = items[index];
+                RemoveItems(index, 1);
+                OnRemove(index, new ReadOnlySpan<T>(in item));
+                return;
+            }
+
+            var removed = ArrayPool<T>.Shared.Rent(count);
+            try
+            {
+                Array.Copy(items, index, removed, 0, count);
+                RemoveItems(index, count);
+                OnRemove(index, new ReadOnlySpan<T>(removed, 0, count));
+            }
+            finally
+            {
+                ReturnCopy(removed);
             }
         }
 
@@ -318,16 +353,97 @@ namespace Adamantium.Core.Collections
 
             lock (SyncRoot)
             {
-                var itemsToAdd = range.ToArray();
-                if (currentIndex + itemsToAdd.Length > Capacity)
-                {
-                    Capacity = Math.Max(currentIndex + itemsToAdd.Length, Capacity * 2);
-                }
+                InsertCopyOf(currentIndex, range);
+            }
+        }
 
-                for (var i = 0; i < itemsToAdd.Length; ++i)
-                {
-                    Insert(currentIndex, itemsToAdd[i]);
-                }
+        /// <summary>
+        /// Adds all items of <paramref name="range"/> to <see cref="AdamantiumCollection{T}"/>
+        /// </summary>
+        /// <param name="range">The items to add, in order</param>
+        public void AddRange(ReadOnlySpan<T> range)
+        {
+            if (IsFixedSize)
+                throw new InvalidOperationException("Cannot add items to a fixed-size collection.");
+
+            lock (SyncRoot)
+            {
+                InsertCopyOf(currentIndex, range);
+            }
+        }
+
+        // A range is taken whole before its first item is in: a handler of the inserts may change the source, and a
+        // lazy sequence may read this very collection. A collection's or a span's items go through a pooled array.
+        private void InsertCopyOf(int index, IEnumerable<T> range)
+        {
+            if (range is not ICollection<T> collection)
+            {
+                InsertWhole(index, range.ToArray());
+                return;
+            }
+
+            var count = collection.Count;
+            if (count == 0)
+            {
+                return;
+            }
+
+            var copy = ArrayPool<T>.Shared.Rent(count);
+            try
+            {
+                collection.CopyTo(copy, 0);
+                InsertWhole(index, new ReadOnlySpan<T>(copy, 0, count));
+            }
+            finally
+            {
+                ReturnCopy(copy);
+            }
+        }
+
+        private void InsertCopyOf(int index, ReadOnlySpan<T> range)
+        {
+            if (range.IsEmpty)
+            {
+                return;
+            }
+
+            var copy = ArrayPool<T>.Shared.Rent(range.Length);
+            try
+            {
+                range.CopyTo(copy);
+                InsertWhole(index, new ReadOnlySpan<T>(copy, 0, range.Length));
+            }
+            finally
+            {
+                ReturnCopy(copy);
+            }
+        }
+
+        private static void ReturnCopy(T[] copy) =>
+            ArrayPool<T>.Shared.Return(copy, RuntimeHelpers.IsReferenceOrContainsReferences<T>());
+
+        // Checked, stored at once, then told at once, with what came in and where.
+        private void InsertWhole(int index, ReadOnlySpan<T> range)
+        {
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
+
+            // Past the end APPENDS: storing at the raw index left every slot between the old end and it empty.
+            index = Math.Min(index, currentIndex);
+
+            CheckItems(range);
+            InsertItems(index, range);
+            OnInsert(index, range);
+        }
+
+        /// <summary>Throws if an item of <paramref name="range"/> may not come in - before any of it does.</summary>
+        protected virtual void CheckItems(ReadOnlySpan<T> range) { }
+
+        /// <summary>For a <see cref="CheckItems"/> that takes no nulls.</summary>
+        protected static void ThrowIfAnyNull(ReadOnlySpan<T> range)
+        {
+            foreach (var item in range)
+            {
+                ArgumentNullException.ThrowIfNull(item);
             }
         }
 
@@ -416,21 +532,15 @@ namespace Adamantium.Core.Collections
             
             lock (SyncRoot)
             {
-                InsertItem(index, item);
-                OnInsert(index, item);
+                InsertWhole(index, new ReadOnlySpan<T>(in item));
             }
         }
 
-        private void CheckCapacity(int size)
+        private void MakeRoomFor(int size)
         {
-            if (Capacity == size)
+            if (size > items.Length)
             {
-                var count = (items.Length + 1) * 2;
-                if (count < size)
-                {
-                    count = size;
-                }
-                Capacity = count;
+                Capacity = Math.Max(size, (items.Length + 1) * 2);
             }
         }
 
@@ -464,11 +574,15 @@ namespace Adamantium.Core.Collections
 
         protected virtual void OnMove(int from, int to, T item) { }
 
-        protected virtual void OnInsert(int index, T item) { }
+        /// <summary>In: <paramref name="range"/>, from <paramref name="index"/> on - one item or a whole range, told once.
+        /// The span does not outlive this call - copy anything that must.</summary>
+        protected virtual void OnInsert(int index, ReadOnlySpan<T> range) { }
 
         protected virtual void OnSet(int index, T oldItem, T newItem) { }
 
-        protected virtual void OnRemoveItem(int index, T item) { }
+        /// <summary>Out: <paramref name="range"/>, which stood from <paramref name="index"/> on - one item or a whole
+        /// range, told once. The span does not outlive this call - copy anything that must.</summary>
+        protected virtual void OnRemove(int index, ReadOnlySpan<T> range) { }
         
         /// <summary>About to be cleared: <paramref name="items"/> is exactly the elements that are leaving, still in place.
         /// It is a window onto the live storage and does not outlive this call - copy anything that must.</summary>
@@ -486,53 +600,67 @@ namespace Adamantium.Core.Collections
             RemoveInternal(index);
         }
 
-        protected virtual void InsertItem(int index, T item)
+        /// <summary>Stores <paramref name="range"/> at <paramref name="index"/> (0 to <see cref="Count"/>), what stood
+        /// from there on moved up once. Every insertion - one item or many - is stored here; what may not come in is
+        /// refused in <see cref="CheckItems"/>, and the range is then told to <see cref="OnInsert"/>.</summary>
+        protected virtual void InsertItems(int index, ReadOnlySpan<T> range)
         {
-            CheckCapacity(currentIndex);
+            if (range.IsEmpty) return;
+
+            var count = currentIndex;
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
 
             // Past the end APPENDS: storing at the raw index left every slot between the old end and it empty.
-            if (index > currentIndex) index = currentIndex;
+            index = Math.Min(index, count);
 
-            if (index < currentIndex)
+            MakeRoomFor(count + range.Length);
+
+            if (index < count)
             {
-                // Shift [index, currentIndex) right by one to open a slot AT index, then store there. (Storing at
-                // currentIndex - the end - was the bug: an insert-in-the-middle put the item last and duplicated the
-                // element that was at index. Surfaced as a tab dragged to a middle slot "flying to the end".)
-                Array.Copy(items, index, items, index + 1, currentIndex - index);
+                Array.Copy(items, index, items, index + range.Length, count - index);
             }
-            items[index] = item;
-            Volatile.Write(ref currentIndex, currentIndex + 1);
+            range.CopyTo(items.AsSpan(index));
+            Volatile.Write(ref currentIndex, count + range.Length);
         }
 
         private void RemoveInternal(int index)
         {
             lock (SyncRoot)
             {
-                T item = RemoveItem(index);
-                OnRemoveItem(index, item);
+                // Checked here: an index past the end took the count down before failing, or wiped the last item.
+                ArgumentOutOfRangeException.ThrowIfNegative(index);
+                ArgumentOutOfRangeException.ThrowIfGreaterThanOrEqual(index, currentIndex);
+
+                RemoveWhole(index, 1);
             }
         }
 
-        protected virtual T RemoveItem(int index)
+        /// <summary>Takes out the <paramref name="count"/> items from <paramref name="index"/>, what follows moved
+        /// down once. Every removal - one item or many - is made here; the range is then told to
+        /// <see cref="OnRemove"/>.</summary>
+        protected virtual void RemoveItems(int index, int count)
         {
-            currentIndex--;
-            T item = items[index];
-            if (index < currentIndex)
-            {
-                Array.Copy(items, index + 1, items, index, currentIndex - index);
-            }
-            items[currentIndex] = default(T);
+            ArgumentOutOfRangeException.ThrowIfNegative(index);
+            ArgumentOutOfRangeException.ThrowIfNegative(count);
+            ArgumentOutOfRangeException.ThrowIfGreaterThan(count, currentIndex - index);
 
-            if (currentIndex == 0)
+            // The count goes down first, so a reader without the lock never takes a cleared slot for an item.
+            var left = currentIndex - count;
+            Volatile.Write(ref currentIndex, left);
+            if (index < left)
+            {
+                Array.Copy(items, index + count, items, index, left - index);
+            }
+            Array.Clear(items, left, count);
+
+            if (left == 0)
             {
                 Capacity = defaultCapacity;
             }
-            else if (items.Length / currentIndex >= 2)
+            else if (items.Length / left >= 2)
             {
-                Capacity = currentIndex;
+                Capacity = left;
             }
-
-            return item;
         }
 
         protected virtual void SetItem(int index, T item)

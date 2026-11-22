@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Threading;
 using Adamantium.Core.Collections;
@@ -221,36 +222,89 @@ namespace Adamantium.ECS
             }
         }
 
-        protected override void InsertItem(int index, IComponent item)
+        // A component twice - already in, or earlier in the range - refuses the range before any of it is in.
+        protected override void CheckItems(ReadOnlySpan<IComponent> range)
         {
-            HandleComponent(index, item, false);
+            for (var i = 0; i < range.Length; i++)
+            {
+                var component = range[i];
+                ArgumentNullException.ThrowIfNull(component);
 
-            base.InsertItem(index, item);
-            ForgetFound();
+                var twice = Contains(component);
+                for (var j = 0; j < i && !twice; j++)
+                {
+                    twice = EqualityComparer<IComponent>.Default.Equals(range[j], component);
+                }
 
-            entity?.OnComponentChanged(null, item, ComponentChangedAction.Added);
+                if (twice)
+                {
+                    throw new InvalidOperationException(
+                       $"Could not add component of type {typeof(IComponent)} to entity {entity} because component of same type already present in list of components");
+                }
+            }
         }
 
-        protected override IComponent RemoveItem(int index)
+        // Stored at once; the entity then hears of each component that came in.
+        protected override void InsertItems(int index, ReadOnlySpan<IComponent> range)
         {
-            var oldComponent = this[index];
-
-            if (oldComponent is Transform)
+            foreach (var component in range)
             {
-                entity.Transform = null;
+                Own(component);
             }
 
-            if (oldComponent is IEntityOwner entityOwner)
-            {
-                entityOwner.Owner = null;
-            }
-
-            base.RemoveItem(index);
+            base.InsertItems(index, range);
             ForgetFound();
 
-            entity?.OnComponentChanged(oldComponent, null, ComponentChangedAction.Removed);
+            foreach (var component in range)
+            {
+                entity?.OnComponentChanged(null, component, ComponentChangedAction.Added);
+            }
+        }
 
-            return oldComponent;
+        // Taken out at once; the entity then hears of each component that left.
+        protected override void RemoveItems(int index, int count)
+        {
+            if (count == 1)
+            {
+                var one = this[index];
+                TakeOut(index, new ReadOnlySpan<IComponent>(in one));
+                return;
+            }
+
+            var leaving = ArrayPool<IComponent>.Shared.Rent(count);
+            try
+            {
+                ItemsSpan.Slice(index, count).CopyTo(leaving);
+                TakeOut(index, new ReadOnlySpan<IComponent>(leaving, 0, count));
+            }
+            finally
+            {
+                ArrayPool<IComponent>.Shared.Return(leaving, clearArray: true);
+            }
+        }
+
+        private void TakeOut(int index, ReadOnlySpan<IComponent> leaving)
+        {
+            foreach (var component in leaving)
+            {
+                if (component is Transform)
+                {
+                    entity.Transform = null;
+                }
+
+                if (component is IEntityOwner entityOwner)
+                {
+                    entityOwner.Owner = null;
+                }
+            }
+
+            base.RemoveItems(index, leaving.Length);
+            ForgetFound();
+
+            foreach (var component in leaving)
+            {
+                entity?.OnComponentChanged(component, null, ComponentChangedAction.Removed);
+            }
         }
 
         protected override void SetItem(int index, IComponent item)
@@ -262,7 +316,7 @@ namespace Adamantium.ECS
                 return;
             }
 
-            HandleComponent(index, item, true);
+            Own(item);
 
             base.SetItem(index, item);
             ForgetFound();
@@ -272,30 +326,19 @@ namespace Adamantium.ECS
 
         protected override void ClearItems()
         {
-            for (var i = Count - 1; i >= 0; i--)
+            if (Count > 0)
             {
-                RemoveItem(i);
+                RemoveItems(0, Count);
             }
 
             base.ClearItems();
             ForgetFound();
         }
 
-        private void HandleComponent<T>(int index, T component, bool isReplacing) where T : IComponent
+        // Two of a component are refused for the whole range in CheckItems; a replacement may be one already in.
+        private void Own(IComponent component)
         {
-            if (component == null)
-            {
-                throw new ArgumentNullException(nameof(component));
-            }
-
-            if (Contains(component))
-            {
-                if (!isReplacing)
-                {
-                    throw new InvalidOperationException(
-                       $"Could not add component of type {typeof(T)} to entity {entity} because component of same type already present in list of components");
-                }
-            }
+            ArgumentNullException.ThrowIfNull(component);
 
             if (component is IEntityOwner entityOwner)
             {
