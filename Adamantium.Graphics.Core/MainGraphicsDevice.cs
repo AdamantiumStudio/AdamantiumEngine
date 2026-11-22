@@ -233,6 +233,10 @@ public class MainGraphicsDevice : DisposableBase
     /// the render devices.</summary>
     public IEffectPassShaderCache EffectPassShaders { get; private set; }
 
+    /// <summary>The rings of frames in memory of the process the surfaces show, each opened once for every size its
+    /// frames come in.</summary>
+    public HostFrameRings HostFrameRings { get; } = new();
+
     // Shared like the heap, so no render device grabs its own BAR block. Created on first use.
     private IDeviceMemoryAllocator _memoryAllocator;
     public IDeviceMemoryAllocator MemoryAllocator => _memoryAllocator ??= _graphicsDeviceFactory.CreateMemoryAllocator(ResourceLoaderDevice);

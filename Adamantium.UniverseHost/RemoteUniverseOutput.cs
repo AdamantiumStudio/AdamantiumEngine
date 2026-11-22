@@ -21,6 +21,8 @@ internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsu
     private readonly int _viewerProcessId;
     private readonly FrameSharing _sharing;
     private readonly Guid _viewerDeviceUuid;
+    private readonly uint _largestScreenWidth;
+    private readonly uint _largestScreenHeight;
     private HandleTransfer _handles;
     private ISharedSurfaceProducer _producer;
     private SharedSurfaceDescriptor _descriptor;
@@ -37,6 +39,8 @@ internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsu
         _viewerProcessId = viewerProcessId;
         _sharing = launch.FrameSharing;
         _viewerDeviceUuid = launch.ViewerDeviceUuid;
+        _largestScreenWidth = launch.LargestScreenWidth;
+        _largestScreenHeight = launch.LargestScreenHeight;
         var width = launch.Width;
         var height = launch.Height;
         Description = new UniverseOutputDescription(PresenterType.RenderTarget)
@@ -251,7 +255,7 @@ internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsu
 
         if (HostMemorySurfaceProducer.CanProduce(device))
         {
-            return new HostMemorySurfaceProducer(this, SurfaceFormat.B8G8R8A8.UNorm);
+            return new HostMemorySurfaceProducer(this, SurfaceFormat.B8G8R8A8.UNorm, _largestScreenWidth, _largestScreenHeight);
         }
 
         throw new NotSupportedException(

@@ -798,6 +798,14 @@ All packages share one version.
 - A joint's limits are never the wrong way round: `HingeJoint.LowerAngle`, `SliderJoint.LowerLimit` and
   `DistanceJoint.MinDistance` set past the other limit take it along, and the other way. Before, such a joint was
   refused when its scene was read, and lost.
+- Frames through memory of the process (`HostMemorySurfaceProducer`, for a viewer on another GPU) keep one ring for
+  every size: its slots hold a frame of the largest screen the viewer shows them on (`UniverseLaunch.LargestScreenWidth`
+  and `LargestScreenHeight`), each slot says the size of the frame it holds, and a new size is new descriptors of the
+  same memory. A viewer maps the ring and imports its slots once (`MainGraphicsDevice.HostFrameRings`), whatever sizes
+  its surfaces take, and a surface's first copy takes it out of its first layout, with no transition waited for.
+  Resizing a game view no longer makes and frees a ring a step: on the viewer's render thread that went from 11.5 s to
+  0.55 s over 600 steps. `SharedFrameMemory`, `HostFrameReader` and `HostSlotBuffer` moved to Adamantium.Graphics.Core;
+  `HostFrameReader.TryTakeNewest` takes the frame after which and the size.
 - `PdfDocument.Authenticate` keeps what was read when the key stays the same - the owner's password after the user's
   opens with the user's key: only the rights change, nothing is read anew. After the owner's password another is only
   checked: the owner's access stays, and the owner's password is the one a copy and the file saved again take.
