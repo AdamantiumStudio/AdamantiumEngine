@@ -15,8 +15,12 @@
     <OutputPath>$(MSBuildThisFileDirectory)..\artifacts\bin\$(MSBuildProjectName)\$(Configuration)\</OutputPath>
   </PropertyGroup>
 
-  <ItemGroup>
-    <PackageReference Include="QuantumBinding.Generator" Version="3.3.0" />
+  <ItemGroup Condition="'$(UseQuantumBindingSource)' == 'true'">
+    <ProjectReference Include="$(QuantumBindingDir)QuantumBinding.Generator\QuantumBinding.Generator.csproj" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(UseQuantumBindingSource)' != 'true'">
+    <PackageReference Include="QuantumBinding.Generator" Version="$(QuantumBindingVersion)" />
   </ItemGroup>
 
 </Project>
