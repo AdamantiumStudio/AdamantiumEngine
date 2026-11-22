@@ -7,6 +7,10 @@ All packages share one version.
 
 ### Added
 
+- `Win32Interop.SendInput` with `INPUT` (`INPUT.Key`, `INPUT.Character` for a character typed whatever the layout),
+  `KEYBDINPUT`, `KeyEventFlags`: keys put into the system's input, for an on-screen keyboard typing into another
+  application. `MapVirtualKey` (`MapVirtualKeyType`) gives a key's scan code and whether it is of the extended set.
+  `GetForegroundWindow`, `GetWindowText` and `GetWindowTextLength` name the window they go to.
 - `MathHelper.Arc`: how an arc's sweep is read, in degrees, the one rule an ellipse's mesh and a drawn arc follow -
   `ReduceSweep` (what a sweep covers: past a turn what is left over whole turns, whole turns a turn),
   `SweepRounding`, the degrees past whole turns taken as rounding, and `TurnInDegrees`.
