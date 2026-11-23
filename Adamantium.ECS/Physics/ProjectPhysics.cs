@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
@@ -20,8 +21,16 @@ public sealed class ProjectPhysics
 
     private static readonly XmlSerializer Serializer = new(typeof(ProjectPhysics));
 
-    [XmlAttribute]
+    /// <summary>The version the file was read at; a file is always written at <see cref="CurrentVersion"/>.</summary>
+    [XmlIgnore]
     public int Version { get; set; } = CurrentVersion;
+
+    [XmlAttribute("Version"), EditorBrowsable(EditorBrowsableState.Never)]
+    public int WrittenVersion
+    {
+        get => CurrentVersion;
+        set => Version = value;
+    }
 
     /// <summary>The pull every dynamic body feels, in meters per second squared; down, along +Y, by default.</summary>
     [XmlIgnore]
@@ -68,11 +77,26 @@ public sealed class ProjectPhysics
         return physics;
     }
 
-    /// <summary>Writes the project's physics to <paramref name="path"/>, whole or not at all.</summary>
-    public void Write(string path) => PhysicsXml.Write(Serializer, this, path);
+    /// <summary>Writes the project's physics to <paramref name="path"/>, whole or not at all; throws
+    /// <see cref="InvalidOperationException"/> for physics <see cref="Read(Stream)"/> would refuse.</summary>
+    public void Write(string path)
+    {
+        ThrowIfUnreadable();
+        PhysicsXml.Write(Serializer, this, path);
+    }
 
-    /// <summary>Writes the project's physics to <paramref name="stream"/>.</summary>
-    public void Write(Stream stream) => PhysicsXml.Write(Serializer, this, stream);
+    /// <summary>Writes the project's physics to <paramref name="stream"/>; see <see cref="Write(string)"/>.</summary>
+    public void Write(Stream stream)
+    {
+        ThrowIfUnreadable();
+        PhysicsXml.Write(Serializer, this, stream);
+    }
+
+    private void ThrowIfUnreadable()
+    {
+        if (FindProblem() is { } problem)
+            throw new InvalidOperationException(problem);
+    }
 
     /// <summary>What makes the project's physics one a game cannot take; null when there is nothing.</summary>
     internal string FindProblem()

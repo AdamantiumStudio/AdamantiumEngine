@@ -60,6 +60,42 @@ public class PhysicsFilesTests
     }
 
     [Test]
+    public void AMaterialNoReadWouldTake_IsNotWritten()
+    {
+        var path = Path.Combine(_folder.FullName, "Bad" + PhysicsMaterialFile.Extension);
+
+        Assert.Throws<InvalidOperationException>(() => new PhysicsMaterialFile { Friction = -1 }.Write(path));
+        Assert.Throws<InvalidOperationException>(() => new PhysicsMaterialFile { Restitution = float.NaN }.Write(path));
+        Assert.That(File.Exists(path), Is.False);
+    }
+
+    [Test]
+    public void AProjectsPhysicsNoReadWouldTake_IsNotWritten()
+    {
+        var path = Path.Combine(_folder.FullName, "Bad" + ProjectPhysics.Extension);
+
+        Assert.Throws<InvalidOperationException>(() => new ProjectPhysics { StepRate = 0 }.Write(path));
+        Assert.Throws<InvalidOperationException>(() => new ProjectPhysics { Gravity = new Vector3F(float.NaN, 0, 0) }.Write(path));
+        Assert.That(File.Exists(path), Is.False);
+    }
+
+    [Test]
+    public void AFileReadAtAnEarlierVersion_IsWrittenAtTheCurrentOne()
+    {
+        var material = Path.Combine(_folder.FullName, "Old" + PhysicsMaterialFile.Extension);
+        var project = Path.Combine(_folder.FullName, "Old" + ProjectPhysics.Extension);
+
+        new PhysicsMaterialFile { Version = 0 }.Write(material);
+        new ProjectPhysics { Version = 0 }.Write(project);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(PhysicsMaterialFile.Read(material).Version, Is.EqualTo(PhysicsMaterialFile.CurrentVersion));
+            Assert.That(ProjectPhysics.Read(project).Version, Is.EqualTo(ProjectPhysics.CurrentVersion));
+        });
+    }
+
+    [Test]
     public void AWriteThatFails_LeavesTheFileThereWas_AndNoTraceBeside()
     {
         var path = Path.Combine(_folder.FullName, "kept.txt");
