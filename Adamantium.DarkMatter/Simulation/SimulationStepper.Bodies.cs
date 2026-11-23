@@ -115,6 +115,11 @@ internal sealed partial class SimulationStepper
                     break;
                 case SimulationCommandKind.SetMaterial:
                     _world.SetMaterial(body.Handle, command.Material);
+                    Tell(new SimulationNews
+                    {
+                        Kind = NewsKind.MaterialTaken, Slot = command.Slot, Generation = body.Generation,
+                        Material = command.Material
+                    });
                     break;
                 case SimulationCommandKind.SetLayer:
                     _world.SetLayer(body.Handle, command.Layer);

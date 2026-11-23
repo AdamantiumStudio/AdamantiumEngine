@@ -11,6 +11,10 @@ internal readonly struct WorldContactEventArgs
     public ContactChange Change { get; init; }
     public bool IsTrigger { get; init; }
 
+    /// <summary>The surface of each part's material; null for none.</summary>
+    public string FirstSurface { get; init; }
+    public string SecondSurface { get; init; }
+
     /// <summary>Where they first touched, the normal from the first to the second, and how fast they closed; none of
     /// these for an end.</summary>
     public WorldPosition Point { get; init; }

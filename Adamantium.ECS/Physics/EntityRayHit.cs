@@ -7,13 +7,15 @@ namespace Adamantium.ECS.Physics;
 /// <summary>Where a ray met an entity the physics moves.</summary>
 public readonly struct EntityRayHit
 {
-    public EntityRayHit(Entity entity, Collider collider, WorldPosition point, Vector3F normal, float distance)
+    public EntityRayHit(Entity entity, Collider collider, WorldPosition point, Vector3F normal, float distance,
+        string surface = null)
     {
         Entity = entity;
         Collider = collider;
         Point = point;
         Normal = normal;
         Distance = distance;
+        Surface = surface;
     }
 
     /// <summary>The entity with the rigid body met; null for a body the main processor made of its own.</summary>
@@ -29,4 +31,8 @@ public readonly struct EntityRayHit
 
     /// <summary>How far along the ray, in meters.</summary>
     public float Distance { get; }
+
+    /// <summary>The surface of the collider's material (<see cref="PhysicsMaterial.Surface"/>) - what a wheel stands
+    /// on; null for none.</summary>
+    public string Surface { get; }
 }

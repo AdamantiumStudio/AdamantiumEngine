@@ -60,7 +60,9 @@ internal sealed partial class PhysicsWorld
             FirstPart = _parts[contact.FirstPart].Index,
             SecondPart = _parts[contact.SecondPart].Index,
             Change = change,
-            IsTrigger = contact.IsTrigger
+            IsTrigger = contact.IsTrigger,
+            FirstSurface = _parts[contact.FirstPart].Material.Surface,
+            SecondSurface = _parts[contact.SecondPart].Material.Surface
         };
 
     // The pair itself, or the first of its triangles' contacts, that touches; null for none.

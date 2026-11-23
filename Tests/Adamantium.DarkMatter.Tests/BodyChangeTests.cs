@@ -117,7 +117,10 @@ public class BodyChangeTests
         scene.Run(2);
         var resting = scene.World.GetPose(box).Position;
 
-        scene.World.SetMaterial(box, new PhysicsMaterial { Friction = 0, FrictionCombine = CombineRule.Minimum });
+        scene.World.SetMaterial(box, new PhysicsMaterial
+        {
+            StaticFriction = 0, DynamicFriction = 0, FrictionCombine = CombineRule.Minimum
+        });
         scene.Run(1);
 
         Assert.That((scene.World.GetPose(box).Position - resting).Length(), Is.GreaterThan(0.5f));
@@ -182,13 +185,13 @@ public class BodyChangeTests
         var box = scene.World.Add(new BodyDescription
         {
             Kind = BodyKind.Static, Shape = new BoxCollisionShape(0.5f, 0.5f, 0.5f),
-            Material = new PhysicsMaterial { Friction = 0.3f }
+            Material = new PhysicsMaterial { DynamicFriction = 0.3f }
         });
 
         Assert.Throws<ArgumentException>(() => scene.World.Change(box, new BodyDescription
         {
             Kind = BodyKind.Dynamic, Shape = new BoxCollisionShape(2, 2, 2), Mass = 0, Density = 0,
-            Material = new PhysicsMaterial { Friction = 0.9f }
+            Material = new PhysicsMaterial { DynamicFriction = 0.9f }
         }, changesShape: true));
 
         Assert.That(scene.World.GetKind(box), Is.EqualTo(BodyKind.Static));

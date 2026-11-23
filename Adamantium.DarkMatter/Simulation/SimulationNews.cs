@@ -21,6 +21,9 @@ internal struct SimulationNews
     /// <summary>A body's layer taken.</summary>
     public Layer Layer;
 
+    /// <summary>A body's material taken.</summary>
+    public PhysicsMaterial Material;
+
     /// <summary>The kind a body settled at, and which of the kinds asked of it that was.</summary>
     public BodyKind BodyKind;
     public int KindAsk;

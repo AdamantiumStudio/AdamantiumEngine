@@ -80,6 +80,18 @@ public sealed partial class PhysicsSimulation
 
     private PhysicsWorld QueryWorld => _snapshot?.World ?? _stepper.World;
 
+    /// <summary>The surface of <paramref name="body"/>'s part at <paramref name="part"/> among its parts - a hit's, what
+    /// a wheel stands on - as queries meet it: of the part's own material, or the body's
+    /// (<see cref="PhysicsMaterial.Surface"/>); null for none, or for a body or part queries do not meet.</summary>
+    public string SurfaceOf(BodyId body, int part)
+    {
+        if (!TryFind(body, out var record) || record.Status != PhysicsStatus.Active)
+            return null;
+
+        var handle = _snapshot != null ? _snapshot.HandleOf(body.Index) : _stepper.HandleOf(body.Index);
+        return handle.IsValid ? QueryWorld.SurfaceOf(handle, part) : null;
+    }
+
     // The query world's handle of the body passed by; none for one not in it.
     private BodyHandle ExceptOf(in QueryFilter filter)
     {

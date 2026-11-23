@@ -22,4 +22,7 @@ internal struct ContactPointState
     public float TangentMass;
     public float BitangentMass;
     public float RelativeVelocity;
+
+    /// <summary>How much friction the point carried as the pass began: its share of what holds its touch.</summary>
+    public float FrictionCarried;
 }

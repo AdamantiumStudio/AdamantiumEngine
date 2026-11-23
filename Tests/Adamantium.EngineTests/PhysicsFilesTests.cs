@@ -27,7 +27,8 @@ public class PhysicsFilesTests
         var path = Path.Combine(_folder.FullName, "Materials", "Ice" + PhysicsMaterialFile.Extension);
         var ice = new PhysicsMaterial
         {
-            Friction = 0.05f, Restitution = 0.1f, FrictionCombine = CombineRule.Minimum, RestitutionCombine = CombineRule.Maximum
+            StaticFriction = 0.1f, DynamicFriction = 0.05f, RollingResistance = 0.02f, Restitution = 0.1f,
+            FrictionCombine = CombineRule.Minimum, RestitutionCombine = CombineRule.Maximum, Surface = "Ice"
         };
 
         PhysicsMaterialFile.From(ice).Write(path);
@@ -64,7 +65,10 @@ public class PhysicsFilesTests
     {
         var path = Path.Combine(_folder.FullName, "Bad" + PhysicsMaterialFile.Extension);
 
-        Assert.Throws<InvalidOperationException>(() => new PhysicsMaterialFile { Friction = -1 }.Write(path));
+        Assert.Throws<InvalidOperationException>(() => new PhysicsMaterialFile { StaticFriction = -1 }.Write(path));
+        Assert.Throws<InvalidOperationException>(() => new PhysicsMaterialFile { DynamicFriction = -1 }.Write(path));
+        Assert.Throws<InvalidOperationException>(() =>
+            new PhysicsMaterialFile { RollingResistance = float.PositiveInfinity }.Write(path));
         Assert.Throws<InvalidOperationException>(() => new PhysicsMaterialFile { Restitution = float.NaN }.Write(path));
         Assert.That(File.Exists(path), Is.False);
     }

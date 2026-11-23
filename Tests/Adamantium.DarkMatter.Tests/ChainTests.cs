@@ -55,7 +55,7 @@ public class ChainTests
     {
         using var simulation = new PhysicsSimulation();
         var crates = simulation.Layers.Define("Crates");
-        var ice = new PhysicsMaterial { Friction = 0, FrictionCombine = CombineRule.Minimum };
+        var ice = new PhysicsMaterial { StaticFriction = 0, DynamicFriction = 0, FrictionCombine = CombineRule.Minimum };
 
         var crate = simulation.NewBody()
             .Kinematic()

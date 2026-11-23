@@ -12,7 +12,9 @@ internal sealed class Contact
     public int FirstPart;
     public int SecondPart;
     public int ListIndex;
-    public float Friction;
+    public float StaticFriction;
+    public float DynamicFriction;
+    public float RollingResistance;
     public float Restitution;
 
     /// <summary>The pair of a part and a surface this contact with it belongs to, one for each way the surface faces the
@@ -37,6 +39,23 @@ internal sealed class Contact
     public Vector3F Bitangent;
     public int PointCount;
     public readonly ContactPointState[] Points;
+
+    /// <summary>The radius the pair rolls on - its moving round part's, zero for a pair that does not roll - and the
+    /// axis it rolls about, zero for any way across the normal.</summary>
+    public float RollingLever;
+    public Vector3F RollingAxis;
+
+    /// <summary>Whether the touch slid faster than the solver holds when it was last solved: it rubs by the dynamic
+    /// friction until it slows down again. A new touch is held.</summary>
+    public bool IsSliding;
+
+    /// <summary>The turn the pair resists, kept from step to step; the axes it is resisted about - the rolling axis
+    /// alone, or the tangents - and the masses of the pair's turn about each.</summary>
+    public Vector3F RollingImpulse;
+    public Vector3F RollingFirstAxis;
+    public Vector3F RollingSecondAxis;
+    public float RollingFirstMass;
+    public float RollingSecondMass;
 
     /// <summary>Whether one of the parts is a trigger: met only where they overlap, and kept in the world's lists of
     /// triggers, apart from the pairs that push.</summary>

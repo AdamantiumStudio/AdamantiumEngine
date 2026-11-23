@@ -37,7 +37,7 @@ public class SurfaceTests
             Shape = new BoxCollisionShape(new Vector3F(0.25f)),
             Position = new WorldPosition(-3, 0.25f, 0.1f),
             LinearVelocity = new Vector3F(4, 0, 0),
-            Material = new PhysicsMaterial { Friction = 0 }
+            Material = new PhysicsMaterial { StaticFriction = 0, DynamicFriction = 0 }
         });
 
         var highest = 0f;
@@ -68,7 +68,7 @@ public class SurfaceTests
             Shape = new SphereCollisionShape(0.3f),
             Position = new WorldPosition(-4, 0.3f, 0.05f),
             LinearVelocity = new Vector3F(3, 0, 0),
-            Material = new PhysicsMaterial { Friction = 0 }
+            Material = new PhysicsMaterial { StaticFriction = 0, DynamicFriction = 0 }
         });
 
         scene.Run(1);
@@ -337,7 +337,7 @@ public class SurfaceTests
         world.Add(new BodyDescription
         {
             Kind = BodyKind.Static, Shape = shape, Position = new WorldPosition(position),
-            Material = new PhysicsMaterial { Friction = friction }
+            Material = new PhysicsMaterial { StaticFriction = friction, DynamicFriction = friction }
         });
 
     // A square floor at Y = 0 of count by count quads of side size, centered; welded or each triangle with corners

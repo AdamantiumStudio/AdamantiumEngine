@@ -17,6 +17,8 @@ public readonly struct EntityContactEventArgs
         SecondCollider = secondCollider;
         Change = told.Change;
         IsTrigger = told.IsTrigger;
+        FirstSurface = told.FirstSurface;
+        SecondSurface = told.SecondSurface;
         Point = told.Point;
         Normal = told.Normal;
         ApproachSpeed = told.ApproachSpeed;
@@ -36,6 +38,11 @@ public readonly struct EntityContactEventArgs
 
     /// <summary>Whether one of the colliders is a trigger: it was entered or left, and pushed nothing.</summary>
     public bool IsTrigger { get; }
+
+    /// <summary>The surface of each collider's material (<see cref="PhysicsMaterial.Surface"/>) - what a step sounds
+    /// on; null for none.</summary>
+    public string FirstSurface { get; }
+    public string SecondSurface { get; }
 
     /// <summary>Where they first touched; none for an end.</summary>
     public WorldPosition Point { get; }
