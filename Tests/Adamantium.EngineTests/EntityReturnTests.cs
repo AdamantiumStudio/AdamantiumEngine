@@ -67,6 +67,97 @@ public class EntityReturnTests
     }
 
     [Test]
+    public void ARootHungUnderAnotherAndTakenOut_ComesBackUnderIt()
+    {
+        var universe = new TestUniverse();
+        var manager = universe.EntityWorld.EntityManager;
+        var model = new Entity(null, "Model");
+        var lamp = new Entity(null, "Lamp");
+        manager.AddEntity(model);
+        manager.AddEntity(lamp);
+        NextFrame(universe);
+        manager.SetOwner(lamp, model);
+        NextFrame(universe);
+        var index = manager.GetSiblingIndex(lamp);
+        manager.RemoveEntity(lamp);
+        NextFrame(universe);
+
+        manager.ReturnEntity(lamp, model, null, index);
+        NextFrame(universe);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(model.Dependencies, Is.EqualTo(new[] { lamp }));
+            Assert.That(lamp.Owner, Is.SameAs(model));
+            Assert.That(manager.MainScene.RootEntities, Is.EqualTo(new[] { model }));
+        });
+    }
+
+    [Test]
+    public void ARootHungUnderAnotherAndTakenOut_LeavesTheOthersProjection()
+    {
+        var universe = new TestUniverse();
+        var manager = universe.EntityWorld.EntityManager;
+        var model = new Entity(null, "Model");
+        var lamp = new Entity(null, "Lamp");
+        manager.AddEntity(model, projectionType: CameraProjectionType.Ortho);
+        manager.AddEntity(lamp);
+        NextFrame(universe);
+        manager.SetOwner(lamp, model);
+        NextFrame(universe);
+
+        manager.RemoveEntity(lamp);
+        NextFrame(universe);
+
+        Assert.That(manager.GetCameraProjectionType(model), Is.EqualTo(CameraProjectionType.Ortho));
+    }
+
+    [Test]
+    public void ARootHungUnderAnotherMovedToAnotherScene_LeavesThatScene_AsItIsTakenOut()
+    {
+        var universe = new TestUniverse();
+        var manager = universe.EntityWorld.EntityManager;
+        var other = manager.CreateScene("Other");
+        var model = new Entity(null, "Model");
+        var lamp = new Entity(null, "Lamp");
+        lamp.AddComponent(new Light());
+        manager.AddEntity(model);
+        manager.AddEntity(lamp);
+        NextFrame(universe);
+        manager.SetOwner(lamp, model);
+        NextFrame(universe);
+        manager.MoveToScene(model, other);
+        NextFrame(universe);
+        var lightsAsItLeft = -1;
+        manager.EntityRemoved += (_, _) => lightsAsItLeft = other.Components.CountOf<Light>();
+
+        manager.RemoveEntity(lamp);
+        NextFrame(universe);
+
+        Assert.That(lightsAsItLeft, Is.Zero);
+    }
+
+    [Test]
+    public void ARootHungOutsideTheWorldAndTakenOut_IsNotRecordedAsAdded()
+    {
+        var universe = new TestUniverse();
+        var manager = universe.EntityWorld.EntityManager;
+        var outside = new Entity(null, "Outside");
+        var lamp = new Entity(null, "Lamp");
+        manager.AddEntity(lamp);
+        NextFrame(universe);
+        manager.SetOwner(lamp, outside);
+        NextFrame(universe);
+        manager.MainScene.Changes.Start();
+
+        manager.RemoveEntity(lamp);
+        NextFrame(universe);
+        manager.MainScene.Changes.Stop();
+
+        Assert.That(manager.MainScene.Changes.Added, Does.Not.Contain(lamp));
+    }
+
+    [Test]
     public void AnEntity_IsPlacedAtAnIndex_AmongTheRootsAndUnderItsOwner()
     {
         var universe = new TestUniverse();

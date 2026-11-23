@@ -137,8 +137,10 @@ public sealed class EntityManager
                 {
                     if (availableEntities.ContainsKey(entity.Uid))
                     {
-                        entity.Owner?.RemoveDependency(entity);
                         RemoveEntityInternal(entity);
+                        // Once out of its owner's scene: an owner kept would hold it in the world, and it would not
+                        // come back.
+                        entity.Owner = null;
                     }
                 }
 
@@ -530,7 +532,8 @@ public sealed class EntityManager
             {
                 if (!entitiesToRemove.Contains(entity))
                 {
-                    entityParametersMap.Remove(entity.RootUid);
+                    // Its own: one hung under another has the other's root.
+                    entityParametersMap.Remove(entity.Uid);
                     entitiesToRemove.Add(entity);
                 }
             }
@@ -581,8 +584,8 @@ public sealed class EntityManager
             _entitiesReturned.Add(new ReturnedEntity(entity, owner, scene, index));
         }
 
-        entity.NotifyUpdated();
-        owner?.NotifyUpdated();
+        // A root taken out has no world of its own to tell.
+        World.Changed(UniverseChangedEventArgs.OneFrame);
     }
 
     /// <summary>Moves <paramref name="entity"/> to <paramref name="index"/> among its owner's entities, or among its

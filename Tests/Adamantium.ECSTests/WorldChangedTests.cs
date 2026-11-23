@@ -55,6 +55,37 @@ public class WorldChangedTests
     }
 
     [Test]
+    public void ARootTakenOutAndReturned_ChangesTheWorld()
+    {
+        var model = new Entity(null, "Model");
+        world.EntityManager.AddEntity(model);
+        world.ForceUpdate();
+        world.EntityManager.RemoveEntity(model);
+        world.ForceUpdate();
+        changes.Clear();
+
+        world.EntityManager.ReturnEntity(model, null, world.EntityManager.MainScene, 0);
+
+        Assert.That(changes, Is.Not.Empty);
+    }
+
+    [Test]
+    public void APartTakenOutAndReturned_ChangesTheWorld()
+    {
+        var model = new Entity(null, "Model");
+        var part = new Entity(model, "Part");
+        world.EntityManager.AddEntity(model);
+        world.ForceUpdate();
+        world.EntityManager.RemoveEntity(part);
+        world.ForceUpdate();
+        changes.Clear();
+
+        world.EntityManager.ReturnEntity(part, model, null, 0);
+
+        Assert.That(changes, Is.Not.Empty);
+    }
+
+    [Test]
     public void APropertyOfAComponentDeepInATree_ChangesTheWorld()
     {
         var model = new Entity(null, "Model");
