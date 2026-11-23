@@ -300,11 +300,13 @@ public sealed class MvvmGenerator : IIncrementalGenerator
         var paramTypeFqn = hasParam ? parameters[0].Type.ToDisplayString(FqnFormat) : null;
 
         string customName = null, canExecute = null;
+        var allowsConcurrentRuns = false;
         var attr = ctx.Attributes[0];
         foreach (var na in attr.NamedArguments)
         {
             if (na.Key == "Name") customName = na.Value.Value as string;
             else if (na.Key == "CanExecute") canExecute = na.Value.Value as string;
+            else if (na.Key == "AllowsConcurrentRuns") allowsConcurrentRuns = na.Value.Value is true;
         }
 
         var commandName = string.IsNullOrEmpty(customName) ? method.Name + "Command" : customName;
@@ -337,6 +339,7 @@ public sealed class MvvmGenerator : IIncrementalGenerator
             Hint(type, commandName, "Command"),
             DescribedTypeOf(type, method, hasParam ? parameters[0].Type : null, ctx.SemanticModel.Compilation),
             CommandType(isAsync, hasParam, hasParam ? parameters[0].Type.ToDisplayString(PlainFormat) : null),
+            isAsync && allowsConcurrentRuns,
             diagnostic), null);
     }
 
@@ -445,11 +448,12 @@ public sealed class MvvmGenerator : IIncrementalGenerator
     private static SourceText EmitCommand(CommandMemberInfo m)
     {
         var canExec = m.CanExecuteExpression is null ? "" : ", " + m.CanExecuteExpression;
+        var concurrent = m.AllowsConcurrentRuns ? ", allowsConcurrentRuns: true" : "";
         var sb = new StringBuilder();
         OpenType(sb, m.Namespace, m.TypeKeyword, m.TypeName);
         sb.AppendLine($"    private {m.CommandTypeFqn} {m.FieldName};");
         sb.AppendLine($"    public {m.CommandTypeFqn} {m.CommandName} =>");
-        sb.AppendLine($"        {m.FieldName} ??= new {m.CommandTypeFqn}({m.ExecuteExpression}{canExec});");
+        sb.AppendLine($"        {m.FieldName} ??= new {m.CommandTypeFqn}({m.ExecuteExpression}{canExec}{concurrent});");
         CloseType(sb);
         return SourceText.From(sb.ToString(), Encoding.UTF8);
     }

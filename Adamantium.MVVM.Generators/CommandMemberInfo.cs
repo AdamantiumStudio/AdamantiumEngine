@@ -17,4 +17,5 @@ internal sealed record CommandMemberInfo(
     string HintName,
     string DescribedType,
     string PlainCommandType,
+    bool AllowsConcurrentRuns,
     DiagnosticInfo Diagnostic = null);

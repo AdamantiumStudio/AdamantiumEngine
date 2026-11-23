@@ -137,6 +137,89 @@ public class MvvmFunctionalTests
     }
 
     [Test]
+    public async Task AsyncCommandAllowingConcurrentRuns_RunsEachPressWhileRunning()
+    {
+        var vm = new StepsViewModel();
+        var command = vm.TakeCommand;
+
+        var first = command.ExecuteAsync();
+        Assert.That(command.IsRunning, Is.True);
+        Assert.That(command.CanExecute(), Is.True);
+
+        var second = command.ExecuteAsync();
+        Assert.That(vm.Gates, Has.Count.EqualTo(2));
+
+        vm.Gates[0].SetResult(true);
+        await first;
+        Assert.That(command.IsRunning, Is.True, "the second run is still under way");
+
+        vm.Gates[1].SetResult(true);
+        await second;
+        Assert.That(command.IsRunning, Is.False);
+        Assert.That(vm.Taken, Is.EqualTo(2));
+    }
+
+    [Test]
+    public async Task AsyncCommandAllowingConcurrentRuns_TellsRunningOnceForAllRuns()
+    {
+        var vm = new StepsViewModel();
+        var command = vm.TakeCommand;
+        var told = 0;
+        command.CanExecuteChanged += (_, _) => told++;
+
+        var first = command.ExecuteAsync();
+        var second = command.ExecuteAsync();
+        vm.Gates[1].SetResult(true);
+        await second;
+        vm.Gates[0].SetResult(true);
+        await first;
+
+        Assert.That(told, Is.EqualTo(2), "once when the first run starts, once when the last one ends");
+    }
+
+    [Test]
+    public async Task AsyncCommandAllowingConcurrentRuns_CancelStopsEveryRun()
+    {
+        var vm = new StepsViewModel();
+        var command = vm.TakeCommand;
+
+        var first = command.ExecuteAsync();
+        var second = command.ExecuteAsync();
+        command.Cancel();
+        await Task.WhenAll(first, second);
+
+        Assert.That(command.IsRunning, Is.False);
+        Assert.That(vm.Taken, Is.Zero);
+    }
+
+    [Test]
+    public async Task TypedAsyncCommandAllowingConcurrentRuns_RunsEachPressWhileRunning()
+    {
+        var vm = new StepsViewModel();
+        var command = vm.NameCommand;
+
+        var first = command.ExecuteAsync("one");
+        Assert.That(command.CanExecute("two"), Is.True);
+        var second = command.ExecuteAsync("two");
+
+        vm.Gates[0].SetResult(true);
+        vm.Gates[1].SetResult(true);
+        await Task.WhenAll(first, second);
+
+        Assert.That(vm.Named, Is.EqualTo(new[] { "one", "two" }));
+    }
+
+    [Test]
+    public void AllowingConcurrentRuns_LeavesAVoidCommandAsItIs()
+    {
+        var vm = new StepsViewModel();
+
+        vm.CountCommand.Execute();
+
+        Assert.That(vm.Taken, Is.EqualTo(1));
+    }
+
+    [Test]
     public void TypedCommand_PassesParameter()
     {
         var vm = new PersonViewModel();
