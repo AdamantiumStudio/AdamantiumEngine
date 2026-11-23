@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Globalization;
 using System.IO;
-using System.Xml;
 using System.Xml.Serialization;
 using Adamantium.Mathematics;
 
@@ -22,8 +21,16 @@ public sealed class ProjectPhysics
 
     private static readonly XmlSerializer Serializer = new(typeof(ProjectPhysics));
 
-    [XmlAttribute]
+    /// <summary>The version the file was read at; a file is always written at <see cref="CurrentVersion"/>.</summary>
+    [XmlIgnore]
     public int Version { get; set; } = CurrentVersion;
+
+    [XmlAttribute("Version"), EditorBrowsable(EditorBrowsableState.Never)]
+    public int WrittenVersion
+    {
+        get => CurrentVersion;
+        set => Version = value;
+    }
 
     /// <summary>The pull every dynamic body feels, in meters per second squared; down, along +Y, by default.</summary>
     [XmlIgnore]
@@ -59,18 +66,7 @@ public sealed class ProjectPhysics
     /// that is not one, of a later version, with a gravity not finite or no steps a second.</summary>
     public static ProjectPhysics Read(Stream stream)
     {
-        ArgumentNullException.ThrowIfNull(stream);
-        ProjectPhysics physics;
-        try
-        {
-            using var reader = XmlReader.Create(stream, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit });
-            physics = (ProjectPhysics)Serializer.Deserialize(reader);
-        }
-        catch (InvalidOperationException exception)
-        {
-            throw new InvalidDataException("The file is not a project's physics.", exception);
-        }
-
+        var physics = PhysicsXml.Read<ProjectPhysics>(Serializer, stream, "a project's physics");
         if (physics.Version > CurrentVersion)
             throw new InvalidDataException($"The project's physics is of version {physics.Version}; this engine reads "
                                            + $"up to {CurrentVersion}.");
@@ -79,6 +75,27 @@ public sealed class ProjectPhysics
             throw new InvalidDataException(problem);
 
         return physics;
+    }
+
+    /// <summary>Writes the project's physics to <paramref name="path"/>, whole or not at all; throws
+    /// <see cref="InvalidOperationException"/> for physics <see cref="Read(Stream)"/> would refuse.</summary>
+    public void Write(string path)
+    {
+        ThrowIfUnreadable();
+        PhysicsXml.Write(Serializer, this, path);
+    }
+
+    /// <summary>Writes the project's physics to <paramref name="stream"/>; see <see cref="Write(string)"/>.</summary>
+    public void Write(Stream stream)
+    {
+        ThrowIfUnreadable();
+        PhysicsXml.Write(Serializer, this, stream);
+    }
+
+    private void ThrowIfUnreadable()
+    {
+        if (FindProblem() is { } problem)
+            throw new InvalidOperationException(problem);
     }
 
     /// <summary>What makes the project's physics one a game cannot take; null when there is nothing.</summary>

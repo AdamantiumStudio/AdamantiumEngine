@@ -1,6 +1,6 @@
 using System;
+using System.ComponentModel;
 using System.IO;
-using System.Xml;
 using System.Xml.Serialization;
 using Adamantium.DarkMatter;
 
@@ -18,8 +18,16 @@ public sealed class PhysicsMaterialFile
 
     private static readonly XmlSerializer Serializer = new(typeof(PhysicsMaterialFile));
 
-    [XmlAttribute]
+    /// <summary>The version the file was read at; a file is always written at <see cref="CurrentVersion"/>.</summary>
+    [XmlIgnore]
     public int Version { get; set; } = CurrentVersion;
+
+    [XmlAttribute("Version"), EditorBrowsable(EditorBrowsableState.Never)]
+    public int WrittenVersion
+    {
+        get => CurrentVersion;
+        set => Version = value;
+    }
 
     [XmlAttribute]
     public float Friction { get; set; } = PhysicsMaterial.Default.Friction;
@@ -42,31 +50,62 @@ public sealed class PhysicsMaterialFile
         RestitutionCombine = RestitutionCombine
     };
 
+    /// <summary>The file of <paramref name="material"/>.</summary>
+    public static PhysicsMaterialFile From(in PhysicsMaterial material) => new()
+    {
+        Friction = material.Friction,
+        Restitution = material.Restitution,
+        FrictionCombine = material.FrictionCombine,
+        RestitutionCombine = material.RestitutionCombine
+    };
+
+    /// <summary>The material in the file at <paramref name="path"/>; see <see cref="Read(Stream)"/>.</summary>
+    public static PhysicsMaterialFile Read(string path)
+    {
+        using var stream = File.OpenRead(path);
+        return Read(stream);
+    }
+
     /// <summary>The material in <paramref name="stream"/>; throws <see cref="InvalidDataException"/> for a file that is
     /// not one, of a later version, or with a friction or restitution below zero or not finite.</summary>
     public static PhysicsMaterialFile Read(Stream stream)
     {
-        ArgumentNullException.ThrowIfNull(stream);
-        PhysicsMaterialFile file;
-        try
-        {
-            using var reader = XmlReader.Create(stream, new XmlReaderSettings { DtdProcessing = DtdProcessing.Prohibit });
-            file = (PhysicsMaterialFile)Serializer.Deserialize(reader);
-        }
-        catch (InvalidOperationException exception)
-        {
-            throw new InvalidDataException("The file is not a physics material.", exception);
-        }
-
+        var file = PhysicsXml.Read<PhysicsMaterialFile>(Serializer, stream, "a physics material");
         if (file.Version > CurrentVersion)
             throw new InvalidDataException($"The physics material is of version {file.Version}; this engine reads up to "
                                            + $"{CurrentVersion}.");
 
-        if (!IsAmount(file.Friction) || !IsAmount(file.Restitution))
-            throw new InvalidDataException("A physics material's friction and restitution are finite, not below zero.");
+        if (file.FindProblem() is { } problem)
+            throw new InvalidDataException(problem);
 
         return file;
     }
+
+    /// <summary>Writes the material to <paramref name="path"/>, whole or not at all; throws
+    /// <see cref="InvalidOperationException"/> for one <see cref="Read(Stream)"/> would refuse.</summary>
+    public void Write(string path)
+    {
+        ThrowIfUnreadable();
+        PhysicsXml.Write(Serializer, this, path);
+    }
+
+    /// <summary>Writes the material to <paramref name="stream"/>; see <see cref="Write(string)"/>.</summary>
+    public void Write(Stream stream)
+    {
+        ThrowIfUnreadable();
+        PhysicsXml.Write(Serializer, this, stream);
+    }
+
+    private void ThrowIfUnreadable()
+    {
+        if (FindProblem() is { } problem)
+            throw new InvalidOperationException(problem);
+    }
+
+    private string FindProblem() =>
+        IsAmount(Friction) && IsAmount(Restitution)
+            ? null
+            : "A physics material's friction and restitution are finite, not below zero.";
 
     private static bool IsAmount(float value) => float.IsFinite(value) && value >= 0;
 }
