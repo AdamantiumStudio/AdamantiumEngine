@@ -1,7 +1,6 @@
 using System.Text;
-using Microsoft.CodeAnalysis.CSharp;
 
-namespace Adamantium.Localization.Generators;
+namespace Adamantium.Localization;
 
 internal static class Placeholders
 {
@@ -57,7 +56,7 @@ internal static class Placeholders
                 }
 
                 var name = NameOf(text.Substring(i + 1, end - i - 1));
-                if (!SyntaxFacts.IsValidIdentifier(name))
+                if (!CSharpIdentifiers.IsValid(name))
                 {
                     error = LanguageMessages.PlaceholderNoName(text.Substring(i + 1, end - i - 1));
                     return false;
@@ -119,8 +118,7 @@ internal static class Placeholders
 
     public static string Unescape(string text) => text.Replace("{{", "{").Replace("}}", "}");
 
-    public static string ParameterName(string name) =>
-        SyntaxFacts.GetKeywordKind(name) == SyntaxKind.None ? name : "@" + name;
+    public static string ParameterName(string name) => CSharpIdentifiers.IsKeyword(name) ? "@" + name : name;
 
     private static string NameOf(string inside)
     {

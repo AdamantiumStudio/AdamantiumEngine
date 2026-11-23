@@ -1,4 +1,4 @@
-namespace Adamantium.Localization.Generators;
+namespace Adamantium.Localization;
 
 /// <summary>One attribute of a language file's <c>&lt;Language.Format&gt;</c>.</summary>
 public sealed class LanguageFormatValue

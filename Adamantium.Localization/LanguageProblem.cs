@@ -1,4 +1,4 @@
-namespace Adamantium.Localization.Generators;
+namespace Adamantium.Localization;
 
 /// <summary>What is wrong at one place of a language file, under a stable diagnostic id.</summary>
 public sealed class LanguageProblem

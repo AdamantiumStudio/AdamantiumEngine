@@ -1,4 +1,4 @@
-namespace Adamantium.Localization.Generators;
+namespace Adamantium.Localization;
 
 /// <summary>One parsed language file: its table and language from the file name, its strings and its formats, and what
 /// is wrong with it. The build and the language server read it the same way.</summary>

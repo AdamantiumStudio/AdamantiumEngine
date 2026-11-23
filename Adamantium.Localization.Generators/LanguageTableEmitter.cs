@@ -308,9 +308,9 @@ internal static class LanguageTableEmitter
 
             source.AppendLine($"        public static class {key}");
             source.AppendLine("        {");
-            foreach (var (name, text) in said.Cases)
+            foreach (var phraseCase in said.Cases)
             {
-                source.AppendLine($"            public const string {name} = {Literal(text)};");
+                source.AppendLine($"            public const string {phraseCase.Name} = {Literal(phraseCase.Text)};");
             }
 
             source.AppendLine("        }");
@@ -336,14 +336,14 @@ internal static class LanguageTableEmitter
             ? $"{PluralRulesType}.FormOf({Literal(language)}, choice) switch"
             : $"{PhraseCasesType}.Of(choice) switch");
         choice.AppendLine($"{indent}{{");
-        foreach (var (name, _) in said.Cases.Where(c => c.Case != LanguageFileParser.OtherCase))
+        foreach (var name in said.Cases.Select(c => c.Name).Where(name => name != LanguageFileParser.OtherCase))
         {
             choice.AppendLine(said.ByNumber
                 ? $"{indent}    {PluralFormType}.{name} => {at}.{name},"
                 : $"{indent}    {Literal(name)} => {at}.{name},");
         }
 
-        var rest = said.Cases.Any(c => c.Case == LanguageFileParser.OtherCase) ? LanguageFileParser.OtherCase : said.Cases[0].Case;
+        var rest = said.Cases.Any(c => c.Name == LanguageFileParser.OtherCase) ? LanguageFileParser.OtherCase : said.Cases[0].Name;
         choice.AppendLine($"{indent}    _ => {at}.{rest},");
         choice.Append($"{indent}}}");
         return choice.ToString();
@@ -352,7 +352,7 @@ internal static class LanguageTableEmitter
     // A phrase with cases becomes a class of them, and a member cannot be named as its class is.
     private static bool CanChoose(SourceProductionContext output, string path, LanguageEntry entry)
     {
-        if (!entry.HasCases || entry.Cases.All(c => c.Case != entry.Key))
+        if (!entry.HasCases || entry.Cases.All(c => c.Name != entry.Key))
         {
             return true;
         }
@@ -369,7 +369,7 @@ internal static class LanguageTableEmitter
             return;
         }
 
-        var lacking = baseEntry.Cases.Select(c => c.Case).Where(name => entry.Cases.All(c => c.Case != name)).ToList();
+        var lacking = baseEntry.Cases.Select(c => c.Name).Where(name => entry.Cases.All(c => c.Name != name)).ToList();
         if (lacking.Count > 0)
         {
             output.ReportDiagnostic(Create("AUL010", LanguageMessages.LacksCases(entry.Key, lacking),At(path, entry.Line, entry.Column), false));
@@ -381,12 +381,12 @@ internal static class LanguageTableEmitter
     {
         public string Text { get; private set; }
 
-        public IReadOnlyList<(string Case, string Text)> Cases { get; private set; }
+        public IReadOnlyList<LanguageCase> Cases { get; private set; }
 
         public bool ByNumber { get; private set; }
 
         public static Said Of(LanguageEntry entry, List<string> order) => entry.HasCases
-            ? new Said { Cases = entry.Cases.Select(c => (c.Case, Stored(c.Text, order))).ToList(), ByNumber = entry.ByNumber }
+            ? new Said { Cases = entry.Cases.Select(c => new LanguageCase(c.Name, Stored(c.Text, order))).ToList(), ByNumber = entry.ByNumber }
             : new Said { Text = Stored(entry.Value, order) };
     }
 
@@ -470,7 +470,7 @@ internal static class LanguageTableEmitter
                     // What chooses the case, under Count or Select as the file says it, then each case.
                     var by = entry.ByNumber ? LanguageFileParser.CountAttribute : LanguageFileParser.SelectAttribute;
                     strings.Add($"[{Literal($"{entry.Key}.{by}")}] = {Literal(entry.Chooser)}");
-                    strings.AddRange(entry.Cases.Select(c => $"[{Literal($"{entry.Key}.{c.Case}")}] = {Literal(Stored(c.Text, order))}"));
+                    strings.AddRange(entry.Cases.Select(c => $"[{Literal($"{entry.Key}.{c.Name}")}] = {Literal(Stored(c.Text, order))}"));
                 }
                 else
                 {

@@ -2,9 +2,8 @@ using System.Globalization;
 using System.Xml;
 using System.Xml.Linq;
 using Adamantium.Core.Shared;
-using Microsoft.CodeAnalysis.CSharp;
 
-namespace Adamantium.Localization.Generators;
+namespace Adamantium.Localization;
 
 /// <summary>Reads a language file (<c>Table.language.alang</c>) - the build and the language server alike.</summary>
 public static class LanguageFileParser
@@ -70,7 +69,7 @@ public static class LanguageFileParser
         {
             table = name.Substring(0, dot);
             language = name.Substring(dot + 1);
-            if (!SyntaxFacts.IsValidIdentifier(table))
+            if (!CSharpIdentifiers.IsValid(table) || CSharpIdentifiers.IsKeyword(table))
             {
                 problems.Add(new LanguageProblem("AUL003", LanguageMessages.LanguageTableNameInvalid(table), 1, 1));
                 table = null;
@@ -156,7 +155,7 @@ public static class LanguageFileParser
             return;
         }
 
-        if (!SyntaxFacts.IsValidIdentifier(key) || SyntaxFacts.GetKeywordKind(key) != SyntaxKind.None)
+        if (!CSharpIdentifiers.IsValid(key) || CSharpIdentifiers.IsKeyword(key))
         {
             problems.Add(Problem("AUL003", LanguageMessages.PhraseKeyInvalid(key), element));
             return;
@@ -217,7 +216,7 @@ public static class LanguageFileParser
         }
 
         var chooser = count ?? select;
-        if (!SyntaxFacts.IsValidIdentifier(chooser.Value))
+        if (!CSharpIdentifiers.IsValid(chooser.Value))
         {
             problems.Add(Problem("AUL010", LanguageMessages.ChooserInvalid(chooser.Name.LocalName, count != null ? "count" : "state"), chooser));
             return;
@@ -277,14 +276,15 @@ public static class LanguageFileParser
 
         var other = given.FirstOrDefault(f => f.Form == PluralForm.Other).Attribute?.Value ?? string.Empty;
         entries.Add(new LanguageEntry(key, other, count.Value, true,
-            given.Select(f => (f.Form.ToString(), f.Attribute.Value)).ToList(), Line(element), Column(element)));
+            given.Select(f => new LanguageCase(f.Form.ToString(), f.Attribute.Value)).ToList(), Line(element), Column(element)));
     }
 
     // A case per value: named after it, so a case's name is a member's name - and Other for any value no case names.
     private static void ReadSelected(XElement element, string key, string chooser, List<XAttribute> cases,
         List<LanguageEntry> entries, List<LanguageProblem> problems)
     {
-        if (cases.FirstOrDefault(c => !SyntaxFacts.IsValidIdentifier(c.Name.LocalName) || c.Name.LocalName == key) is { } bad)
+        if (cases.FirstOrDefault(c => !CSharpIdentifiers.IsValid(c.Name.LocalName) || CSharpIdentifiers.IsKeyword(c.Name.LocalName) ||
+                                      c.Name.LocalName == key) is { } bad)
         {
             problems.Add(Problem("AUL010", LanguageMessages.CaseNameInvalid(bad.Name.LocalName, key), bad));
             return;
@@ -299,7 +299,7 @@ public static class LanguageFileParser
         var given = cases.Where(c => !string.IsNullOrEmpty(c.Value)).ToList();
         var other = given.FirstOrDefault(c => c.Name.LocalName == OtherCase)?.Value ?? given.FirstOrDefault()?.Value ?? string.Empty;
         entries.Add(new LanguageEntry(key, other, chooser, false,
-            given.Select(c => (c.Name.LocalName, c.Value)).ToList(), Line(element), Column(element)));
+            given.Select(c => new LanguageCase(c.Name.LocalName, c.Value)).ToList(), Line(element), Column(element)));
     }
 
     private static string NameOf(string language)

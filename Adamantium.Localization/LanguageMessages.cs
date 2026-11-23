@@ -1,10 +1,9 @@
-using Adamantium.Localization;
-
-namespace Adamantium.Localization.Generators;
+namespace Adamantium.Localization;
 
 /// <summary>What the build of language files says - its problems - in the language of
-/// <see cref="System.Globalization.CultureInfo.CurrentUICulture"/>; each method is one message.</summary>
-public static class LanguageMessages
+/// <see cref="System.Globalization.CultureInfo.CurrentUICulture"/>; each method is one message. The parser's and the
+/// generator's own, so not public: a tool shows a problem by its message.</summary>
+internal static class LanguageMessages
 {
     /// <summary>The catalog the messages are read from.</summary>
     public static MessageCatalog Catalog { get; } = new(typeof(LanguageMessages).Assembly, nameof(LanguageMessages));
