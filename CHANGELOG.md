@@ -7,6 +7,14 @@ All packages share one version.
 
 ### Added
 
+- `Adamantium.Win32.WinRT`: the Windows Runtime's basics, for calling its classes without a projection -
+  `WinRTInterop` (its strings, HSTRING; a class's activation factory), `IInspectable`, `IAsyncInfo`, `AsyncStatus`,
+  the list of strings (`IStringVectorView`), strings handed to a call (`IStringIterable`, `IStringIterator`, and
+  `StringIterable` for ours), and an operation that gives a list of strings (`IStringListOperation`, its handler, and
+  `StringListOperations.ReadAsync`, a task with cancellation). The generic ones' interface ids are written in, each
+  computed from its signature as the Windows Runtime computes them. `.editorconfig`: CA1416 off in `Adamantium.Win32` -
+  Windows' calls run only on Windows.
+
 - Localization in the engine, as two packages: `Adamantium.Localization` - string tables (`LocalizedStrings`,
   `ILanguageTable`, `LanguageTableAttribute`), the application's language (`Languages`: `Current`, `Changed`, `Say`,
   cultures and formats by `LanguageFormat`, translations of another assembly's table), `PluralRules` and
