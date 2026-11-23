@@ -1,4 +1,4 @@
-namespace Adamantium.Localization.Generators;
+namespace Adamantium.Localization;
 
 /// <summary>One <c>&lt;Phrase Key="..."&gt;</c> of a language file: one text, or a text per case, chosen by the value of
 /// a placeholder - a number choosing a plural form (<c>Count</c>), or any value choosing the case named after it
@@ -11,7 +11,7 @@ public sealed class LanguageEntry
     }
 
     public LanguageEntry(string key, string value, string chooser, bool byNumber,
-        IReadOnlyList<(string Case, string Text)> cases, int line, int column)
+        IReadOnlyList<LanguageCase> cases, int line, int column)
     {
         Key = key;
         Value = value;
@@ -34,7 +34,7 @@ public sealed class LanguageEntry
     public bool ByNumber { get; }
 
     /// <summary>The text of each case the phrase gives; empty for a phrase with one text.</summary>
-    public IReadOnlyList<(string Case, string Text)> Cases { get; }
+    public IReadOnlyList<LanguageCase> Cases { get; }
 
     public bool HasCases => Chooser != null;
 

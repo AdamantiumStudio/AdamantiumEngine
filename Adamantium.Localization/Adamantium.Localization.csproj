@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-    <!-- netstandard2.0: the generator loads it at build time to know a language's plural forms, and reads its own
-         messages through MessageCatalog; the running application uses the same assembly. -->
+    <!-- netstandard2.0: the generators and the language server load it to read language files (LanguageFileParser) and
+         know a language's plural forms, and tell their messages through MessageCatalog; the running application uses the
+         same assembly. -->
     <PropertyGroup>
         <TargetFramework>netstandard2.0</TargetFramework>
         <Configurations>Debug;Release</Configurations>
@@ -15,6 +16,15 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <EmbeddedResource Include="Localization\*.alang" LogicalName="Localization/%(Filename)%(Extension)" WithCulture="false" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Adamantium.Core.Shared\Adamantium.Core.Shared.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Adamantium.Localization.Generators" />
         <InternalsVisibleTo Include="Adamantium.LocalizationTests" />
     </ItemGroup>
 

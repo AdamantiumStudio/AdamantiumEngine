@@ -1,6 +1,4 @@
-using Adamantium.Localization;
-
-namespace Adamantium.Localization.Generators;
+namespace Adamantium.Localization;
 
 /// <summary>What the build of language files says - its problems - in the language of
 /// <see cref="System.Globalization.CultureInfo.CurrentUICulture"/>; each method is one message.</summary>
