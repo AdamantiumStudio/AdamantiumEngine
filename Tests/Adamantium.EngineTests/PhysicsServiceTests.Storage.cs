@@ -204,6 +204,49 @@ public partial class PhysicsServiceTests
         }
     }
 
+    // Ground of a material file naming its surface: a box landing on it is told the ground's surface, and a ray meets it.
+    [Test]
+    public void TheSurfaceOfAMaterialFile_IsToldWithEntityContactsAndHits()
+    {
+        var folder = Directory.CreateTempSubdirectory("adamantium-physmat-");
+        try
+        {
+            var asphalt = Path.Combine(folder.FullName, "Asphalt" + PhysicsMaterialFile.Extension);
+            File.WriteAllText(asphalt, "<PhysicsMaterial Version=\"2\" Surface=\"Asphalt\" />");
+            var assets = new AssetService(_universe.Container, _universe.Satellites);
+            assets.Resolvers.Add(new FileSystemAssetResolver());
+            assets.Readers.Add(typeof(PhysicsMaterial), new PhysicsMaterialAssetReader());
+            _universe.Satellites.Add<IAssetService>(assets);
+            UseSteppedPhysics();
+            var ground = AddGround();
+            ground.GetComponent<RigidBody>().MaterialPath = asphalt;
+            var box = AddBox("Box", new WorldPosition(0, -1.5, 0), 0.5);
+            Play();
+            var told = new List<EntityContactEventArgs>();
+            for (var frame = 0; frame < 60; frame++)
+            {
+                Frame(FrameSeconds);
+                told.AddRange(_physics.Contacts.ToArray());
+            }
+
+            var met = _physics.RayCast(new WorldPosition(5, -10, 0), Vector3F.UnitY, 20, out var hit);
+
+            var began = told.Find(contact => contact.Change == ContactChange.Began);
+            Assert.Multiple(() =>
+            {
+                Assert.That(began.Involves(box, out var other) && other == ground, Is.True);
+                Assert.That(began.First == ground ? began.FirstSurface : began.SecondSurface, Is.EqualTo("Asphalt"));
+                Assert.That(began.First == box ? began.FirstSurface : began.SecondSurface, Is.Null);
+                Assert.That(met && hit.Entity == ground, Is.True);
+                Assert.That(hit.Surface, Is.EqualTo("Asphalt"));
+            });
+        }
+        finally
+        {
+            folder.Delete(true);
+        }
+    }
+
     // A material file that is not there: said in the log, the body rubs and bounces by the default and lands.
     [Test]
     public void AMaterialFileNotThere_LeavesTheDefault()
@@ -297,18 +340,63 @@ public partial class PhysicsServiceTests
     public void APhysicsMaterialFile_IsReadAsWritten_AndAMaterialNoneCanHaveIsRefused()
     {
         var material = PhysicsMaterialFile.Read(Stream(
-            "<PhysicsMaterial Version=\"1\" Friction=\"0.05\" Restitution=\"0.3\" FrictionCombine=\"Minimum\" />"))
-            .ToMaterial();
+            "<PhysicsMaterial Version=\"2\" StaticFriction=\"0.7\" DynamicFriction=\"0.05\" RollingResistance=\"0.02\" "
+            + "Restitution=\"0.3\" FrictionCombine=\"Minimum\" Surface=\" Ice \" />")).ToMaterial();
 
         Assert.Multiple(() =>
         {
-            Assert.That(material.Friction, Is.EqualTo(0.05f));
+            Assert.That(material.StaticFriction, Is.EqualTo(0.7f));
+            Assert.That(material.DynamicFriction, Is.EqualTo(0.05f));
+            Assert.That(material.RollingResistance, Is.EqualTo(0.02f));
+            Assert.That(material.Surface, Is.EqualTo("Ice"));
             Assert.That(material.Restitution, Is.EqualTo(0.3f));
             Assert.That(material.FrictionCombine, Is.EqualTo(CombineRule.Minimum));
             Assert.That(material.RestitutionCombine, Is.EqualTo(PhysicsMaterial.Default.RestitutionCombine));
             Assert.Throws<InvalidDataException>(() => PhysicsMaterialFile.Read(Stream("<PhysicsMaterial Friction=\"-1\" />")));
             Assert.Throws<InvalidDataException>(() =>
+                PhysicsMaterialFile.Read(Stream("<PhysicsMaterial RollingResistance=\"-1\" />")));
+            Assert.Throws<InvalidDataException>(() =>
                 PhysicsMaterialFile.Read(Stream("<PhysicsMaterial FrictionCombine=\"Sideways\" />")));
+        });
+    }
+
+    [Test]
+    public void AFirstVersionMaterialsFriction_IsReadAsBothFrictions_AndWrittenAsBoth()
+    {
+        var file = PhysicsMaterialFile.Read(Stream("<PhysicsMaterial Version=\"1\" Friction=\"0.05\" />"));
+        using var written = new MemoryStream();
+        file.Write(written);
+        var text = Encoding.UTF8.GetString(written.ToArray());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(file.ToMaterial().StaticFriction, Is.EqualTo(0.05f));
+            Assert.That(file.ToMaterial().DynamicFriction, Is.EqualTo(0.05f));
+            Assert.That(file.ToMaterial().Surface, Is.Null);
+            Assert.That(text, Does.Contain("StaticFriction=\"0.05\"").And.Contain("DynamicFriction=\"0.05\""));
+            Assert.That(text, Does.Not.Contain(" Friction="));
+            Assert.That(text, Does.Contain("Version=\"2\""));
+        });
+    }
+
+    // A file of the second version is read by its own frictions, a first version's Friction in it left alone wherever it
+    // stands; a file naming no version is of the first. A blank surface is none, one written with spaces is kept without.
+    [Test]
+    public void ASecondVersionMaterial_IsReadByItsOwnFrictions_AndItsSurfaceTrimmed()
+    {
+        var friction = PhysicsMaterialFile.Read(Stream(
+            "<PhysicsMaterial Friction=\"0.1\" Version=\"2\" StaticFriction=\"0.9\" DynamicFriction=\"0.7\" />"));
+        var unversioned = PhysicsMaterialFile.Read(Stream("<PhysicsMaterial Friction=\"0.1\" />"));
+        var file = PhysicsMaterialFile.From(new PhysicsMaterial { Surface = " Ice " });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(friction.StaticFriction, Is.EqualTo(0.9f));
+            Assert.That(friction.DynamicFriction, Is.EqualTo(0.7f));
+            Assert.That(unversioned.Version, Is.EqualTo(1));
+            Assert.That(unversioned.StaticFriction, Is.EqualTo(0.1f));
+            Assert.That(file.Surface, Is.EqualTo("Ice"));
+            Assert.That(new PhysicsMaterialFile { Surface = "  " }.ToMaterial().Surface, Is.Null);
         });
     }
 

@@ -10,6 +10,10 @@ namespace Adamantium.DarkMatter.Dynamics;
 /// the cone of the push, a pass without the spring takes out the speed it added; bounces come at the step's end.</summary>
 internal sealed class ContactSolver
 {
+    // Faster across the normal than this, in meters per second, a touch slides by its dynamic friction; slower, it is
+    // held by its static.
+    private const float SlipSpeed = 0.02f;
+
     private readonly List<Contact> _active = [];
 
     /// <summary>The contacts solved this step, until the next <see cref="Prepare"/>: a span, read only, no enumerator.
@@ -31,7 +35,12 @@ internal sealed class ContactSolver
         {
             Debug.Assert(!contact.IsTrigger, "A trigger's pair is kept apart from those solved.");
             if (!contact.IsTouching)
+            {
+                // Parted, it starts its next touch held and from no turn, as its points start from no push.
+                contact.RollingImpulse = Vector3F.Zero;
+                contact.IsSliding = false;
                 continue;
+            }
 
             ref var first = ref bodies[contact.First];
             ref var second = ref bodies[contact.Second];
@@ -57,7 +66,30 @@ internal sealed class ContactSolver
                 point.FrictionImpulse -= normal * Vector3F.Dot(point.FrictionImpulse, normal);
                 point.RelativeVelocity = Vector3F.Dot(GetRelativeVelocity(first, second, anchorFirst, anchorSecond), normal);
             }
+
+            PrepareRolling(contact, first, second);
         }
+    }
+
+    // A pair that rolls - its world measured how - is resisted about its rolling axis, or about both tangents for a
+    // ball; it starts from the turn it resisted last step about those, as the points start from their pushes. One that
+    // does not roll starts from none.
+    private static void PrepareRolling(Contact contact, in BodyState first, in BodyState second)
+    {
+        if (contact.RollingLever == 0)
+        {
+            contact.RollingImpulse = Vector3F.Zero;
+            return;
+        }
+
+        var hasAxis = contact.RollingAxis != Vector3F.Zero;
+        contact.RollingFirstAxis = hasAxis ? contact.RollingAxis : contact.Tangent;
+        contact.RollingSecondAxis = hasAxis ? Vector3F.Zero : contact.Bitangent;
+        contact.RollingFirstMass = ComputeTurnMass(first, second, contact.RollingFirstAxis);
+        contact.RollingSecondMass = hasAxis ? 0 : ComputeTurnMass(first, second, contact.RollingSecondAxis);
+        var kept = contact.RollingImpulse;
+        contact.RollingImpulse = contact.RollingFirstAxis * Vector3F.Dot(kept, contact.RollingFirstAxis)
+                                 + contact.RollingSecondAxis * Vector3F.Dot(kept, contact.RollingSecondAxis);
     }
 
     /// <summary>Gives every point the impulses it ended the last substep with.</summary>
@@ -73,6 +105,9 @@ internal sealed class ContactSolver
                 var impulse = contact.Normal * point.NormalImpulse + point.FrictionImpulse;
                 ApplyImpulse(ref first, ref second, point.AnchorFirst, point.AnchorSecond, impulse);
             }
+
+            if (contact.RollingLever > 0)
+                ApplyTurn(ref first, ref second, contact.RollingImpulse);
         }
     }
 
@@ -131,23 +166,87 @@ internal sealed class ContactSolver
                 ApplyImpulse(ref first, ref second, point.AnchorFirst, point.AnchorSecond, normal * impulse);
             }
 
+            // A touch held - not slipping faster than SlipSpeed - is held by its static friction whole, against all its
+            // points are pressed with, each point taking its share by the friction it carries, as a load shifts from
+            // one edge to another; sliding, each point rubs by the dynamic friction, never harder than holding would.
+            var carried = 0f;
+            var pressed = 0f;
             for (var index = 0; index < contact.PointCount; index++)
             {
                 ref var point = ref contact.Points[index];
-                var velocity = GetRelativeVelocity(first, second, point.AnchorFirst, point.AnchorSecond);
-                var tangentImpulse = -point.TangentMass * Vector3F.Dot(velocity, contact.Tangent);
-                var bitangentImpulse = -point.BitangentMass * Vector3F.Dot(velocity, contact.Bitangent);
+                point.FrictionCarried = point.FrictionImpulse.Length();
+                carried += point.FrictionCarried;
+                pressed += point.NormalImpulse;
+            }
+
+            var holding = contact.StaticFriction * pressed;
+            var sliding = MathF.Min(contact.DynamicFriction, contact.StaticFriction);
+            var slip = 0f;
+            for (var index = 0; index < contact.PointCount; index++)
+            {
+                ref var point = ref contact.Points[index];
                 var previous = point.FrictionImpulse;
-                var total = previous + contact.Tangent * tangentImpulse + contact.Bitangent * bitangentImpulse;
-                var limit = contact.Friction * point.NormalImpulse;
+                var velocity = GetRelativeVelocity(first, second, point.AnchorFirst, point.AnchorSecond);
+                var total = previous - contact.Tangent * (point.TangentMass * Vector3F.Dot(velocity, contact.Tangent))
+                            - contact.Bitangent * (point.BitangentMass * Vector3F.Dot(velocity, contact.Bitangent));
                 var length = total.Length();
+                var limit = contact.IsSliding
+                    ? sliding * point.NormalImpulse
+                    : MathF.Max(contact.StaticFriction * point.NormalImpulse,
+                        carried > 0 ? holding * point.FrictionCarried / carried : 0);
                 if (length > limit)
+                {
+                    // What it could not stop is how fast it still slips.
+                    if (point.TangentMass > 0)
+                        slip = MathF.Max(slip, (length - limit) / point.TangentMass);
+
                     total *= length > 0 ? limit / length : 0;
+                }
 
                 point.FrictionImpulse = total;
                 ApplyImpulse(ref first, ref second, point.AnchorFirst, point.AnchorSecond, total - previous);
             }
+
+            // Slipping past its hold it slides from now on; stopped again, it is held.
+            contact.IsSliding = slip > SlipSpeed;
+
+            if (contact.RollingLever > 0)
+                ResistRolling(contact, ref first, ref second);
         }
+    }
+
+    // Takes out the pair's spin about its rolling axes, up to its rolling resistance times how hard it is pressed times
+    // the radius it rolls on.
+    private static void ResistRolling(Contact contact, ref BodyState first, ref BodyState second)
+    {
+        var pressed = 0f;
+        for (var index = 0; index < contact.PointCount; index++)
+        {
+            pressed += contact.Points[index].NormalImpulse;
+        }
+
+        var spin = second.AngularVelocity - first.AngularVelocity;
+        var previous = contact.RollingImpulse;
+        var total = previous
+                    - contact.RollingFirstAxis * (contact.RollingFirstMass * Vector3F.Dot(spin, contact.RollingFirstAxis))
+                    - contact.RollingSecondAxis * (contact.RollingSecondMass
+                                                   * Vector3F.Dot(spin, contact.RollingSecondAxis));
+        var limit = contact.RollingResistance * contact.RollingLever * pressed;
+        var length = total.Length();
+        if (length > limit)
+            total *= length > 0 ? limit / length : 0;
+
+        contact.RollingImpulse = total;
+        ApplyTurn(ref first, ref second, total - previous);
+    }
+
+    private static void ApplyTurn(ref BodyState first, ref BodyState second, Vector3F turn)
+    {
+        if (first.IsDynamic)
+            first.AngularVelocity -= InertiaMath.Apply(first.WorldInverseInertia, turn);
+
+        if (second.IsDynamic)
+            second.AngularVelocity += InertiaMath.Apply(second.WorldInverseInertia, turn);
     }
 
     /// <summary>Makes points that closed faster than <paramref name="threshold"/> and pushed part with the speed their
@@ -186,6 +285,13 @@ internal sealed class ContactSolver
         var mass = first.InverseMass + second.InverseMass
                    + Vector3F.Dot(turnFirst, InertiaMath.Apply(first.WorldInverseInertia, turnFirst))
                    + Vector3F.Dot(turnSecond, InertiaMath.Apply(second.WorldInverseInertia, turnSecond));
+        return mass > 0 ? 1f / mass : 0;
+    }
+
+    private static float ComputeTurnMass(in BodyState first, in BodyState second, Vector3F axis)
+    {
+        var mass = (first.IsDynamic ? Vector3F.Dot(axis, InertiaMath.Apply(first.WorldInverseInertia, axis)) : 0)
+                   + (second.IsDynamic ? Vector3F.Dot(axis, InertiaMath.Apply(second.WorldInverseInertia, axis)) : 0);
         return mass > 0 ? 1f / mass : 0;
     }
 

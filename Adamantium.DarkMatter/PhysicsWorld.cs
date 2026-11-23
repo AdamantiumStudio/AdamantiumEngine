@@ -18,6 +18,8 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
     // The cosine of the widest turn between two triangles' contact normals for their points to be one contact: about
     // two degrees.
     private const float SameWay = 0.9995f;
+    // Closer than this to square with a cylinder's axis, a touch is on its side: it rolls on its radius there.
+    private const float CylinderSide = 0.7071f;
 
     // In double, as the bodies stand: far from the origin a float box would grow by meters.
     private readonly DynamicAabbTree<int, double> _tree;
@@ -382,6 +384,8 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
             body.StartRotation = body.Rotation;
         }
 
+        MeasureRollingRadii(_contacts);
+        MeasureRollingRadii(_pieces);
         _solver.Prepare(_bodies, _contacts, _pieces);
         _jointSolver.Prepare(_bodies, _joints);
         var contactHertz = MathF.Min(Settings.ContactHertz, 0.25f * inverseSubstep);
@@ -439,6 +443,63 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         var swing = new Vector3F(MeasureSweepSpeed(body, part) * StepSeconds);
         return Place(new BoundingBox<float>(bounds.Minimum + Vector3F.Min(travel, Vector3F.Zero) - swing,
             bounds.Maximum + Vector3F.Max(travel, Vector3F.Zero) + swing), body.Position);
+    }
+
+    // How each touching pair with a rolling resistance rolls: on its moving round part - a sphere, a capsule, a
+    // cylinder met on its side - at the body's center, the smaller of two; about that part's axis for a cylinder or a
+    // capsule lying, any way for a ball. Flat parts, and round ones off their body's center, tip rather than roll.
+    private void MeasureRollingRadii(List<Contact> contacts)
+    {
+        foreach (var contact in contacts)
+        {
+            if (!contact.IsTouching || contact.RollingResistance <= 0)
+            {
+                contact.RollingLever = 0;
+                continue;
+            }
+
+            var firstRadius = RollingRadiusOf(contact.First, contact.FirstPart, contact.Normal, out var firstAxis);
+            var secondRadius = RollingRadiusOf(contact.Second, contact.SecondPart, contact.Normal, out var secondAxis);
+            var takesFirst = firstRadius > 0 && (secondRadius == 0 || firstRadius <= secondRadius);
+            contact.RollingLever = takesFirst ? firstRadius : secondRadius;
+            contact.RollingAxis = takesFirst ? firstAxis : secondAxis;
+        }
+    }
+
+    // The radius the part rolls on, and the axis it rolls about - none for any way; no radius for one that does not.
+    private float RollingRadiusOf(int body, int part, Vector3F normal, out Vector3F axis)
+    {
+        axis = Vector3F.Zero;
+        ref readonly var state = ref _bodies[body];
+        ref readonly var slot = ref _parts[part];
+        if (!state.IsDynamic || !slot.IsCentered)
+            return 0;
+
+        switch (slot.Shape)
+        {
+            case SphereCollisionShape sphere:
+                return sphere.Radius;
+            case CapsuleCollisionShape capsule:
+                // On its end, it rolls as a ball does.
+                if (!TryLieAcross(state, slot, normal, out axis))
+                    axis = Vector3F.Zero;
+
+                return capsule.Radius;
+            case CylinderCollisionShape cylinder:
+                return TryLieAcross(state, slot, normal, out axis) ? cylinder.Radius : 0;
+            default:
+                return 0;
+        }
+    }
+
+    // Whether the part's Y axis lies across the normal - a wheel on its side - and that axis, square with the normal.
+    private static bool TryLieAcross(in BodyState state, in PartState slot, Vector3F normal, out Vector3F axis)
+    {
+        var rotation = slot.HasBodyPose ? state.Rotation : state.Rotation * slot.Pose.Rotation;
+        var along = Vector3F.Transform(Vector3F.UnitY, rotation);
+        var across = Vector3F.Dot(along, normal);
+        axis = Vector3F.Normalize(along - normal * across);
+        return MathF.Abs(across) < CylinderSide;
     }
 
     // Where the part stands against origin, which lies near it: its body's center, or the other body's of a pair.
@@ -767,7 +828,11 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         piece.FirstPart = holder.FirstPart;
         piece.SecondPart = holder.SecondPart;
         piece.PointCount = 0;
-        piece.Friction = holder.Friction;
+        piece.RollingImpulse = Vector3F.Zero;
+        piece.IsSliding = false;
+        piece.StaticFriction = holder.StaticFriction;
+        piece.DynamicFriction = holder.DynamicFriction;
+        piece.RollingResistance = holder.RollingResistance;
         piece.Restitution = holder.Restitution;
         piece.IsTrigger = holder.IsTrigger;
         piece.IsToldTouching = false;
@@ -1169,6 +1234,8 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         contact.FirstPart = firstPart;
         contact.SecondPart = secondPart;
         contact.PointCount = 0;
+        contact.RollingImpulse = Vector3F.Zero;
+        contact.IsSliding = false;
         contact.IsTrigger = _parts[firstPart].IsTrigger || _parts[secondPart].IsTrigger;
         contact.IsToldTouching = false;
         CombineMaterials(contact);
@@ -1180,12 +1247,14 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
         LinkContact(contact, second);
     }
 
-    // The friction and bounce the pair's parts meet by; a surface's pieces keep their holder's.
+    // The friction, rolling resistance and bounce the pair's parts meet by; a surface's pieces keep their holder's.
     private void CombineMaterials(Contact contact)
     {
         ref readonly var first = ref _parts[contact.FirstPart].Material;
         ref readonly var second = ref _parts[contact.SecondPart].Material;
-        contact.Friction = PhysicsMaterial.CombineFriction(first, second);
+        contact.StaticFriction = PhysicsMaterial.CombineStaticFriction(first, second);
+        contact.DynamicFriction = PhysicsMaterial.CombineDynamicFriction(first, second);
+        contact.RollingResistance = PhysicsMaterial.CombineRollingResistance(first, second);
         contact.Restitution = PhysicsMaterial.CombineRestitution(first, second);
     }
 

@@ -15,6 +15,8 @@ public readonly struct ContactEventArgs
         SecondPartData = secondPartData;
         Change = told.Change;
         IsTrigger = told.IsTrigger;
+        FirstSurface = told.FirstSurface;
+        SecondSurface = told.SecondSurface;
         Point = told.Point;
         Normal = told.Normal;
         ApproachSpeed = told.ApproachSpeed;
@@ -36,6 +38,11 @@ public readonly struct ContactEventArgs
 
     /// <summary>Whether one of the parts is a trigger: it was entered or left, and pushed nothing.</summary>
     public bool IsTrigger { get; }
+
+    /// <summary>The surface of each part's material (<see cref="PhysicsMaterial.Surface"/>) - what a step sounds on,
+    /// what a wheel grips; null for none.</summary>
+    public string FirstSurface { get; }
+    public string SecondSurface { get; }
 
     /// <summary>Where they first touched; none for an end.</summary>
     public WorldPosition Point { get; }

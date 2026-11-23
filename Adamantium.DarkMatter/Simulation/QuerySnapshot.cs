@@ -19,11 +19,11 @@ internal sealed class QuerySnapshot
 
     public PhysicsWorld World => _world;
 
-    /// <summary>Puts the body in <paramref name="slot"/> at <paramref name="pose"/> on <paramref name="layer"/>, a copy
-    /// of <paramref name="shape"/> and its parts' own; a copy there already is moved, or made anew for a shape not its
-    /// own.</summary>
+    /// <summary>Puts the body in <paramref name="slot"/> at <paramref name="pose"/> on <paramref name="layer"/> of
+    /// <paramref name="material"/>, a copy of <paramref name="shape"/> and its parts' own; a copy there already is
+    /// moved, or made anew for a shape not its own.</summary>
     public void Place(int slot, int generation, CollisionShape shape, PartTraits[] partTraits, Layer layer,
-        in Pose pose)
+        in PhysicsMaterial material, in Pose pose)
     {
         while (_handleOfSlot.Count <= slot)
         {
@@ -37,14 +37,15 @@ internal sealed class QuerySnapshot
         {
             _world.SetPose(handle, pose);
             _world.SetLayer(handle, layer);
+            _world.SetMaterial(handle, material);
             return;
         }
 
         Remove(slot);
         handle = _world.Add(new BodyDescription
         {
-            Kind = BodyKind.Static, Shape = shape, PartTraits = partTraits, Layer = layer, Position = pose.Position,
-            Rotation = pose.Rotation
+            Kind = BodyKind.Static, Shape = shape, PartTraits = partTraits, Layer = layer, Material = material,
+            Position = pose.Position, Rotation = pose.Rotation
         });
         while (_slotOfCopy.Count <= handle.Index)
         {
@@ -63,6 +64,14 @@ internal sealed class QuerySnapshot
     {
         if (slot < _handleOfSlot.Count && _handleOfSlot[slot].IsValid && _generationOfSlot[slot] == generation)
             _world.SetLayer(_handleOfSlot[slot], layer);
+    }
+
+    /// <summary>Gives the copy of the body in <paramref name="slot"/> <paramref name="material"/>, if there is one of
+    /// its generation.</summary>
+    public void SetMaterial(int slot, int generation, in PhysicsMaterial material)
+    {
+        if (slot < _handleOfSlot.Count && _handleOfSlot[slot].IsValid && _generationOfSlot[slot] == generation)
+            _world.SetMaterial(_handleOfSlot[slot], material);
     }
 
     /// <summary>Moves the copy of the body in <paramref name="slot"/>, if there is one of its generation.</summary>

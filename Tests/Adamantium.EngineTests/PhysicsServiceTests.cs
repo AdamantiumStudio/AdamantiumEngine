@@ -86,7 +86,7 @@ public partial class PhysicsServiceTests
         _physics.ApplyImpulse(box, new Vector3F(5000, 0, 0));
         Frames(2);
 
-        var expected = 5.0 * 5.0 / (2 * PhysicsMaterial.Default.Friction * 9.81);
+        var expected = 5.0 * 5.0 / (2 * PhysicsMaterial.Default.DynamicFriction * 9.81);
         Assert.That(box.Transform.Position.X, Is.EqualTo(expected).Within(0.1 * expected));
     }
 

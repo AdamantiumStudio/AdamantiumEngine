@@ -24,7 +24,7 @@ internal sealed class SceneBuilder
             Shape = new BoxCollisionShape(50, 1, 50),
             Position = new WorldPosition(center),
             Rotation = turn,
-            Material = new PhysicsMaterial { Friction = friction }
+            Material = new PhysicsMaterial { StaticFriction = friction, DynamicFriction = friction }
         });
     }
 
@@ -36,7 +36,10 @@ internal sealed class SceneBuilder
             Shape = new BoxCollisionShape(halfExtents),
             Position = new WorldPosition(position),
             Rotation = rotation ?? QuaternionF.Identity,
-            Material = new PhysicsMaterial { Friction = friction, Restitution = restitution },
+            Material = new PhysicsMaterial
+            {
+                StaticFriction = friction, DynamicFriction = friction, Restitution = restitution
+            },
             LinearVelocity = velocity
         });
     }
@@ -50,7 +53,8 @@ internal sealed class SceneBuilder
             Position = new WorldPosition(position),
             Material = new PhysicsMaterial
             {
-                Friction = 0.6f, Restitution = restitution, RestitutionCombine = restitutionCombine
+                StaticFriction = 0.6f, DynamicFriction = 0.6f, Restitution = restitution,
+                RestitutionCombine = restitutionCombine
             }
         });
     }

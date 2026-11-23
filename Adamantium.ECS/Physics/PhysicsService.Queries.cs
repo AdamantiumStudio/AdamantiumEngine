@@ -35,7 +35,8 @@ public sealed partial class PhysicsService
         if (_simulation == null || !_simulation.RayCast(origin, direction, maxDistance, out var met, ToQueryFilter(filter)))
             return false;
 
-        hit = new EntityRayHit(EntityOf(met.Body), ColliderOf(met.Body, met.Part), met.Point, met.Normal, met.Distance);
+        hit = new EntityRayHit(EntityOf(met.Body), ColliderOf(met.Body, met.Part), met.Point, met.Normal, met.Distance,
+            _simulation.SurfaceOf(met.Body, met.Part));
         return true;
     }
 
@@ -57,7 +58,7 @@ public sealed partial class PhysicsService
             {
                 ref readonly var one = ref met[index];
                 hits[index] = new EntityRayHit(EntityOf(one.Body), ColliderOf(one.Body, one.Part), one.Point, one.Normal,
-                    one.Distance);
+                    one.Distance, _simulation.SurfaceOf(one.Body, one.Part));
             }
 
             return count;
@@ -77,7 +78,8 @@ public sealed partial class PhysicsService
         if (_simulation == null || !_simulation.CastShape(shape, pose, translation, out var met, ToQueryFilter(filter)))
             return false;
 
-        hit = new EntityShapeHit(EntityOf(met.Body), ColliderOf(met.Body, met.Part), met.Point, met.Normal, met.Distance);
+        hit = new EntityShapeHit(EntityOf(met.Body), ColliderOf(met.Body, met.Part), met.Point, met.Normal, met.Distance,
+            _simulation.SurfaceOf(met.Body, met.Part));
         return true;
     }
 

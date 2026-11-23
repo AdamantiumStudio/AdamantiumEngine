@@ -19,6 +19,10 @@ internal sealed class SimulatedBody
     /// <summary>Its layer after the last run read.</summary>
     public Layer Layer;
 
+    /// <summary>Its material as last taken, for the queries' snapshot: what surface its parts with none of their own
+    /// are.</summary>
+    public PhysicsMaterial Material;
+
     /// <summary>Where it stands in the simulation's list of bodies alive.</summary>
     public int ListIndex;
 

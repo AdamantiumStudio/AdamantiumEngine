@@ -195,7 +195,7 @@ public class CylinderTests
             Shape = new CylinderCollisionShape(0.15f, 0.4f),
             Position = new WorldPosition(up * 0.401f),
             Rotation = Quaternion.CreateFromAxisAngle(Vector3F.UnitX, MathF.PI / 2),
-            Material = new PhysicsMaterial { Friction = 1 }
+            Material = new PhysicsMaterial { StaticFriction = 1, DynamicFriction = 1 }
         });
 
         scene.Run(1f);

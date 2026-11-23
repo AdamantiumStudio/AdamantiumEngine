@@ -63,6 +63,7 @@ public sealed partial class PhysicsSimulation
         body.Shape = description.Shape;
         body.PartTraits = description.PartTraits;
         body.Layer = description.Layer;
+        body.Material = description.Material;
         body.Pose = new Pose(settings.Position, QuaternionF.Normalize(settings.Rotation));
         body.PreviousPose = body.Pose;
         TakeCenter(slot, body, settings.Position);
@@ -496,7 +497,8 @@ public sealed partial class PhysicsSimulation
                 body.Shape = news.Shape;
                 body.PartTraits = news.PartTraits;
                 body.Layer = news.Layer;
-                _snapshot?.Place(news.Slot, news.Generation, news.Shape, news.PartTraits, news.Layer, body.Pose);
+                _snapshot?.Place(news.Slot, news.Generation, news.Shape, news.PartTraits, news.Layer, body.Material,
+                    body.Pose);
                 break;
             case NewsKind.Refused when body.Status == PhysicsStatus.Adding:
                 body.Status = PhysicsStatus.Refused;
@@ -510,11 +512,16 @@ public sealed partial class PhysicsSimulation
                 body.Shape = news.Shape;
                 body.PartData = news.PartData;
                 body.PartTraits = news.PartTraits;
-                _snapshot?.Place(news.Slot, news.Generation, news.Shape, news.PartTraits, body.Layer, body.Pose);
+                _snapshot?.Place(news.Slot, news.Generation, news.Shape, news.PartTraits, body.Layer, body.Material,
+                    body.Pose);
                 break;
             case NewsKind.LayerTaken when body.Status == PhysicsStatus.Active:
                 body.Layer = news.Layer;
                 _snapshot?.SetLayer(news.Slot, news.Generation, news.Layer);
+                break;
+            case NewsKind.MaterialTaken when body.Status == PhysicsStatus.Active:
+                body.Material = news.Material;
+                _snapshot?.SetMaterial(news.Slot, news.Generation, news.Material);
                 break;
             case NewsKind.KindSettled when news.KindAsk == body.KindAsks:
                 body.KindAsked = news.BodyKind;
@@ -582,7 +589,8 @@ public sealed partial class PhysicsSimulation
         {
             var body = _bodySlots[id.Index];
             if (body.Status == PhysicsStatus.Active)
-                snapshot.Place(id.Index, id.Generation, body.Shape, body.PartTraits, body.Layer, body.Pose);
+                snapshot.Place(id.Index, id.Generation, body.Shape, body.PartTraits, body.Layer, body.Material,
+                    body.Pose);
         }
 
         return snapshot;

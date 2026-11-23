@@ -273,6 +273,19 @@ internal sealed partial class PhysicsWorld
     private WorldShapeHit WithPartIndex(in WorldShapeHit hit) =>
         new(hit.Body, _parts[hit.Part].Index, hit.Position, hit.Normal, hit.Distance);
 
+    /// <summary>The surface of the material of <paramref name="body"/>'s part at <paramref name="part"/> among its
+    /// parts: its own, or the body's; null for none, or for a part the body does not have.</summary>
+    internal string SurfaceOf(BodyHandle body, int part)
+    {
+        for (var slot = _bodies[Resolve(body)].FirstPart; slot != NoPart; slot = _parts[slot].Next)
+        {
+            if (_parts[slot].Index == part)
+                return _parts[slot].Material.Surface;
+        }
+
+        return null;
+    }
+
     // Each body part in the box the shape sweeps up to the nearest meeting yet.
     private void CastPart(CollisionShape shape, in LocalPose pose, ref ShapeCast cast)
     {
