@@ -12,4 +12,9 @@ public sealed class CommandAttribute : Attribute
 
     /// <summary>Override the generated command property name (default = method name + "Command").</summary>
     public string Name { get; set; }
+
+    /// <summary>For a <c>Task</c> method: the command stays executable while it runs, and a press meanwhile starts
+    /// another run at once instead of being ignored. The method keeps its runs in order - Undo pressed twice takes
+    /// back two steps. Ignored for a <c>void</c> method, which never runs on.</summary>
+    public bool AllowsConcurrentRuns { get; set; }
 }

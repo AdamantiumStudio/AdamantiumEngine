@@ -8,6 +8,11 @@ and are put here at a release.
 
 ### Added
 
+- `[Command(AllowsConcurrentRuns = true)]` on a `Task` method: the async command stays executable while it runs, and a
+  press meanwhile starts another run at once instead of being ignored - the method keeps its runs in order, as an
+  undo history does for Ctrl+Z pressed twice. `AdamantiumAsyncCommand` and `AdamantiumAsyncCommand<T>` take it as
+  `allowsConcurrentRuns`; `IsRunning` holds while any run is under way and `Cancel` cancels them all.
+
 - `Adamantium.Win32.WinRT`: the Windows Runtime's basics, for calling its classes without a projection -
   `WinRTInterop` (its strings, HSTRING; a class's activation factory), `IInspectable`, `IAsyncInfo`, `AsyncStatus`,
   the list of strings (`IStringVectorView`), strings handed to a call (`IStringIterable`, `IStringIterator`, and

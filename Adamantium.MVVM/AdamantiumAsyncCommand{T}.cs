@@ -12,28 +12,22 @@ public sealed class AdamantiumAsyncCommand<T> : IAsyncCommand
 {
     private readonly Func<T, CancellationToken, Task> _execute;
     private readonly Func<T, bool> _canExecute;
-    private CancellationTokenSource _cts;
-    private bool _isRunning;
+    private readonly AsyncCommandRuns _runs;
 
-    public AdamantiumAsyncCommand(Func<T, CancellationToken, Task> execute, Func<T, bool> canExecute = null)
+    public AdamantiumAsyncCommand(Func<T, CancellationToken, Task> execute, Func<T, bool> canExecute = null,
+        bool allowsConcurrentRuns = false)
     {
         _execute = execute ?? throw new ArgumentNullException(nameof(execute));
         _canExecute = canExecute;
+        _runs = new AsyncCommandRuns(allowsConcurrentRuns, OnRunningChanged);
     }
 
-    public bool IsRunning
-    {
-        get => _isRunning;
-        private set
-        {
-            if (_isRunning == value) return;
-            _isRunning = value;
-            RaisePropertyChanged(nameof(IsRunning));
-            RaiseCanExecuteChanged();   // disable-while-running: bound controls re-query CanExecute
-        }
-    }
+    public bool IsRunning => _runs.IsRunning;
 
-    public bool CanExecute(T parameter) => !_isRunning && (_canExecute == null || _canExecute(parameter));
+    /// <summary>True when a press while the command runs starts another run instead of being ignored.</summary>
+    public bool AllowsConcurrentRuns => _runs.AllowsConcurrentRuns;
+
+    public bool CanExecute(T parameter) => !_runs.Blocks && (_canExecute == null || _canExecute(parameter));
 
     // Fire-and-forget for the UI click path; real exceptions surface on the UI thread (not swallowed).
     public async void Execute(T parameter) => await ExecuteAsync(parameter);
@@ -42,11 +36,10 @@ public sealed class AdamantiumAsyncCommand<T> : IAsyncCommand
     {
         if (!CanExecute(parameter)) return;
 
-        _cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        IsRunning = true;
+        var run = _runs.Start(cancellationToken);
         try
         {
-            await _execute(parameter, _cts.Token);
+            await _execute(parameter, run.Token);
         }
         catch (OperationCanceledException)
         {
@@ -54,14 +47,12 @@ public sealed class AdamantiumAsyncCommand<T> : IAsyncCommand
         }
         finally
         {
-            IsRunning = false;
-            var cts = _cts;
-            _cts = null;
-            cts?.Dispose();
+            _runs.End(run);
         }
     }
 
-    public void Cancel() => _cts?.Cancel();
+    /// <summary>Cancels every run under way.</summary>
+    public void Cancel() => _runs.CancelAll();
 
     bool ICommand.CanExecute(object parameter) => CanExecute(Coerce(parameter));
 
@@ -76,7 +67,11 @@ public sealed class AdamantiumAsyncCommand<T> : IAsyncCommand
 
     public event PropertyChangedEventHandler PropertyChanged;
 
-    private void RaisePropertyChanged(string name) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    private void OnRunningChanged()
+    {
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsRunning)));
+        RaiseCanExecuteChanged();   // disable-while-running: bound controls re-query CanExecute
+    }
 
     private static T Coerce(object parameter) => parameter is T value ? value : default;
 }
