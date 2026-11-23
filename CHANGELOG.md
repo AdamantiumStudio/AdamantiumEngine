@@ -1,7 +1,8 @@
 # Changelog
 
 Notable changes to the Adamantium Engine packages, in the form of [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
-All packages share one version.
+All packages share one version. Entries for changes not yet released wait in [`changelog.d`](changelog.d/README.md),
+and are put here at a release.
 
 ## Unreleased
 
