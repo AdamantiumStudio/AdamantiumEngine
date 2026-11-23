@@ -69,7 +69,7 @@ public static class LanguageFileParser
         {
             table = name.Substring(0, dot);
             language = name.Substring(dot + 1);
-            if (!CSharpIdentifiers.IsValid(table))
+            if (!CSharpIdentifiers.IsValid(table) || CSharpIdentifiers.IsKeyword(table))
             {
                 problems.Add(new LanguageProblem("AUL003", LanguageMessages.LanguageTableNameInvalid(table), 1, 1));
                 table = null;
@@ -283,7 +283,8 @@ public static class LanguageFileParser
     private static void ReadSelected(XElement element, string key, string chooser, List<XAttribute> cases,
         List<LanguageEntry> entries, List<LanguageProblem> problems)
     {
-        if (cases.FirstOrDefault(c => !CSharpIdentifiers.IsValid(c.Name.LocalName) || c.Name.LocalName == key) is { } bad)
+        if (cases.FirstOrDefault(c => !CSharpIdentifiers.IsValid(c.Name.LocalName) || CSharpIdentifiers.IsKeyword(c.Name.LocalName) ||
+                                      c.Name.LocalName == key) is { } bad)
         {
             problems.Add(Problem("AUL010", LanguageMessages.CaseNameInvalid(bad.Name.LocalName, key), bad));
             return;

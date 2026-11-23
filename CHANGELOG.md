@@ -14,7 +14,8 @@ All packages share one version.
   `LocalizedStrings.TryText` and `MessageCatalog.Say` take in place of the UI's tuples and lookup function -
   `MessageCatalog` for the messages of tools, and `LanguageFileParser`, which reads a language file into a
   `LanguageFile` of `LanguageEntry` phrases (a `LanguageCase` per case) and the `LanguageProblem`s in it, for any
-  tool that reads `.alang` files as the build does, with no compiler under it - and its source generator
+  tool that reads `.alang` files as the build does, with no compiler under it (it takes `Adamantium.Core.Shared` for a
+  table's namespace) - and its source generator
   `Adamantium.Localization.Generators`, a table for every set of `.alang` files, checked as it is built, with the
   build file that hands the generator a project's language files. Taken over from Adamantium UI, with no UI in it:
   the engine, a game or a tool can speak the user's language without one. `Adamantium.Core.Shared.PathExtension`

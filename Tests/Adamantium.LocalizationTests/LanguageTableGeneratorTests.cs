@@ -201,6 +201,7 @@ public class LanguageTableGeneratorTests
 
     [TestCase("Strings.alang", "AUL001", TestName = "A file that names no language")]
     [TestCase("Strings.e n.alang", "AUL002", TestName = "A name that is no language")]
+    [TestCase("event.en.alang", "AUL003", TestName = "A table named as a keyword")]
     public void AFileName_StatesTableAndLanguage(string name, string id)
     {
         var project = Generate(new() { [name] = English });
@@ -450,6 +451,7 @@ public class LanguageTableGeneratorTests
 
     [TestCase("""<Phrase Key="Actions" Select="on"/>""", "AUL010", TestName = "A value that chooses nothing")]
     [TestCase("""<Phrase Key="Actions" Select="on" Actions="on" Other="off"/>""", "AUL010", TestName = "A case named as its phrase")]
+    [TestCase("""<Phrase Key="Door" Select="state" class="open" Other="shut"/>""", "AUL010", TestName = "A case named as a keyword")]
     [TestCase("""<Phrase Key="Actions" True="on" False="off"/>""", "AUL004", TestName = "Cases without a choosing value")]
     public void AWrongChosenPhrase_IsABuildError(string phrase, string id)
     {

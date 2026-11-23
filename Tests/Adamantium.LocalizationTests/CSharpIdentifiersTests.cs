@@ -11,14 +11,15 @@ public class CSharpIdentifiersTests
     [Test]
     public void EveryCharacter_StartsAndContinuesANameAsTheCompilerSays()
     {
-        for (var code = 0; code <= char.MaxValue; code++)
-        {
-            var character = (char)code;
-            var alone = character.ToString();
-            var after = "a" + character;
-            Assert.That(CSharpIdentifiers.IsValid(alone), Is.EqualTo(SyntaxFacts.IsValidIdentifier(alone)), $"U+{code:X4} first");
-            Assert.That(CSharpIdentifiers.IsValid(after), Is.EqualTo(SyntaxFacts.IsValidIdentifier(after)), $"U+{code:X4} after");
-        }
+        var differing = Enumerable.Range(0, char.MaxValue + 1)
+            .Select(code => (char)code)
+            .Where(character => Differs(character.ToString()) || Differs("a" + character))
+            .Select(character => $"U+{(int)character:X4}")
+            .ToList();
+
+        Assert.That(differing, Is.Empty);
+
+        static bool Differs(string name) => CSharpIdentifiers.IsValid(name) != SyntaxFacts.IsValidIdentifier(name);
     }
 
     [TestCase("")]
