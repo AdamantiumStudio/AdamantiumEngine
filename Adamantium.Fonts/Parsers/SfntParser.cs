@@ -34,6 +34,7 @@ namespace Adamantium.Fonts.Parsers
         private HorizontalMetricsTable hmtx;
         private VerticalHeaderTable vhea;
         private VerticalMetricsTable vmtx;
+        private readonly Dictionary<long, Typeface> _outlineTypefaces = new();
 
         protected NameTable Name { get; set; }
 
@@ -461,14 +462,34 @@ namespace Adamantium.Fonts.Parsers
         protected virtual void ReadFontCollection()
         {
             SortTables();
-            
+
+            var file = Typeface;
             foreach (var tableDirectory in TableDirectories)
             {
                 CurrentTableDirectory = tableDirectory;
+                Typeface = GetOutlineTypeface(tableDirectory, file);
                 ReadTableDirectory(tableDirectory);
+                if (Typeface != file)
+                    file.AddFont(CurrentFont);
             }
-            
+
+            Typeface = file;
             Typeface.UpdateGlyphNames();
+        }
+
+        private Typeface GetOutlineTypeface(TableDirectory tableDirectory, Typeface file)
+        {
+            var outlines = tableDirectory.Tables.FirstOrDefault(table =>
+                table.Name is TableNames.glyf or TableNames.CFF or TableNames.CFF2);
+            if (outlines == null)
+                return file;
+
+            if (_outlineTypefaces.TryGetValue(outlines.Offset, out var known))
+                return known;
+
+            var typeface = _outlineTypefaces.Count == 0 ? file : new Typeface { Parser = this };
+            _outlineTypefaces[outlines.Offset] = typeface;
+            return typeface;
         }
 
         protected virtual void ReadTableDirectory(TableDirectory tableDirectory)

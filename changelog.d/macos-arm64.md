@@ -24,3 +24,6 @@
   font is bold and italic by its head table's `macStyle`.
 - A PDF font not embedded and drawn by a system font from a collection (`.ttc`) - Times on macOS - had every width 0:
   the widths are the face's own.
+- A font collection whose faces each have glyphs of their own (macOS's Helvetica.ttc and other system collections) drew
+  every face with the glyphs of the face read last - text came out as other letters: each such face has a typeface of
+  its own, and faces sharing their glyphs still share one.
