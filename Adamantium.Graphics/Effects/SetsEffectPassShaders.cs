@@ -204,13 +204,17 @@ internal sealed class SetsEffectPassShaders : EffectPassShaders
             Template = template;
         }
 
+        var createInfos = new ShaderCreateInfoEXT[stages.Length];
+        var layouts = new ulong[stages.Length];
         for (var i = 0; i < stages.Length; i++)
         {
-            var createInfo = NewCreateInfo(i);
-            createInfo.SetLayoutCount = setCount;
-            createInfo.PSetLayouts = setLayouts;
-            CreateShader(i, createInfo, layoutKey);
+            createInfos[i] = NewCreateInfo(i);
+            createInfos[i].SetLayoutCount = setCount;
+            createInfos[i].PSetLayouts = setLayouts;
+            layouts[i] = layoutKey;
         }
+
+        CreateShadersFrom(createInfos, layouts);
     }
 
     private void CheckLimits(List<(EffectData.PassResource Resource, DescriptorType Type)> pushed)

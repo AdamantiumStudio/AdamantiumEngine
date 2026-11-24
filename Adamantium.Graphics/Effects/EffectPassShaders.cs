@@ -98,9 +98,13 @@ internal abstract class EffectPassShaders : IDisposable
         var link = Pass.Stages[stage];
         var shader = effectData.Shaders[link.Index];
         var hasTaskShader = Pass.Stages.Exists(other => other.Stage == EffectStage.Task);
+        var flags = link.Stage == EffectStage.Mesh && !hasTaskShader ? ShaderCreateFlagBitsEXT.NoTaskShaderBitExt : 0;
+        if (stages.Length > 1)
+            flags |= ShaderCreateFlagBitsEXT.LinkStageBitExt;
+
         return new ShaderCreateInfoEXT
         {
-            Flags = link.Stage == EffectStage.Mesh && !hasTaskShader ? ShaderCreateFlagBitsEXT.NoTaskShaderBitExt : 0,
+            Flags = flags,
             Stage = stages[stage],
             NextStage = stage + 1 < stages.Length ? stages[stage + 1] : 0,
             CodeType = ShaderCodeTypeEXT.SpirvExt,
@@ -110,9 +114,15 @@ internal abstract class EffectPassShaders : IDisposable
         };
     }
 
-    private protected void CreateShader(int stage, ShaderCreateInfoEXT createInfo, ulong layout)
+    private protected void CreateShadersFrom(ShaderCreateInfoEXT[] createInfos, ulong[] layouts)
     {
-        shaders[stage] = graphicsDevice.CreateShader(createInfo, $"{cacheName}.{Pass.Stages[stage].Stage}", layout);
+        var names = new string[createInfos.Length];
+        for (var i = 0; i < names.Length; i++)
+        {
+            names[i] = $"{cacheName}.{Pass.Stages[i].Stage}";
+        }
+
+        graphicsDevice.CreateShaders(createInfos, names, layouts).CopyTo(shaders, 0);
     }
 
     private protected static ulong Mix(ulong hash, ulong value)

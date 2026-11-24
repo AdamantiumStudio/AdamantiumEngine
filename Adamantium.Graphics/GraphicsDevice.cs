@@ -767,47 +767,77 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     private static readonly object ShaderCreateLock = new();
 
     public ShaderEXT CreateShader(ShaderCreateInfoEXT shaderCreateInfo, string name = null) =>
-        CreateShader(shaderCreateInfo, name, 0);
+        CreateShaders([shaderCreateInfo], [name], [0])[0];
 
-    /// <summary>As <see cref="CreateShader(ShaderCreateInfoEXT, string)"/>; the binary cache takes only a binary made for
-    /// the same <paramref name="layout"/>.</summary>
-    internal ShaderEXT CreateShader(ShaderCreateInfoEXT shaderCreateInfo, string name, ulong layout)
+    /// <summary>Creates shaders in one call - how linked ones must be made. The binary cache takes only binaries made for
+    /// the same <paramref name="layouts"/>, and gives a group either all of its shaders or none.</summary>
+    internal ShaderEXT[] CreateShaders(ShaderCreateInfoEXT[] createInfos, string[] names, ulong[] layouts)
     {
         lock (ShaderCreateLock)
         {
-            return CreateShaderCore(shaderCreateInfo, name, layout);
+            return CreateShadersFromCache(createInfos, names, layouts) ?? CompileShaders(createInfos, names, layouts);
         }
     }
 
-    private ShaderEXT CreateShaderCore(ShaderCreateInfoEXT shaderCreateInfo, string name, ulong layout)
+    private ShaderEXT[] CreateShadersFromCache(ShaderCreateInfoEXT[] createInfos, string[] names, ulong[] layouts)
     {
-        // Create from the cached driver binary when there is one; otherwise compile from SPIR-V and persist the binary as
-        // `name` (effect.technique.pass.stage).
-        if (ShaderBinaryCache.TryLoad(this, shaderCreateInfo, name, layout, out var binary))
+        var binaries = new ShaderCreateInfoEXT[createInfos.Length];
+        for (var i = 0; i < createInfos.Length; i++)
         {
-            var result = LogicalDevice.CreateShaderFromBinary(ShaderBinaryCache.AsBinary(shaderCreateInfo, binary), out var cached);
-            if (result == Result.Success) return cached;
-            // else: incompatible binary (driver/device change) -> fall through and recompile from SPIR-V (re-caches below).
+            if (!ShaderBinaryCache.TryLoad(this, createInfos[i], names[i], layouts[i], out var binary))
+                return null;
+
+            binaries[i] = ShaderBinaryCache.AsBinary(createInfos[i], binary);
         }
 
+        if (LogicalDevice.CreateShadersFromBinary(binaries, out var shaders) == Result.Success)
+            return shaders;
+
+        DestroyShaders(shaders);
+        return null;
+    }
+
+    private ShaderEXT[] CompileShaders(ShaderCreateInfoEXT[] createInfos, string[] names, ulong[] layouts)
+    {
         // Creation below can fault natively, which no catch intercepts, so a shader recorded as having taken the process
         // down is refused here. Cache hits and the compile pass stay unguarded.
-        if (!ShaderPrecompiler.IsCompilePass && ShaderCompileStats.ForDevice(this).ShouldSkipShader(name))
+        var refused = Array.Find(names, name =>
+            !ShaderPrecompiler.IsCompilePass && ShaderCompileStats.ForDevice(this).ShouldSkipShader(name));
+        if (refused != null)
         {
             // Refusing is not giving up - a child can try it while this process keeps drawing.
-            ShaderPrecompiler.TryCompileInBackground(this, name);
+            ShaderPrecompiler.TryCompileInBackground(this, refused);
 
             throw new InvalidOperationException(
-                $"Shader '{name}' is not compiled: building it took the process down before. " +
+                $"Shader '{refused}' is not compiled: building it took the process down before. " +
                 "See compile-stats.xml beside the shader cache.");
         }
 
         // Recorded before creation, so a native fault still leaves the shader's name behind.
-        ShaderPrecompiler.NoteShaderInFlight(name);
+        ShaderPrecompiler.NoteShaderInFlight(names[0]);
 
-        LogicalDevice.CreateShadersEXT(1, shaderCreateInfo, null, out var shaderObject);
-        ShaderBinaryCache.Save(this, shaderCreateInfo, name, layout, shaderObject[0]);
-        return shaderObject[0];
+        var result = LogicalDevice.CreateShadersEXT((uint)createInfos.Length, createInfos, null, out var shaders);
+        if (result != Result.Success)
+        {
+            DestroyShaders(shaders);
+            ResultHelper.CheckResult(result, nameof(LogicalDevice.CreateShadersEXT));
+        }
+
+        for (var i = 0; i < shaders.Length; i++)
+        {
+            ShaderBinaryCache.Save(this, createInfos[i], names[i], layouts[i], shaders[i]);
+        }
+
+        return shaders;
+    }
+
+    private void DestroyShaders(ShaderEXT[] shaders)
+    {
+        foreach (var shader in shaders)
+        {
+            if (shader != null)
+                DestroyShader(shader);
+        }
     }
 
     public void DestroyShader(ShaderEXT shaderObject)
