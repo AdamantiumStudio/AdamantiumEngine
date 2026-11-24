@@ -42,18 +42,23 @@ public class TransformService : EntityService
     }
 
     // Each scene a visible output shows, for the cameras of the outputs showing it; a scene nobody sees waits.
-    public override void Update(AppTime appTime)
+    public override void Update(AppTime appTime) => UpdateShownScenes(appTime, animates: true);
+
+    // What the game moved since the last frame placed where it is now, no animation stepped.
+    public override void UpdateAtBreakpoint() => UpdateShownScenes(default, animates: false);
+
+    private void UpdateShownScenes(AppTime appTime, bool animates)
     {
         universe.CollectShownScenes(shownScenes);
         foreach (var scene in shownScenes)
         {
-            UpdateScene(scene, appTime);
+            UpdateScene(scene, appTime, animates);
         }
 
         shownScenes.Clear();
     }
 
-    private void UpdateScene(Scene scene, AppTime appTime)
+    private void UpdateScene(Scene scene, AppTime appTime, bool animates)
     {
         try
         {
@@ -64,7 +69,7 @@ public class TransformService : EntityService
             index.BeginFrame();
             foreach (var entity in scene.RootEntities)
             {
-                Transform(entity, appTime);
+                Transform(entity, appTime, animates);
             }
 
             IndexSkins();
@@ -82,7 +87,7 @@ public class TransformService : EntityService
         }
     }
         
-    private void Transform(Entity entity, AppTime appTime)
+    private void Transform(Entity entity, AppTime appTime, bool animates)
     {
         entity.TraverseInDepth(current =>
         {
@@ -163,7 +168,10 @@ public class TransformService : EntityService
                 }
             }
 
-            current.GetComponent<AnimationComponent>()?.Update(appTime);
+            if (animates)
+            {
+                current.GetComponent<AnimationComponent>()?.Update(appTime);
+            }
         });
     }
 

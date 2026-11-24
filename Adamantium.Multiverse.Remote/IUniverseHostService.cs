@@ -1,12 +1,11 @@
 using Adamantium.Multiverse.Input;
-using StreamJsonRpc;
 
 namespace Adamantium.Multiverse.Remote;
 
 /// <summary>What a universe host serves its viewer: the game launched, its frames paced, the user's input and size
-/// given, the scene and the frame read back, the universe stopped. Methods that return nothing are not waited for.</summary>
-[JsonRpcContract]
-public partial interface IUniverseHostService
+/// given, the scene and the frame read back, the universe stopped. Methods that return nothing are not waited for; a
+/// call that fails in the host throws <see cref="UniverseHostException"/> with its reason.</summary>
+public interface IUniverseHostService
 {
     /// <summary>Loads and starts the game; done once it plays. A scene or code it cannot load fails it, with the reason;
     /// a stop before it plays cancels it. Once the universe stopped, or the launch failed, the viewer lets go of the
@@ -23,6 +22,17 @@ public partial interface IUniverseHostService
     /// <summary>The viewer asks for surfaces of the same size it has not imported yet - the ones it has were imported
     /// by a view it left - and is shown them as any new surface.</summary>
     void AskNewSurface();
+
+    /// <summary>Draws the world as it is, at once, with no step of the game: for a game a debugger holds, whose own
+    /// thread cannot draw - at each stop, its view to show the game there. Nothing for a game not launched debugged
+    /// (<see cref="UniverseLaunch.IsDebugged"/>). <paramref name="atBreakpointOrStep"/>: held between two statements of
+    /// the game's code - what it moved so far is drawn where it is; paused anywhere, maybe halfway through changing the
+    /// world, it is drawn as the last frame placed it.</summary>
+    void DrawAtBreakpoint(bool atBreakpointOrStep);
+
+    /// <summary>The game is about to be let go on from a stop: it draws where it stands no more; done once that drawing
+    /// is over, so it never meets a step of the game.</summary>
+    Task GoOnAsync(CancellationToken cancellationToken);
 
     /// <summary>Puts the pointer at <paramref name="x"/>, <paramref name="y"/> in the surface's pixels;
     /// <paramref name="isOver"/> says whether it is over the view.</summary>

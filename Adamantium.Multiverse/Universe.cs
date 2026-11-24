@@ -59,6 +59,9 @@ public class Universe : IUniverse
 
     private Thread hostedLoop;
     private readonly object hostedFrameGate = new();
+    // Held by the loop while it readies the outputs and while it draws: a drawing where it stands goes only while the
+    // loop is held elsewhere - in the game's step - never beside the loop's own drawing, nor its GPU calls.
+    private readonly Lock drawing = new();
     private int hostedLoopHolds;
     private volatile FrameMode frameMode;
     private volatile bool isPaused;
@@ -371,9 +374,13 @@ public class Universe : IUniverse
 
         StartFrame(true);
         UpdateAppTime(MeasureFrameTime());
-        MakePreparations();
+        lock (drawing)
+            MakePreparations();
+
         Update(SimulationTime());
-        ExecuteDrawSequence2(appTime);
+        lock (drawing)
+            ExecuteDrawSequence2(appTime);
+
         FrameFinished?.Invoke(this, EventArgs.Empty);
     }
 
@@ -546,10 +553,17 @@ public class Universe : IUniverse
         StartFrame(false);
         WaitUntilShown();
         UpdateAppTime(MeasureFrameTime());
-        MakePreparations();
+        lock (drawing)
+            MakePreparations();
+
         Update(SimulationTime());
-        var drawn = ExecuteDrawSequence2(appTime);
-        EndScene();
+        bool drawn;
+        lock (drawing)
+        {
+            drawn = ExecuteDrawSequence2(appTime);
+            EndScene();
+        }
+
         FrameFinished?.Invoke(this, EventArgs.Empty);
         return drawn;
     }
@@ -922,9 +936,13 @@ public class Universe : IUniverse
     {
         StartFrame(true);
         UpdateAppTime(TakeAccumulatedFrameTime());
-        MakePreparations();
+        lock (drawing)
+            MakePreparations();
+
         Update(SimulationTime());
-        ExecuteDrawSequence(appTime);
+        lock (drawing)
+            ExecuteDrawSequence(appTime);
+
         FrameFinished?.Invoke(this, EventArgs.Empty);
     }
 
@@ -1076,6 +1094,54 @@ public class Universe : IUniverse
         }
 
         EntityWorld.ServiceManager.Update(time);
+    }
+
+    /// <summary>Draws every output once, the world as it stands - no step of the game, no action posted, no end of a
+    /// frame: for a universe whose own thread is held where it stands, by a debugger, called on another thread that is
+    /// let run meanwhile. A size asked for since is taken first, as a frame's start takes it; a surface asked for, as the
+    /// drawing does. Nothing - the outputs keep their last frame - while the loop readies the outputs or draws, held
+    /// there or in a GPU call: whether anything was drawn. <paramref name="atBreakpointOrStep"/>: held at a statement of
+    /// the game's code - what it moved since the last frame is drawn where it is
+    /// (<see cref="EntityServiceManager.UpdateAtBreakpoint"/>); paused anywhere, it is drawn as the last frame placed it.
+    /// </summary>
+    public bool DrawAtBreakpoint(bool atBreakpointOrStep)
+    {
+        if (!drawing.TryEnter())
+        {
+            return false;
+        }
+
+        try
+        {
+            MakePreparations();
+            // Held in its first frame, no service draws yet: the one the output that came in it brought is put in now.
+            if (!EntityWorld.ServiceManager.HasActiveRenderingService)
+                EntityWorld.ServiceManager.TakeInRenderingServices();
+            // What the game moved since the last frame - a breakpoint in the loop that moves it - is drawn where it is.
+            if (atBreakpointOrStep)
+                EntityWorld.ServiceManager.UpdateAtBreakpoint();
+            foreach (var output in platform.Outputs)
+            {
+                output.IsDrawnThisFrame = true;
+            }
+
+            if (!platform.HasOutputs || !BeginScene())
+            {
+                return false;
+            }
+
+            var drawn = Draw(appTime);
+            foreach (var output in platform.Outputs)
+            {
+                output.DisplayContent();
+            }
+
+            return drawn;
+        }
+        finally
+        {
+            drawing.Exit();
+        }
     }
 
     /// <summary>

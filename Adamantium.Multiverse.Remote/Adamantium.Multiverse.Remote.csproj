@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
-	<!-- A universe shown in another process: the service a universe host serves and its viewer calls, over a pipe, with
-	     StreamJsonRpc. Apart from Adamantium.Multiverse, so what uses a universe in its own process takes none of it. -->
+	<!-- A universe shown in another process: the service a universe host serves and its viewer calls, over pipes, in
+	     MessagePack, on threads of the link's own. Apart from Adamantium.Multiverse, so what uses a universe in its own
+	     process takes none of it. -->
 	<PropertyGroup>
 		<TargetFramework>net11.0</TargetFramework>
 		<Platforms>AnyCPU</Platforms>
@@ -12,9 +13,6 @@
 		<IsPackable>true</IsPackable>
 		<Description>A universe of the Adamantium engine shown in another process: the host's service, its viewer's callbacks and the connection between them.</Description>
 		<PackageTags>adamantium;engine;remote;rpc</PackageTags>
-		<!-- StreamJsonRpc0008 asks for PolyType shapes, which only the Nerdbank.MessagePack formatter reads; the
-		     connection uses MessagePackFormatter, between processes of one desktop machine. -->
-		<NoWarn>$(NoWarn);StreamJsonRpc0008</NoWarn>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -22,7 +20,7 @@
 	</ItemGroup>
 
 	<ItemGroup>
-		<PackageReference Include="StreamJsonRpc" Version="2.26.150" />
+		<PackageReference Include="MessagePack" Version="3.1.12" />
 	</ItemGroup>
 
 </Project>

@@ -1,10 +1,7 @@
-using StreamJsonRpc;
-
 namespace Adamantium.Multiverse.Remote;
 
 /// <summary>What a universe host tells its viewer, not waiting for it.</summary>
-[JsonRpcContract]
-public partial interface IUniverseViewer
+public interface IUniverseViewer
 {
     /// <summary>Told first, before any surface: the host's process and the GPU it draws on, which the viewer's must be to
     /// take its surfaces.</summary>

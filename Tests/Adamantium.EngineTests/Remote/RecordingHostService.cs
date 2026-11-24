@@ -31,6 +31,14 @@ public class RecordingHostService : IUniverseHostService
 
     public void AskNewSurface() => Calls.Add("AskNewSurface");
 
+    public void DrawAtBreakpoint(bool atBreakpointOrStep) => Calls.Add($"DrawAtBreakpoint {atBreakpointOrStep}");
+
+    public Task GoOnAsync(CancellationToken cancellationToken)
+    {
+        Calls.Add("GoOn");
+        return Task.CompletedTask;
+    }
+
     public void MovePointer(float x, float y, bool isOver) =>
         Calls.Add(string.Create(CultureInfo.InvariantCulture, $"MovePointer {x},{y} {isOver}"));
 
@@ -46,7 +54,11 @@ public class RecordingHostService : IUniverseHostService
 
     public void TakeText(string text) => Calls.Add($"Text {text}");
 
-    public Task<string> CaptureSceneAsync(CancellationToken cancellationToken) => Task.FromResult("<Scene />");
+    /// <summary>Set, the scene is captured once it is done - or called off.</summary>
+    public TaskCompletionSource<string> HeldScene { get; set; }
+
+    public Task<string> CaptureSceneAsync(CancellationToken cancellationToken) =>
+        HeldScene?.Task.WaitAsync(cancellationToken) ?? Task.FromResult("<Scene />");
 
     public Task<byte[]> CaptureFrameAsync(CancellationToken cancellationToken) => Task.FromResult(new byte[] { 1, 2, 3 });
 
