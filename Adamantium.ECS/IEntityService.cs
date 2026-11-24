@@ -33,7 +33,12 @@ public interface IEntityService : IUpdateService, IRenderService
 
     /// <summary>Called on every service, active or not, once the frame is presented.</summary>
     void FrameEnded();
-    
+
+    /// <summary>At a debugger's stop, before the world is drawn where it stands: brings what the drawing reads up to date
+    /// with what the game changed so far - no time goes by, nothing steps. Called on another thread, the game's own held;
+    /// of the engine's services only, never a game's.</summary>
+    void UpdateWhereItStands();
+
     IReadOnlyList<IEntityProcessor> Processors { get; }
 
     void AttachProcessor(IEntityProcessor processor);

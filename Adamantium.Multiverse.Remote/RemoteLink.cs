@@ -229,7 +229,7 @@ internal sealed class RemoteLink : IDisposable
                 }
                 catch (MessagePackSerializationException unreadable)
                 {
-                    answered.Break(unreadable);
+                    answered.Break(new UniverseHostException("The universe host's answer could not be read.", unreadable));
                 }
 
                 return;

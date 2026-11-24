@@ -182,6 +182,18 @@ public class InputService : EntityService
         UpdateIdleCameras(appTime);
     }
 
+    // At a debugger's stop: the cameras take a size given and a move the game made meanwhile - no time goes by.
+    public override void UpdateWhereItStands()
+    {
+        var cameras = observatory.CurrentCameras;
+        for (int i = 0; i < cameras.Count; i++)
+        {
+            cameras[i].Update(default);
+        }
+
+        UpdateIdleCameras(default);
+    }
+
     // The cameras of the scenes shown that no output looks through - one travelling to its subject, say.
     private void FollowSteering(AppTime appTime)
     {

@@ -74,9 +74,11 @@ public class UniverseConnectionTests
         });
         host.TakeGestureInput(new GestureInput { Translation = new Vector2<float>(1, 2), Scale = 1.25f, Rotation = 0.5f });
         host.TakeText("привет");
+        host.DrawWhereItStands(true);
+        host.DrawWhereItStands(false);
         await host.StopAsync(CancellationToken.None);
 
-        Assert.That(Take(_service.Calls, 11), Is.EqualTo((string[])
+        Assert.That(Take(_service.Calls, 13), Is.EqualTo((string[])
         [
             "Launch .tmp",
             "Resize 640x360 at 1.5",
@@ -88,6 +90,8 @@ public class UniverseConnectionTests
             "Mouse None Wheel -120 0 5,6",
             "Gesture 1,2 1.25 0.5",
             "Text привет",
+            "DrawWhereItStands True",
+            "DrawWhereItStands False",
             "Stop"
         ]));
         Assert.Multiple(async () =>

@@ -45,6 +45,8 @@ namespace Adamantium.ECS
         // The per-frame phases iterate this snapshot without a lock: a lock held through Draw made the loop wait out the
         // whole GPU frame. Republished in SyncServices, ordered by Priority (stable, so equal priorities keep their order).
         private volatile IEntityService[] _snapshot = [];
+        // The service being updated: read by a drawing at a debugger's stop, the world's thread held - maybe inside it.
+        private volatile IEntityService _updating;
 
         private void RepublishSnapshot() => _snapshot = services.OrderBy(s => s.Priority).ToArray();
 
@@ -155,6 +157,7 @@ namespace Adamantium.ECS
                 if (!handler.IsActive)
                     continue;
 
+                _updating = handler;
                 try
                 {
                     handler.Update(appTime);
@@ -164,6 +167,37 @@ namespace Adamantium.ECS
                     Log.Logger.Error(exception, "The service {Service} failed to update and is put to sleep",
                         handler.GetType().FullName);
                     handler.IsActive = false;
+                }
+                finally
+                {
+                    _updating = null;
+                }
+            }
+        }
+
+        /// <summary>Brings what each active service of the engine's draws from up to date with the world where the game
+        /// stands - at a debugger's stop, before it is drawn there, on another thread, the world's own held. Only while it
+        /// is held inside a game service's update, where breakpoints are: anywhere else the engine may be halfway through
+        /// changing the world, and nothing is touched. The game's own services are left as they are - their code would run
+        /// where no breakpoint stops it. One that fails leaves the others to it.</summary>
+        public void UpdateWhereItStands()
+        {
+            if (_updating is not IGameService)
+                return;
+
+            foreach (var handler in _snapshot)
+            {
+                if (!handler.IsActive || handler is IGameService)
+                    continue;
+
+                try
+                {
+                    handler.UpdateWhereItStands();
+                }
+                catch (Exception exception)
+                {
+                    Log.Logger.Error(exception, "The service {Service} failed to bring the world where it stands up to date",
+                        handler.GetType().FullName);
                 }
             }
         }

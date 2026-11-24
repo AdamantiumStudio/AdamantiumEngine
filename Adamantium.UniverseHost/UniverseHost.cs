@@ -135,19 +135,22 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
     }
 
     // Asked at a stop: the game stands from now until it is let go on (GoOnAsync).
-    public void DrawWhereItStands()
+    public void DrawWhereItStands(bool heldAtAStatement)
     {
         _standing = true;
-        _drawing?.Ask();
+        if (_drawing != null)
+        {
+            _drawing.PlacesWhatMoved = heldAtAStatement;
+            _drawing.Ask();
+        }
     }
 
-    // Answered on the link's own thread, the pool held: done once the drawing waits, so it never meets a step of the
-    // game the debugger is about to let go on.
+    // Done once the drawing waits, so it never meets a step of the game the debugger is about to let go on; answered on
+    // the drawing's own thread, the pool held, the link reading on meanwhile.
     public Task GoOnAsync(CancellationToken cancellationToken)
     {
         _standing = false;
-        _drawing?.WaitTillItWaits(cancellationToken);
-        return Task.CompletedTask;
+        return _drawing?.WaitTillItWaitsAsync(cancellationToken) ?? Task.CompletedTask;
     }
 
     private void DrawIfStanding()
