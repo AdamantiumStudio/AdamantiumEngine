@@ -335,6 +335,83 @@ public class PdfIncrementalUpdateTests
             "re-encrypted with the key of its new number");
     }
 
+    // A stream of the file given a picture inside it is copied to write the picture apart; the copy is still the
+    // file's encrypted bytes, decrypted once and encrypted with its new number.
+    [TestCase(3)]
+    [TestCase(6)]
+    public void AnEncryptedFilesStream_GivenAPicture_IsNotEncryptedTwice(int revision)
+    {
+        var encryption = new PdfTestEncryption(revision, "user", "owner");
+        var builder = new PdfFileBuilder();
+        builder.Add("<< /Type /Catalog /Pages 2 0 R >>");
+        builder.Add("<< /Type /Pages /Kids [3 0 R] /Count 1 >>");
+        builder.Add("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 600 800] /Contents 4 0 R >>");
+        builder.Add(PdfFileBuilder.Stream(string.Empty, encryption.Encrypt(4, Encoding.ASCII.GetBytes("0 0 m S"))));
+        builder.Add(encryption.Dictionary);
+        var document = PdfDocument.Open(builder.Build("/Root 1 0 R /Encrypt 5 0 R /ID " + encryption.IdArray));
+        document.Authenticate("user");
+        var update = new PdfIncrementalUpdate(document);
+        var contents = (PdfStream)document.Resolve(document.Pages[0].Dictionary["Contents"]);
+        contents.Dictionary.Set("Picture", PdfImages.FromRgba(1, 1, [1, 2, 3, 255]));
+
+        var added = update.Add(contents);
+        var reopened = PdfDocument.Open(update.Write());
+        reopened.Authenticate("user");
+
+        Assert.That(reopened.Decode((PdfStream)reopened.Resolve(added)).Data.ToArray(),
+            Is.EqualTo(Encoding.ASCII.GetBytes("0 0 m S")));
+    }
+
+    // One picture in two appearances is one object of the update.
+    [Test]
+    public void APictureInTwoAppearances_IsWrittenOnce()
+    {
+        var document = PdfDocument.Open(Pages().Build("/Root 1 0 R"));
+        var update = new PdfIncrementalUpdate(document);
+        var picture = PdfImages.FromRgba(1, 1, [1, 2, 3, 255]);
+        PdfNewAnnotation Stamp(string name) =>
+            new(PdfAnnotationTypes.Square, new PdfRectangle(0, 0, 10, 10))
+            {
+                Name = name,
+                Appearance = new PdfContentBuilder().Draw(picture).ToFormXObject(new PdfRectangle(0, 0, 10, 10)),
+            };
+
+        update.AddAnnotation(document.Pages[0], Stamp("a"));
+        update.AddAnnotation(document.Pages[0], Stamp("b"));
+        var reopened = PdfDocument.Open(update.Write());
+
+        var pictures = reopened.Pages[0].Annotations.Select(annotation =>
+        {
+            var appearance = (PdfStream)reopened.Resolve(((PdfDictionary)reopened.Resolve(annotation.Dictionary["AP"]))["N"]);
+            var resources = (PdfDictionary)reopened.Resolve(appearance.Dictionary["Resources"]);
+            return ((PdfReference)((PdfDictionary)resources["XObject"])["Im0"]).Id;
+        }).Distinct();
+        Assert.That(pictures.Count(), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void AReplacedObjectHoldingAStream_WritesTheStreamApart()
+    {
+        var document = PdfDocument.Open(Pages().Build("/Root 1 0 R"));
+        var update = new PdfIncrementalUpdate(document);
+        var page = document.Pages[0];
+        var resources = new PdfDictionary();
+        var pictures = new PdfDictionary();
+        pictures.Set("Im0", PdfImages.FromRgba(1, 1, [1, 2, 3, 255]));
+        resources.Set("XObject", pictures);
+        var changed = new PdfDictionary();
+        foreach (var (key, value) in page.Dictionary)
+        {
+            changed.Set(key, value);
+        }
+
+        changed.Set("Resources", resources);
+        update.Replace(page.Id!.Value, changed);
+        var reopened = PdfDocument.Open(update.Write());
+
+        Assert.That(((PdfDictionary)reopened.Pages[0].Resources["XObject"])["Im0"], Is.TypeOf<PdfReference>());
+    }
+
     [Test]
     public void AHugeDeclaredSizeDoesNotLeadNumbersPastTheLimit()
     {

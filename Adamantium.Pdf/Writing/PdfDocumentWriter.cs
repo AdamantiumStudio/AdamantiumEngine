@@ -21,6 +21,7 @@ public sealed class PdfDocumentWriter
     private readonly List<long> _offsets = [-1, -1, -1];
     private readonly List<PdfReference> _pages = [];
     private readonly Dictionary<PdfStream, PdfReference> _streams = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<PdfStream> _lifting = new(ReferenceEqualityComparer.Instance);
     private bool _finished;
 
     /// <summary>A writer of a new document into <paramref name="output"/>, which it does not close.</summary>
@@ -50,7 +51,8 @@ public sealed class PdfDocumentWriter
     public int PageCount => _pages.Count;
 
     /// <summary>Writes <paramref name="value"/> as a new indirect object, and the streams inside it as their own; a
-    /// stream written before is not written again.</summary>
+    /// stream written before is not written again. Streams read from a file are refused: their references point into
+    /// that file.</summary>
     public PdfReference Add(PdfObject value)
     {
         ArgumentNullException.ThrowIfNull(value);
@@ -156,14 +158,13 @@ public sealed class PdfDocumentWriter
 
     private PdfReference AddStream(PdfStream stream)
     {
-        if (_streams.TryGetValue(stream, out var written))
+        if (stream.Id != default)
         {
-            return written;
+            throw new PdfException("A stream read from a file cannot be written into a new one: what it refers to, " +
+                                   "and how its bytes are encrypted, are that file's.");
         }
 
-        var reference = Write(PdfIndirection.Lift(stream, AddStream));
-        _streams[stream] = reference;
-        return reference;
+        return PdfIndirection.Once(stream, _streams, _lifting, own => Write(PdfIndirection.Lift(own, AddStream)));
     }
 
     private PdfReference Write(PdfObject value)

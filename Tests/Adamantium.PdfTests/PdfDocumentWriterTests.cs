@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text;
+using Adamantium.Pdf;
 using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Graphics;
 using Adamantium.Pdf.Images;
@@ -185,6 +186,84 @@ public class PdfDocumentWriterTests
         var written = (PdfStream)new PdfResources(document.Pages[0].Resources, document).Shading("Sh0");
         Assert.That(((PdfInteger)written.Dictionary["ShadingType"]).Value, Is.EqualTo(4));
         Assert.That(document.Decode(written).Data.Length, Is.EqualTo(3 * (1 + 4 + 4 + 6)));
+    }
+
+    // Two stops at one offset are a hard edge: it stays the way round it was drawn, whatever order the rest come in.
+    [Test]
+    public void AHardEdge_KeepsItsColorsTheWayRoundTheyWereGiven()
+    {
+        var axial = PdfShadings.Axial(0, 0, 1, 0,
+        [
+            new PdfGradientStop(0.5, 1, 0, 0), new PdfGradientStop(0.5, 0, 0, 1), new PdfGradientStop(0.2, 1, 1, 1),
+        ]);
+
+        var ramps = ((PdfArray)((PdfDictionary)axial["Function"])[PdfKeys.Functions]).Cast<PdfDictionary>().ToList();
+        double First(PdfDictionary ramp, string key) => ((PdfReal)((PdfArray)ramp[key])[0]).Value;
+        double Third(PdfDictionary ramp, string key) => ((PdfReal)((PdfArray)ramp[key])[2]).Value;
+        Assert.Multiple(() =>
+        {
+            Assert.That(First(ramps[1], PdfKeys.C1), Is.EqualTo(1), "white runs into red");
+            Assert.That(Third(ramps[1], PdfKeys.C1), Is.EqualTo(0));
+            Assert.That(First(ramps[2], PdfKeys.C0), Is.EqualTo(1), "the edge goes from red...");
+            Assert.That(Third(ramps[2], PdfKeys.C1), Is.EqualTo(1), "...to blue");
+            Assert.That(Third(ramps[3], PdfKeys.C0), Is.EqualTo(1), "blue carries on");
+        });
+    }
+
+    // What a stream read from a file refers to are that file's objects; written into a new file it would point at
+    // whatever has those numbers there.
+    [Test]
+    public void AStreamReadFromAFile_IsRefused()
+    {
+        var first = PdfDocument.Open(Write(writer =>
+            writer.AddPage(A4, new PdfContentBuilder().Draw(PdfImages.FromRgba(1, 1, [1, 2, 3, 4])))));
+        var read = new PdfResources(first.Pages[0].Resources, first).XObject("Im0");
+
+        using var output = new MemoryStream();
+        var writer = new PdfDocumentWriter(output);
+        Assert.Throws<PdfException>(() => writer.AddPage(A4, new PdfContentBuilder().Draw(read)));
+    }
+
+    [Test]
+    public void ASoftMask_IsATransparencyGroup_AndOneReadByLuminosityNamesItsSpace()
+    {
+        var plain = new PdfContentBuilder().ToFormXObject(new PdfRectangle(0, 0, 1, 1));
+        var spaceless = new PdfContentBuilder().ToFormXObject(new PdfRectangle(0, 0, 1, 1),
+            new PdfTransparencyGroup(null));
+
+        Assert.Throws<ArgumentException>(() => new PdfContentBuilder().SoftMask(plain, false));
+        Assert.Throws<ArgumentException>(() => new PdfContentBuilder().SoftMask(spaceless, true));
+        Assert.DoesNotThrow(() => new PdfContentBuilder().SoftMask(spaceless, false), "an alpha mask needs no space");
+    }
+
+    // A stream that holds itself has no end: refused with an error, not a stack overflow.
+    [Test]
+    public void AStreamHoldingItself_IsRefused()
+    {
+        var form = new PdfContentBuilder().ToFormXObject(new PdfRectangle(0, 0, 1, 1));
+        var self = new PdfDictionary();
+        self.Set("Fm0", form);
+        ((PdfDictionary)form.Dictionary[PdfKeys.Resources]).Set(PdfKeys.XObject, self);
+
+        using var output = new MemoryStream();
+        Assert.Throws<PdfException>(() => new PdfDocumentWriter(output).AddPage(A4, new PdfContentBuilder().Draw(form)));
+    }
+
+    [Test]
+    public void TrianglesAtNoPlace_AreRefused()
+    {
+        Assert.Throws<ArgumentException>(() => PdfShadings.Triangles(
+        [
+            new PdfShadedVertex(0, 0, 1, 0, 0), new PdfShadedVertex(double.NaN, 0, 0, 1, 0),
+            new PdfShadedVertex(0, 100, 0, 0, 1),
+        ]));
+    }
+
+    [Test]
+    public void APictureOfNoPixels_NamesTheSideThatHasNone()
+    {
+        var error = Assert.Throws<ArgumentOutOfRangeException>(() => PdfImages.FromRgba(10, 0, new byte[40]));
+        Assert.That(error.ParamName, Is.EqualTo("height"));
     }
 
     [Test]

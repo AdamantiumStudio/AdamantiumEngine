@@ -18,12 +18,44 @@ internal static class PdfIndirection
         return value is PdfStream stream ? LiftStream(stream, add) : Inner(value, add, 0);
     }
 
+    /// <summary>The reference to <paramref name="stream"/>, written by <paramref name="write"/> unless
+    /// <paramref name="written"/> has it - once, however many objects hold it. A stream that holds itself, directly or
+    /// through others, is refused: it has no end to write.</summary>
+    public static PdfReference Once(PdfStream stream, Dictionary<PdfStream, PdfReference> written,
+        HashSet<PdfStream> lifting, Func<PdfStream, PdfReference> write)
+    {
+        if (written.TryGetValue(stream, out var reference))
+        {
+            return reference;
+        }
+
+        if (!lifting.Add(stream))
+        {
+            throw new PdfException("A stream to write holds itself; it has no end to write.");
+        }
+
+        try
+        {
+            reference = write(stream);
+        }
+        finally
+        {
+            lifting.Remove(stream);
+        }
+
+        written[stream] = reference;
+        return reference;
+    }
+
     private const int MaxDepth = 256;
 
     private static PdfStream LiftStream(PdfStream stream, Func<PdfStream, PdfReference> add)
     {
         var dictionary = (PdfDictionary)Inner(stream.Dictionary, add, 0);
-        return ReferenceEquals(dictionary, stream.Dictionary) ? stream : new PdfStream(dictionary, stream.Data);
+        // The copy keeps the number it was read as: a file's encrypted bytes are told by it.
+        return ReferenceEquals(dictionary, stream.Dictionary)
+            ? stream
+            : new PdfStream(dictionary, stream.Data) { Id = stream.Id };
     }
 
     private static PdfObject Inner(PdfObject value, Func<PdfStream, PdfReference> add, int depth)

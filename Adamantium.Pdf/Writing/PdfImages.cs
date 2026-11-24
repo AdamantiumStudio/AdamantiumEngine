@@ -16,9 +16,14 @@ public static class PdfImages
     /// row from the top. <paramref name="interpolate"/> asks a reader to smooth it when it is enlarged.</summary>
     public static PdfStream FromRgba(int width, int height, ReadOnlySpan<byte> rgba, bool interpolate = true)
     {
-        if (width <= 0 || height <= 0)
+        if (width <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(width), "A picture has pixels.");
+            throw new ArgumentOutOfRangeException(nameof(width), "A picture is a pixel wide at least.");
+        }
+
+        if (height <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(height), "A picture is a pixel high at least.");
         }
 
         var pixels = (long)width * height;

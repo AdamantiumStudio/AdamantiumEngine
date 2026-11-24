@@ -106,6 +106,19 @@ public sealed class PdfContentBuilder
     public PdfContentBuilder SoftMask(PdfStream group, bool luminosity)
     {
         ArgumentNullException.ThrowIfNull(group);
+        if (group.Dictionary[PdfGraphicsKeys.FormGroup] is not PdfDictionary attributes ||
+            attributes[PdfGraphicsKeys.Kind] is not PdfName { Value: PdfGraphicsKeys.Transparency })
+        {
+            throw new ArgumentException("A soft mask is a transparency group form (ISO 32000-2, 11.6.5.2).",
+                nameof(group));
+        }
+
+        if (luminosity && attributes[PdfGraphicsKeys.ColorSpace] == null)
+        {
+            throw new ArgumentException("A mask read by luminosity names the space its group is blended in.",
+                nameof(group));
+        }
+
         if (!_masks.TryGetValue((group, luminosity), out var name))
         {
             name = "SM" + _masks.Count;

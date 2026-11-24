@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using System.Linq;
 using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Filters;
 using Adamantium.Pdf.Objects;
@@ -50,6 +51,11 @@ public static class PdfShadings
         double bottom = double.PositiveInfinity, top = double.NegativeInfinity;
         for (var index = 0; index < count; index++)
         {
+            if (!double.IsFinite(vertices[index].X) || !double.IsFinite(vertices[index].Y))
+            {
+                throw new ArgumentException($"Corner {index} is not at a finite place.", nameof(vertices));
+            }
+
             left = Math.Min(left, vertices[index].X);
             right = Math.Max(right, vertices[index].X);
             bottom = Math.Min(bottom, vertices[index].Y);
@@ -118,7 +124,8 @@ public static class PdfShadings
         return shading;
     }
 
-    /// <summary>The stops by offset, each in 0..1, with the end colors at 0 and at 1.</summary>
+    /// <summary>The stops by offset, each in 0..1, with the end colors at 0 and at 1; stops at one offset keep the
+    /// order they were given in - a hard edge stays the way round it was drawn.</summary>
     private static List<PdfGradientStop> Ordered(IReadOnlyList<PdfGradientStop> stops)
     {
         var ordered = new List<PdfGradientStop>(stops.Count + 2);
@@ -127,7 +134,10 @@ public static class PdfShadings
             ordered.Add(stop with { Offset = Unit(stop.Offset) });
         }
 
-        ordered.Sort((one, other) => one.Offset.CompareTo(other.Offset));
+        var stable = ordered.Select((stop, index) => new { Stop = stop, Index = index })
+            .OrderBy(entry => entry.Stop.Offset).ThenBy(entry => entry.Index).Select(entry => entry.Stop).ToList();
+        ordered.Clear();
+        ordered.AddRange(stable);
         if (ordered[0].Offset > 0)
         {
             ordered.Insert(0, ordered[0] with { Offset = 0 });

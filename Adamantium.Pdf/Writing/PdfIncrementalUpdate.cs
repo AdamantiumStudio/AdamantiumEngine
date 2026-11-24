@@ -24,6 +24,8 @@ public sealed class PdfIncrementalUpdate
     private readonly Dictionary<int, PdfArray> _annotationArrays = [];
     private readonly Dictionary<int, PdfArray> _sharedAnnotationArrays = [];
     private readonly Dictionary<int, PdfDictionary> _pages = [];
+    private readonly Dictionary<PdfStream, PdfReference> _inner = new(ReferenceEqualityComparer.Instance);
+    private readonly HashSet<PdfStream> _lifting = new(ReferenceEqualityComparer.Instance);
     private int _next;
 
     public PdfIncrementalUpdate(PdfDocument document)
@@ -49,11 +51,12 @@ public sealed class PdfIncrementalUpdate
     public bool HasChanges => _written.Count > 0 || _freed.Count > 0;
 
     /// <summary>Adds <paramref name="value"/> as a new indirect object, and the streams inside it - an appearance's
-    /// pictures and masks - as their own; returns the reference to it.</summary>
+    /// pictures and masks - as their own, each once however many objects of the update hold it; returns the reference
+    /// to it.</summary>
     public PdfReference Add(PdfObject value)
     {
         ArgumentNullException.ThrowIfNull(value);
-        value = PdfIndirection.Lift(value, Add);
+        value = PdfIndirection.Lift(value, Inner);
         if (_next >= MaxObjectNumber)
         {
             throw new PdfException("The file has as many objects as a file may have.");
@@ -64,11 +67,16 @@ public sealed class PdfIncrementalUpdate
         return new PdfReference(id);
     }
 
-    /// <summary>Writes <paramref name="value"/> in place of the object <paramref name="id"/>.</summary>
+    /// <summary>A stream inside an object added or replaced: written as its own object, once.</summary>
+    private PdfReference Inner(PdfStream stream) => PdfIndirection.Once(stream, _inner, _lifting, Add);
+
+    /// <summary>Writes <paramref name="value"/> in place of the object <paramref name="id"/>, the streams inside it as
+    /// their own.</summary>
     public void Replace(PdfObjectId id, PdfObject value)
     {
         ArgumentNullException.ThrowIfNull(value);
         Check(id);
+        value = PdfIndirection.Lift(value, Inner);
         _freed.Remove(id.Number);
         _written[id.Number] = (id, value);
         _next = Math.Max(_next, id.Number + 1);
