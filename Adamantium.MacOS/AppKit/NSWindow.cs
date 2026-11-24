@@ -39,6 +39,14 @@ public static unsafe class NSWindow
     private static readonly IntPtr ScreenSelector = ObjCRuntime.RegisterSelector("screen");
     private static readonly IntPtr WindowNumberSelector = ObjCRuntime.RegisterSelector("windowNumber");
     private static readonly IntPtr MakeFirstResponderSelector = ObjCRuntime.RegisterSelector("makeFirstResponder:");
+    private static readonly IntPtr SetOpaqueSelector = ObjCRuntime.RegisterSelector("setOpaque:");
+    private static readonly IntPtr SetBackgroundColorSelector = ObjCRuntime.RegisterSelector("setBackgroundColor:");
+    private static readonly IntPtr SetIgnoresMouseEventsSelector = ObjCRuntime.RegisterSelector("setIgnoresMouseEvents:");
+    private static readonly IntPtr SetHasShadowSelector = ObjCRuntime.RegisterSelector("setHasShadow:");
+    private static readonly IntPtr SetLevelSelector = ObjCRuntime.RegisterSelector("setLevel:");
+
+    /// <summary>NSPopUpMenuWindowLevel: above the windows of every application, as a drag's image is.</summary>
+    public const nint PopUpMenuLevel = 101;
 
     /// <summary>A new window whose content is <paramref name="contentRect"/> in screen points, owned by the caller
     /// and kept after <see cref="Close"/> until released.</summary>
@@ -128,6 +136,23 @@ public static unsafe class NSWindow
 
     /// <summary>The window server's number for the window.</summary>
     public static nint NumberOf(IntPtr window) => NSObject.SendForInteger(window, WindowNumberSelector);
+
+    /// <summary>Makes the window see-through where nothing is drawn: not opaque, of no background color, without a
+    /// shadow.</summary>
+    public static void MakeTransparent(IntPtr window)
+    {
+        NSObject.Send(window, SetOpaqueSelector, false);
+        NSObject.Send(window, SetBackgroundColorSelector, NSColor.Clear);
+        NSObject.Send(window, SetHasShadowSelector, false);
+    }
+
+    /// <summary>Lets the mouse through the window to what is below it.</summary>
+    public static void SetIgnoresMouseEvents(IntPtr window, bool ignores) =>
+        NSObject.Send(window, SetIgnoresMouseEventsSelector, ignores);
+
+    /// <summary>Sets how high the window floats among others (NSWindowLevel).</summary>
+    public static void SetLevel(IntPtr window, nint level) =>
+        ((delegate* unmanaged<IntPtr, IntPtr, nint, void>)ObjCRuntime.MessageSend)(window, SetLevelSelector, level);
 
     /// <summary>Gives the keyboard to <paramref name="view"/>.</summary>
     public static void MakeFirstResponder(IntPtr window, IntPtr view) =>
