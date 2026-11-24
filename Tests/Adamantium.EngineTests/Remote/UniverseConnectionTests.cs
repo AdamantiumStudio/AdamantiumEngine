@@ -136,7 +136,8 @@ public class UniverseConnectionTests
     [Test]
     public void WithEveryPoolThreadBusy_TheConnectionStillCarries_BothWays()
     {
-        using var busy = new ManualResetEventSlim();
+        // Not disposed: work items queued behind the busy ones still wait on it after the test - set, they pass at once.
+        var busy = new ManualResetEventSlim();
         ThreadPool.GetMinThreads(out var minWorkers, out var minPorts);
         ThreadPool.GetMaxThreads(out var maxWorkers, out var maxPorts);
         var workers = Environment.ProcessorCount;
