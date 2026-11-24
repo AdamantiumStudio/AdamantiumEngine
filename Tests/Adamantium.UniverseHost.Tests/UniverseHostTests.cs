@@ -4,7 +4,6 @@ using Adamantium.Graphics.Core;
 using Adamantium.Imaging;
 using Adamantium.Multiverse.Remote;
 using NUnit.Framework;
-using StreamJsonRpc;
 
 namespace Adamantium.UniverseHost.Tests;
 
@@ -218,7 +217,7 @@ public class UniverseHostTests
     [Test]
     public void ALaunchThatCannotLoad_FailsWithTheReason()
     {
-        var failure = Assert.ThrowsAsync<RemoteInvocationException>(() => Launch("Missing.ascene", 160, 90));
+        var failure = Assert.ThrowsAsync<UniverseHostException>(() => Launch("Missing.ascene", 160, 90));
         _connection.Dispose();
 
         Assert.Multiple(() =>

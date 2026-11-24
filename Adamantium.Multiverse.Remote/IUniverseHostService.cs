@@ -1,12 +1,11 @@
 using Adamantium.Multiverse.Input;
-using StreamJsonRpc;
 
 namespace Adamantium.Multiverse.Remote;
 
 /// <summary>What a universe host serves its viewer: the game launched, its frames paced, the user's input and size
-/// given, the scene and the frame read back, the universe stopped. Methods that return nothing are not waited for.</summary>
-[JsonRpcContract]
-public partial interface IUniverseHostService
+/// given, the scene and the frame read back, the universe stopped. Methods that return nothing are not waited for; a
+/// call that fails in the host throws <see cref="UniverseHostException"/> with its reason.</summary>
+public interface IUniverseHostService
 {
     /// <summary>Loads and starts the game; done once it plays. A scene or code it cannot load fails it, with the reason;
     /// a stop before it plays cancels it. Once the universe stopped, or the launch failed, the viewer lets go of the
@@ -23,6 +22,11 @@ public partial interface IUniverseHostService
     /// <summary>The viewer asks for surfaces of the same size it has not imported yet - the ones it has were imported
     /// by a view it left - and is shown them as any new surface.</summary>
     void AskNewSurface();
+
+    /// <summary>Draws the world as it stands, at once, with no step of the game: for a game a debugger holds, whose own
+    /// thread cannot draw - at each stop, its view to show where it stands. Nothing for a game not launched debugged
+    /// (<see cref="UniverseLaunch.IsDebugged"/>).</summary>
+    void DrawWhereItStands();
 
     /// <summary>Puts the pointer at <paramref name="x"/>, <paramref name="y"/> in the surface's pixels;
     /// <paramref name="isOver"/> says whether it is over the view.</summary>

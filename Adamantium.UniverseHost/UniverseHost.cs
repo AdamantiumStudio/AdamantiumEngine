@@ -30,6 +30,7 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
     private RemoteUniverseOutput _output;
     private UniverseLaunch _launch;
     private GameRun _run;
+    private WhereItStandsDrawing _drawing;
     private volatile bool _stopAsked;
 
     /// <summary>The exit code: 0 once the game played until stopped, else 1 - the reason written to the error output.
@@ -114,11 +115,23 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
         return _launched.Task.WaitAsync(cancellationToken);
     }
 
-    public void Resize(uint width, uint height, float pixelsPerPoint) => _output?.ResizeTo(width, height, pixelsPerPoint);
+    // A size given or a surface asked for while a debugger holds the game is drawn where it stands; while it runs, the
+    // debugger holds the drawing's thread, and the game's next frame takes them.
+    public void Resize(uint width, uint height, float pixelsPerPoint)
+    {
+        _output?.ResizeTo(width, height, pixelsPerPoint);
+        _drawing?.Ask();
+    }
 
     public void AskFrame(ulong frame) => _output?.TakeFrameRequest();
 
-    public void AskNewSurface() => _output?.AskNewSurface();
+    public void AskNewSurface()
+    {
+        _output?.AskNewSurface();
+        _drawing?.Ask();
+    }
+
+    public void DrawWhereItStands() => _drawing?.Ask();
 
     public void MovePointer(float x, float y, bool isOver) => _output?.MovePointer(new Vector2F(x, y), isOver);
 
@@ -271,6 +284,9 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
             service.Project = physics;
 
         _run = GameRun.Start(world.MainScene);
+        if (_launch.IsDebugged)
+            _drawing = new WhereItStandsDrawing(_universe);
+
         _launched.TrySetResult();
     }
 
@@ -318,6 +334,8 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
 
     private void OnShuttingDown(object sender, EventArgs e)
     {
+        _drawing?.Dispose();
+        _drawing = null;
         _run?.Stop();
         _run = null;
         _connection.Viewer.EndUniverse();

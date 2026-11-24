@@ -10,7 +10,6 @@ using Adamantium.Multiverse.Input;
 using Adamantium.Multiverse.Remote;
 using Adamantium.Vulkan.Core;
 using NUnit.Framework;
-using StreamJsonRpc;
 
 namespace Adamantium.EngineTests.Remote;
 
@@ -101,7 +100,7 @@ public class UniverseConnectionTests
     [Test]
     public void ALaunchThatFails_FailsTheCaller_WithTheReason()
     {
-        var failure = Assert.ThrowsAsync<RemoteInvocationException>(() => _viewerEnd.Host.LaunchAsync(
+        var failure = Assert.ThrowsAsync<UniverseHostException>(() => _viewerEnd.Host.LaunchAsync(
             new UniverseLaunch { ScenePath = "Missing.ascene" }, CancellationToken.None));
         Assert.That(failure.Message, Does.Contain("Missing.ascene"));
     }
@@ -129,6 +128,56 @@ public class UniverseConnectionTests
             Assert.That(_viewer.LastSurface.HandleType, Is.EqualTo(SharedHandleType.OpaqueWin32));
             Assert.That(_viewer.LastSurface.Buffers[1], Is.EqualTo(new RemoteSurfaceBuffer(21, 4096, 22, 23)));
         });
+    }
+
+    // A host held by a debugger has its thread pool held too; only threads the debugger lets run go on. The connection
+    // hears and tells on threads of its own: with every pool thread busy, a size given still reaches the host, and a
+    // frame told still reaches the viewer.
+    [Test]
+    public void WithEveryPoolThreadBusy_TheConnectionStillCarries_BothWays()
+    {
+        using var busy = new ManualResetEventSlim();
+        ThreadPool.GetMinThreads(out var minWorkers, out var minPorts);
+        ThreadPool.GetMaxThreads(out var maxWorkers, out var maxPorts);
+        var workers = Environment.ProcessorCount;
+        try
+        {
+            ThreadPool.SetMinThreads(workers, minPorts);
+            ThreadPool.SetMaxThreads(workers, maxPorts);
+            for (var i = 0; i < workers * 4; i++)
+            {
+                ThreadPool.UnsafeQueueUserWorkItem(_ => busy.Wait(), null);
+            }
+
+            _viewerEnd.Host.Resize(320, 180, 1);
+            _hostEnd.Viewer.ShowFrame(9);
+
+            Assert.Multiple(() =>
+            {
+                Assert.That(Take(_service.Calls, 1), Is.EqualTo((string[])["Resize 320x180 at 1"]));
+                Assert.That(Take(_viewer.Calls, 1), Is.EqualTo((string[])["ShowFrame 9"]));
+            });
+        }
+        finally
+        {
+            busy.Set();
+            ThreadPool.SetMaxThreads(maxWorkers, maxPorts);
+            ThreadPool.SetMinThreads(minWorkers, minPorts);
+        }
+    }
+
+    // Called off by its caller, a call is done at once - the host told - however long the host would take.
+    [Test]
+    public void ACallCalledOff_IsCanceledAtOnce()
+    {
+        _service.HeldScene = new TaskCompletionSource<string>();
+        using var calledOff = new CancellationTokenSource();
+        var capturing = _viewerEnd.Host.CaptureSceneAsync(calledOff.Token);
+
+        calledOff.Cancel();
+
+        Assert.That(() => capturing.Wait(TimeSpan.FromSeconds(5)),
+            Throws.InstanceOf<AggregateException>().With.InnerException.InstanceOf<TaskCanceledException>());
     }
 
     [Test]
