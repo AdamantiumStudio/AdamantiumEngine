@@ -50,6 +50,18 @@ public static unsafe class NSWindow
     private static readonly IntPtr StandardWindowButtonSelector = ObjCRuntime.RegisterSelector("standardWindowButton:");
     private static readonly IntPtr SetHiddenSelector = ObjCRuntime.RegisterSelector("setHidden:");
     private static readonly IntPtr PerformWindowDragSelector = ObjCRuntime.RegisterSelector("performWindowDragWithEvent:");
+    private static readonly IntPtr SetStyleMaskSelector = ObjCRuntime.RegisterSelector("setStyleMask:");
+    private static readonly IntPtr SetContentMinSizeSelector = ObjCRuntime.RegisterSelector("setContentMinSize:");
+    private static readonly IntPtr SetContentMaxSizeSelector = ObjCRuntime.RegisterSelector("setContentMaxSize:");
+    private static readonly IntPtr SetAlphaValueSelector = ObjCRuntime.RegisterSelector("setAlphaValue:");
+    private static readonly IntPtr AddChildWindowSelector = ObjCRuntime.RegisterSelector("addChildWindow:ordered:");
+    private static readonly IntPtr RemoveChildWindowSelector = ObjCRuntime.RegisterSelector("removeChildWindow:");
+
+    /// <summary>NSNormalWindowLevel: where ordinary windows are.</summary>
+    public const nint NormalLevel = 0;
+
+    /// <summary>NSFloatingWindowLevel: above the ordinary windows, as a palette is.</summary>
+    public const nint FloatingLevel = 3;
 
     /// <summary>NSPopUpMenuWindowLevel: above the windows of every application, as a drag's image is.</summary>
     public const nint PopUpMenuLevel = 101;
@@ -185,4 +197,32 @@ public static unsafe class NSWindow
     public static void MakeFirstResponder(IntPtr window, IntPtr view) =>
         ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, byte>)ObjCRuntime.MessageSend)(window, MakeFirstResponderSelector,
             view);
+
+    /// <summary>Changes what the window has: title bar, buttons, resizing.</summary>
+    public static void SetStyleMask(IntPtr window, NSWindowStyleMask style) =>
+        ((delegate* unmanaged<IntPtr, IntPtr, ulong, void>)ObjCRuntime.MessageSend)(window, SetStyleMaskSelector,
+            (ulong)style);
+
+    /// <summary>The smallest size, in points, the user can resize the content to.</summary>
+    public static void SetContentMinSize(IntPtr window, CGSize size) =>
+        ((delegate* unmanaged<IntPtr, IntPtr, CGSize, void>)ObjCRuntime.MessageSend)(window, SetContentMinSizeSelector,
+            size);
+
+    /// <summary>The largest size, in points, the user can resize the content to.</summary>
+    public static void SetContentMaxSize(IntPtr window, CGSize size) =>
+        ((delegate* unmanaged<IntPtr, IntPtr, CGSize, void>)ObjCRuntime.MessageSend)(window, SetContentMaxSizeSelector,
+            size);
+
+    /// <summary>How opaque the whole window is, from 0 to 1.</summary>
+    public static void SetAlphaValue(IntPtr window, double alpha) =>
+        ((delegate* unmanaged<IntPtr, IntPtr, double, void>)ObjCRuntime.MessageSend)(window, SetAlphaValueSelector, alpha);
+
+    /// <summary>Makes <paramref name="child"/> stay above the window and move with it.</summary>
+    public static void AddChildWindow(IntPtr window, IntPtr child) =>
+        ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, nint, void>)ObjCRuntime.MessageSend)(window, AddChildWindowSelector,
+            child, 1);
+
+    /// <summary>Lets <paramref name="child"/> go its own way again.</summary>
+    public static void RemoveChildWindow(IntPtr window, IntPtr child) =>
+        NSObject.Send(window, RemoveChildWindowSelector, child);
 }
