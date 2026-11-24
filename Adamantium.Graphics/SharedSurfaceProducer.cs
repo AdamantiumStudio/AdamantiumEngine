@@ -35,6 +35,8 @@ public sealed class SharedSurfaceProducer : ISharedSurfaceProducer
 
     internal SharedSurface Surface => _surface;
 
+    public bool HandsOverWithNextFrame => _pendingSurface != null;
+
     public void Produce(IGraphicsDevice device, ITexture frame, uint width, uint height, bool inDevice)
     {
         HandOverPendingSurface();

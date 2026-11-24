@@ -210,6 +210,10 @@ internal sealed class RemoteUniverseOutput : UniverseOutput, ISharedSurfaceConsu
 
     void ISharedSurfaceConsumer.AskFrame() => Invalidate();
 
+    /// <summary>Whether the frames of a new size or a new ring reach the viewer only with the next frame: a game held
+    /// where it stands draws that one too, on its drawing's thread, as no frame of its own comes.</summary>
+    public bool HandsOverWithNextFrame => _producer?.HandsOverWithNextFrame == true;
+
     protected override void Dispose(bool disposeManagedResources)
     {
         _producer?.Release(retire: false);

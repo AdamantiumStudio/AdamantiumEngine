@@ -11,6 +11,10 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="Adamantium.UniverseHost.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\Adamantium.Engine\Adamantium.Engine.csproj" />
     <ProjectReference Include="..\Adamantium.Multiverse.Remote\Adamantium.Multiverse.Remote.csproj" />
   </ItemGroup>

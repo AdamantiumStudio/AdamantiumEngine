@@ -212,7 +212,11 @@ namespace Adamantium.ECS
 
         public virtual void FrameEnded()
         {
-            
+
+        }
+
+        public virtual void UpdateAtBreakpoint()
+        {
         }
 
         private void OnPropertyChanged(object sender, System.ComponentModel.PropertyChangedEventArgs e)

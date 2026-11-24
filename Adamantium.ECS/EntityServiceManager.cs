@@ -45,6 +45,8 @@ namespace Adamantium.ECS
         // The per-frame phases iterate this snapshot without a lock: a lock held through Draw made the loop wait out the
         // whole GPU frame. Republished in SyncServices, ordered by Priority (stable, so equal priorities keep their order).
         private volatile IEntityService[] _snapshot = [];
+        // The service being updated: read by a drawing at a debugger's stop, the world's thread held - maybe inside it.
+        private volatile IEntityService _updating;
 
         private void RepublishSnapshot() => _snapshot = services.OrderBy(s => s.Priority).ToArray();
 
@@ -155,6 +157,7 @@ namespace Adamantium.ECS
                 if (!handler.IsActive)
                     continue;
 
+                _updating = handler;
                 try
                 {
                     handler.Update(appTime);
@@ -164,6 +167,37 @@ namespace Adamantium.ECS
                     Log.Logger.Error(exception, "The service {Service} failed to update and is put to sleep",
                         handler.GetType().FullName);
                     handler.IsActive = false;
+                }
+                finally
+                {
+                    _updating = null;
+                }
+            }
+        }
+
+        /// <summary>Brings what each active service of the engine's draws from up to date with the world as the game left
+        /// it - at a breakpoint or a step, before it is drawn there, on another thread, the world's own held. Only while it
+        /// is held inside a game service's update, where breakpoints are: anywhere else the engine may be halfway through
+        /// changing the world, and nothing is touched. The game's own services are left as they are - their code would run
+        /// where no breakpoint stops it. One that fails leaves the others to it.</summary>
+        public void UpdateAtBreakpoint()
+        {
+            if (_updating is not IGameService)
+                return;
+
+            foreach (var handler in _snapshot)
+            {
+                if (!handler.IsActive || handler is IGameService)
+                    continue;
+
+                try
+                {
+                    handler.UpdateAtBreakpoint();
+                }
+                catch (Exception exception)
+                {
+                    Log.Logger.Error(exception, "The service {Service} failed to update at a breakpoint",
+                        handler.GetType().FullName);
                 }
             }
         }
@@ -267,28 +301,59 @@ namespace Adamantium.ECS
 
             foreach (var service in toAdd)
             {
-                lock (syncObject)
-                {
-                    if (activeServices.ContainsKey(service.Uid)) continue;
-                }
-                // A world not yet given its application - not initialized - keeps the service waiting, as one whose
-                // application has not started does.
-                var running = appService is { IsRunning: true };
-                if (running)
-                {
-                    service.Initialize();
-                    service.LoadContent();
-                }
-                lock (syncObject)
-                {
-                    activeServices[service.Uid] = service;
-                    services.Add(service);
-                    if (!running)
-                        pendingServices.Add(service);
-                    RepublishSnapshot();
-                }
-                OnServiceAdded(service);
+                PutIn(service);
             }
+        }
+
+        /// <summary>Puts in only the rendering services added since the last frame ended: for a drawing of the world
+        /// where it stands, outside its frames, its thread held - in its first frame, the output that came with it would
+        /// otherwise have nothing to draw it until an end of the frame that does not come.</summary>
+        public void TakeInRenderingServices()
+        {
+            List<IEntityService> toAdd = null;
+            lock (syncObject)
+            {
+                for (var index = 0; index < servicesToAdd.Count; index++)
+                {
+                    if (servicesToAdd[index].IsRenderingService)
+                        (toAdd ??= []).Add(servicesToAdd[index]);
+                }
+
+                if (toAdd == null) return;
+
+                servicesToAdd.RemoveAll(service => service.IsRenderingService);
+            }
+
+            foreach (var service in toAdd)
+            {
+                PutIn(service);
+            }
+        }
+
+        // Initialized and loaded before it enters the snapshot, so it is never drawn half-made.
+        private void PutIn(IEntityService service)
+        {
+            lock (syncObject)
+            {
+                if (activeServices.ContainsKey(service.Uid)) return;
+            }
+            // A world not yet given its application - not initialized - keeps the service waiting, as one whose
+            // application has not started does.
+            var running = appService is { IsRunning: true };
+            if (running)
+            {
+                service.Initialize();
+                service.LoadContent();
+            }
+            lock (syncObject)
+            {
+                activeServices[service.Uid] = service;
+                services.Add(service);
+                if (!running)
+                    pendingServices.Add(service);
+                RepublishSnapshot();
+            }
+            OnServiceAdded(service);
         }
 
         public void AddService(IEntityService service)
