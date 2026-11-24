@@ -90,6 +90,11 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         => topology is PrimitiveTopology.LineStrip or PrimitiveTopology.TriangleStrip or PrimitiveTopology.TriangleFan
             or PrimitiveTopology.LineStripWithAdjacency or PrimitiveTopology.TriangleStripWithAdjacency;
     private Type _cVertexType;
+    private static readonly VkDeviceSize[] OneZeroOffset = [0UL];
+    private readonly Adamantium.Vulkan.Core.Buffer[] _oneVertexBuffer = new Adamantium.Vulkan.Core.Buffer[1];
+    private Adamantium.Vulkan.Core.Buffer[] _vertexBuffers = [];
+    private VkDeviceSize[] _vertexOffsets = [];
+    private Type _vertexBuffersType;
     private bool _cRasterizerDiscard;
     private PrimitiveTopology _cTopology;
     private bool _isTessellating;
@@ -1299,6 +1304,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
         // Fresh command buffer => dynamic state is undefined, so the state cache must re-emit everything next draw.
         _stateInitialized = false;
+        _vertexBuffers = [];
         _depthBiasKnown = false;
         _isTessellationKnown = false;
         _boundShaderPass = null;
@@ -1845,8 +1851,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             if (_swallowing) return;
         }
 
-        ulong offset = 0;
-        CurrentCommandBuffer.BindVertexBuffers(0U, 1U, vertexBuffer.GetBuffer(), offset);
+        BindVertexBuffer(CurrentCommandBuffer, vertexBuffer);
     }
 
     public void SetVertexBuffers(params IBuffer[] vertexBuffers)
@@ -1860,9 +1865,28 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             if (_swallowing) return;
         }
 
-        var offsets = new VkDeviceSize[vertexBuffers.Length];
-        var buffers = vertexBuffers.Select(x=>x.GetBuffer()).ToArray();
-        CurrentCommandBuffer.BindVertexBuffers(0, (uint)buffers.Length, buffers, offsets);
+        BindVertexBuffers(CurrentCommandBuffer, vertexBuffers.Select(x => x.GetBuffer()).ToArray(),
+            new VkDeviceSize[vertexBuffers.Length]);
+    }
+
+    private void BindVertexBuffer(CommandBuffer commandBuffer, IBuffer vertexBuffer)
+    {
+        _oneVertexBuffer[0] = vertexBuffer.GetBuffer();
+        BindVertexBuffers(commandBuffer, _oneVertexBuffer, OneZeroOffset);
+    }
+
+    private void BindVertexBuffers(CommandBuffer commandBuffer, Adamantium.Vulkan.Core.Buffer[] buffers, VkDeviceSize[] offsets)
+    {
+        _vertexBuffers = buffers;
+        _vertexOffsets = offsets;
+        _vertexBuffersType = VertexType;
+
+        Span<VkDeviceSize> strides = stackalloc VkDeviceSize[buffers.Length];
+        strides.Clear();
+        if (VertexType != null)
+            strides[0] = VertexType.GetBindingDescription2().Stride;
+
+        commandBuffer.BindVertexBuffers2(0, (uint)buffers.Length, buffers, offsets, ReadOnlySpan<VkDeviceSize>.Empty, strides);
     }
 
     public void SetIndexBuffer(IBuffer indexBuffer)
@@ -1916,6 +1940,8 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             }
             _cVertexType = VertexType;
         }
+        if (_vertexBuffers.Length > 0 && _vertexBuffersType != VertexType)
+            BindVertexBuffers(commandBuffer, _vertexBuffers, _vertexOffsets);
         if (!_stateInitialized || _cRasterizerDiscard != RasterizerDiscardEnabled)
         { commandBuffer.SetRasterizerDiscardEnable(RasterizerDiscardEnabled); _cRasterizerDiscard = RasterizerDiscardEnabled; }
         if (!_stateInitialized || _cTopology != PrimitiveTopology)
@@ -2175,12 +2201,11 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             }
         }
 
-        ulong offset = 0;
         var commandBuffer = CurrentCommandBuffer;
 
         SetDrawingState(commandBuffer);
 
-        commandBuffer.BindVertexBuffers(0, 1, vertexBuffer.GetBuffer(), offset);
+        BindVertexBuffer(commandBuffer, vertexBuffer);
 
         commandBuffer.BindIndexBuffer(indexBuffer.GetBuffer(), 0, IndexType.Uint32);
 
@@ -2206,12 +2231,11 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             }
         }
 
-        ulong offset = 0;
         var commandBuffer = CurrentCommandBuffer;
 
         // Bind the vertex buffer before SetDrawingState, which emits the dynamic vertex input (the SetVertexBuffer()+Draw()
         // order).
-        commandBuffer.BindVertexBuffers(0, 1, vertexBuffer.GetBuffer(), offset);
+        BindVertexBuffer(commandBuffer, vertexBuffer);
 
         SetDrawingState(commandBuffer);
 
@@ -2254,7 +2278,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
         var commandBuffer = CurrentCommandBuffer;
         SetDrawingState(commandBuffer);
-        commandBuffer.BindVertexBuffers(0, 1, vertexBuffer.GetBuffer(), 0UL);
+        BindVertexBuffer(commandBuffer, vertexBuffer);
         commandBuffer.DrawIndirect(indirectBuffer.GetBuffer(), 0, drawCount, stride);
     }
 
