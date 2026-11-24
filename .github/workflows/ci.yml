@@ -1,7 +1,6 @@
 # Builds the engine, runs the tests that need no GPU and packs the packages: for every pull request, and for master
-# once it is merged into. On Windows and on Linux: the effects generator compiles the built-in shaders during the build
-# on either, and a path or a file name that only Windows forgives fails on Linux before it is merged. The maths tests
-# also run on macOS ARM64.
+# once it is merged into. On Windows, on Linux and on macOS (ARM64): the effects generator compiles the built-in shaders
+# during the build on each, and a path or a file name that only Windows forgives fails on Linux before it is merged.
 name: CI
 
 on:
@@ -18,10 +17,13 @@ jobs:
   # A required check for master: the job always runs and always reports, so a pull request is never left waiting for a
   # check that did not start. What it skips is the work, when nothing but documents, icons or settings changed.
   #
-  # Windows keeps the job's name, build - the one master requires; Linux runs beside it as build (linux).
+  # Windows keeps the job's name, build - the one master requires; Linux and macOS run beside it as build (linux)
+  # and build (macos).
   build:
     name: ${{ matrix.name }}
     runs-on: ${{ matrix.os }}
+    # A hung run is stopped long before GitHub's six hours.
+    timeout-minutes: 60
     strategy:
       fail-fast: false
       matrix:
@@ -30,6 +32,8 @@ jobs:
             name: build
           - os: ubuntu-latest
             name: build (linux)
+          - os: macos-latest
+            name: build (macos)
 
     steps:
       - uses: actions/checkout@v7
@@ -109,7 +113,8 @@ jobs:
           for p in Tests/*/*.csproj; do
             case "$p" in *GraphicsTests*|*UniverseHost.Tests*) continue ;; esac
             log="$RUNNER_TEMP/$(basename "$p" .csproj).log"
-            dotnet test "$p" -c Release --no-build > "$log" 2>&1 &
+            # A test that hangs is stopped after 10 minutes; the blame sequence, uploaded below, says which it was.
+            dotnet test "$p" -c Release --no-build --blame-hang-timeout 10m --blame-hang-dump-type none > "$log" 2>&1 &
             pids+=($!)
             logs+=("$log")
           done
@@ -127,14 +132,22 @@ jobs:
           done
           exit $status
 
+      - name: Blame sequences of a failed run
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: blame-${{ matrix.name }}
+          path: Tests/*/TestResults/**/Sequence_*.xml
+          if-no-files-found: ignore
+
       # Once: the packages are the same whichever runner packs them.
       - name: Pack
         if: steps.changes.outputs.code == 'true' && matrix.os == 'windows-latest'
         run: dotnet pack AdamantiumEngine.sln -c Release --no-build -o artifacts/nupkg
 
-  # The maths on ARM64 - Apple Silicon - where SIMD is 128-bit NEON and the double matrices take their two-half path,
-  # which the x64 runners only imitate. Only the maths tests: the rest of the engine is not built on macOS yet. Not a
-  # check master requires. Once with SIMD, once without, as the two paths must give the same answers.
+  # The maths on ARM64 - Apple Silicon - without SIMD: build (macos) runs them with it, 128-bit NEON and the double
+  # matrices' two-half path, which the x64 runners only imitate, and the two paths must give the same answers. Not a
+  # check master requires.
   maths-arm64:
     name: maths (macos arm64)
     runs-on: macos-latest
@@ -153,9 +166,6 @@ jobs:
 
       - name: Build
         run: dotnet build Tests/Adamantium.MathTests/Adamantium.MathTests.csproj -c Release -warnaserror
-
-      - name: Test
-        run: dotnet test Tests/Adamantium.MathTests/Adamantium.MathTests.csproj -c Release --no-build
 
       - name: Test without SIMD
         env:

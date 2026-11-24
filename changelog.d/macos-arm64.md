@@ -22,6 +22,8 @@
 
 ### Fixed
 
+- A viewer waited forever for a universe host serving on a long name on macOS, where a pipe is a socket whose path may
+  have 104 bytes: the pipes' names are short whatever the name.
 - A font with no OS/2 table - Apple's own, such as macOS's Courier - would not load: OS/2 is not required, and such a
   font is bold and italic by its head table's `macStyle`.
 - A PDF font not embedded and drawn by a system font from a collection (`.ttc`) - Times on macOS - had every width 0:
