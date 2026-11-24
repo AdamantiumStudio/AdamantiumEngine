@@ -24,19 +24,21 @@ public class NativeLibraryLoader
 
     private static readonly bool IsWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
 
+    private static readonly bool IsMac = RuntimeInformation.IsOSPlatform(OSPlatform.OSX);
+
     // Loaded in order; a shim must come after the runtime it imports
     // (slang-c-shared.dll imports slang.dll), so list dependencies first. On Linux libslang.so IS the compiler, which
     // LoadSlangRuntime has already loaded, and the shim finds it there by its soname.
-    private static readonly string[] NativeLibraries = IsWindows
-        ? new[] { "spirv-cross-c-shared.dll", "slang.dll", "slang-c-shared.dll" }
-        : new[] { "libspirv-cross-c-shared.so", "libslang-c-shared.so" };
+    private static readonly string[] NativeLibraries = IsWindows ? ["spirv-cross-c-shared.dll", "slang.dll", "slang-c-shared.dll"]
+        : IsMac ? ["libspirv-cross-c-shared.dylib", "libslang-c-shared.dylib"]
+        : ["libspirv-cross-c-shared.so", "libslang-c-shared.so"];
 
     /// <summary>The folder of the Slang package that holds this platform's libraries: runtimes/&lt;rid&gt;/native.</summary>
     private static string RuntimeIdentifier
     {
         get
         {
-            var os = IsWindows ? "win" : RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? "osx" : "linux";
+            var os = IsWindows ? "win" : IsMac ? "osx" : "linux";
             var arch = RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "arm64" : "x64";
             return $"{os}-{arch}";
         }
@@ -269,8 +271,10 @@ public class NativeLibraryLoader
                 .Where(File.Exists);
         }
 
-        return new[] { "libslang-compiler.so*", "libslang-glslang*.so" }
-            .SelectMany(pattern => Directory.GetFiles(directory, pattern));
+        string[] patterns = IsMac ? ["libslang-compiler.*.dylib", "libslang-glslang*.dylib"]
+            : ["libslang-compiler.so*", "libslang-glslang*.so"];
+
+        return patterns.SelectMany(pattern => Directory.GetFiles(directory, pattern));
     }
 
     private static IntPtr LoadLibraryByPath(string filename) =>
@@ -278,12 +282,9 @@ public class NativeLibraryLoader
 
     private static unsafe IntPtr LoadWindowsLibrary(string filename)
     {
-        [DllImport("kernel32", ExactSpelling = true, SetLastError = true)]
-        static extern void* LoadLibraryW(ushort* lpLibFileName);
-
         fixed (char* p = filename)
         {
-            var handle = LoadLibraryW((ushort*)p);
+            var handle = NativeLibraryInterop.LoadWindowsLibrary((ushort*)p);
 
             if (handle is null)
             {
@@ -296,22 +297,16 @@ public class NativeLibraryLoader
 
     // A library loaded here satisfies a later one that needs it by soname - the shim needs the compiler that way - which
     // matters because the Slang package folder is on no search path in this process.
-    private const int RTLD_NOW = 0x002;
-    private const int RTLD_GLOBAL = 0x100;
-
     private static IntPtr LoadUnixLibrary(string filename)
     {
-        [DllImport("libdl.so.2", EntryPoint = "dlopen")]
-        static extern IntPtr DlOpen(string fileName, int flags);
-
-        [DllImport("libdl.so.2", EntryPoint = "dlerror")]
-        static extern IntPtr DlError();
-
-        var handle = DlOpen(filename, RTLD_NOW | RTLD_GLOBAL);
+        var handle = IsMac
+            ? NativeLibraryInterop.OpenMacLibrary(filename, NativeLibraryInterop.RTLD_NOW | NativeLibraryInterop.MacRtldGlobal)
+            : NativeLibraryInterop.OpenLinuxLibrary(filename, NativeLibraryInterop.RTLD_NOW | NativeLibraryInterop.LinuxRtldGlobal);
 
         if (handle == IntPtr.Zero)
         {
-            throw new Win32Exception($"Failed to load {Path.GetFileName(filename)}: {Marshal.PtrToStringAnsi(DlError())}");
+            var error = IsMac ? NativeLibraryInterop.GetMacError() : NativeLibraryInterop.GetLinuxError();
+            throw new Win32Exception($"Failed to load {Path.GetFileName(filename)}: {Marshal.PtrToStringAnsi(error)}");
         }
 
         return handle;
