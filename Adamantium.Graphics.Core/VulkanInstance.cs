@@ -121,6 +121,17 @@ public unsafe class VulkanInstance : DisposableBase
         var layersAvailable = Instance.EnumerateInstanceLayerProperties();
         var available = Instance.EnumerateInstanceExtensionProperties().Select(x => x.ExtensionName).ToHashSet();
 
+        var availableLayers = new HashSet<string>(layersAvailable.Select(x => x.LayerName));
+        var asked = IsInDebugMode ? Settings.DebugLayers.Concat(Settings.Layers) : Settings.Layers;
+        var enabledLayers = asked.Distinct().Where(availableLayers.Contains).ToArray();
+
+        if (GraphicsSettings.IsApple)
+        {
+            var driver = KosmicKrispDriver.Load();
+            available = GetDirectDriverExtensions(available, driver, enabledLayers);
+            createInfo.PNext = driver.CreateLoadingList();
+        }
+
         var missing = Settings.InstanceExtensions.Where(x => !available.Contains(x)).ToArray();
         if (missing.Length > 0)
         {
@@ -133,9 +144,6 @@ public unsafe class VulkanInstance : DisposableBase
         createInfo.PEnabledExtensionNames = enabled;
         createInfo.EnabledExtensionCount = (uint)enabled.Length;
 
-        var availableLayers = new HashSet<string>(layersAvailable.Select(x => x.LayerName));
-        var asked = IsInDebugMode ? Settings.DebugLayers.Concat(Settings.Layers) : Settings.Layers;
-        var enabledLayers = asked.Distinct().Where(availableLayers.Contains).ToArray();
         EnabledLayers = new HashSet<string>(enabledLayers, StringComparer.Ordinal);
         createInfo.EnabledLayerCount = (uint)enabledLayers.Length;
         createInfo.PEnabledLayerNames = enabledLayers;
@@ -151,6 +159,21 @@ public unsafe class VulkanInstance : DisposableBase
         {
             EnableDebug();
         }
+    }
+
+    private static HashSet<string> GetDirectDriverExtensions(HashSet<string> listed, KosmicKrispDriver driver,
+        IEnumerable<string> layers)
+    {
+        var offered = new HashSet<string>(driver.InstanceExtensions, StringComparer.Ordinal)
+        {
+            Constants.VK_LUNARG_DIRECT_DRIVER_LOADING_EXTENSION_NAME
+        };
+
+        foreach (var layer in layers)
+            offered.UnionWith(Instance.EnumerateInstanceExtensionProperties(layer).Select(x => x.ExtensionName));
+
+        listed.IntersectWith(offered);
+        return listed;
     }
 
     private void EnableDebug()
