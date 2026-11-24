@@ -60,6 +60,7 @@ public static unsafe class NSWindow
     private static readonly IntPtr SetContentMaxSizeSelector = ObjCRuntime.RegisterSelector("setContentMaxSize:");
     private static readonly IntPtr SetAlphaValueSelector = ObjCRuntime.RegisterSelector("setAlphaValue:");
     private static readonly IntPtr AddChildWindowSelector = ObjCRuntime.RegisterSelector("addChildWindow:ordered:");
+    private static readonly IntPtr ParentWindowSelector = ObjCRuntime.RegisterSelector("parentWindow");
     private static readonly IntPtr RemoveChildWindowSelector = ObjCRuntime.RegisterSelector("removeChildWindow:");
 
     /// <summary>NSNormalWindowLevel: where ordinary windows are.</summary>
@@ -254,6 +255,9 @@ public static unsafe class NSWindow
     public static void AddChildWindow(IntPtr window, IntPtr child) =>
         ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, nint, void>)ObjCRuntime.MessageSend)(window, AddChildWindowSelector,
             child, 1);
+
+    /// <summary>The window this one is a child of; zero when of none.</summary>
+    public static IntPtr ParentOf(IntPtr window) => NSObject.Send(window, ParentWindowSelector);
 
     /// <summary>Lets <paramref name="child"/> go its own way again.</summary>
     public static void RemoveChildWindow(IntPtr window, IntPtr child) =>
