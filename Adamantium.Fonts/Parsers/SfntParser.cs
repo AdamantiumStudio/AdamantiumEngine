@@ -669,6 +669,11 @@ namespace Adamantium.Fonts.Parsers
             CurrentFont.LowestRecPPEM = head.LowestRecPPEM;
             CurrentFont.Created = FromLongDateTime(head.CreatedDate);
             CurrentFont.Modified = FromLongDateTime(head.ModifiedDate);
+
+            const UInt16 macBold = 1;
+            const UInt16 macItalic = 1 << 1;
+            CurrentFont.Weight = (head.MacStyle & macBold) != 0 ? FontWeight.Bold : FontWeight.Normal;
+            CurrentFont.Style = (head.MacStyle & macItalic) != 0 ? FontStyle.Italic : FontStyle.Normal;
         }
 
         private static DateTime FromLongDateTime(long seconds)
