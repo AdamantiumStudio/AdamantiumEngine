@@ -77,6 +77,8 @@ public sealed class HostMemorySurfaceProducer : ISharedSurfaceProducer
         }
     }
 
+    public bool HandsOverWithNextFrame => _pendingRing != null || _resizeFrame != 0;
+
     public void NoteSubmitted()
     {
         AnnounceDone();

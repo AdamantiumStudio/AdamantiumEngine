@@ -8,6 +8,7 @@ internal enum HostMethod
     AskFrame,
     AskNewSurface,
     DrawWhereItStands,
+    GoOn,
     MovePointer,
     Focus,
     TakeKeyboardInput,

@@ -31,6 +31,8 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
     private UniverseLaunch _launch;
     private GameRun _run;
     private WhereItStandsDrawing _drawing;
+    // Whether the game stands where a debugger holds it: told by its viewer at a stop, forgotten as its loop ends a frame.
+    private volatile bool _standing;
     private volatile bool _stopAsked;
 
     /// <summary>The exit code: 0 once the game played until stopped, else 1 - the reason written to the error output.
@@ -97,6 +99,7 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
             _universe.Started -= OnStarted;
             _universe.ShuttingDown -= OnShuttingDown;
             _universe.Stopped -= OnStopped;
+            _universe.FrameFinished -= OnFrameFinished;
         }
 
         _output?.Dispose();
@@ -115,12 +118,12 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
         return _launched.Task.WaitAsync(cancellationToken);
     }
 
-    // A size given or a surface asked for while a debugger holds the game is drawn where it stands; while it runs, the
-    // debugger holds the drawing's thread, and the game's next frame takes them.
+    // A size given or a surface asked for while the game stands is drawn where it stands; while it runs, its next frame
+    // takes them.
     public void Resize(uint width, uint height, float pixelsPerPoint)
     {
         _output?.ResizeTo(width, height, pixelsPerPoint);
-        _drawing?.Ask();
+        DrawIfStanding();
     }
 
     public void AskFrame(ulong frame) => _output?.TakeFrameRequest();
@@ -128,10 +131,33 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
     public void AskNewSurface()
     {
         _output?.AskNewSurface();
+        DrawIfStanding();
+    }
+
+    // Asked at a stop: the game stands from now until it is let go on (GoOnAsync).
+    public void DrawWhereItStands()
+    {
+        _standing = true;
         _drawing?.Ask();
     }
 
-    public void DrawWhereItStands() => _drawing?.Ask();
+    // Answered on the link's own thread, the pool held: done once the drawing waits, so it never meets a step of the
+    // game the debugger is about to let go on.
+    public Task GoOnAsync(CancellationToken cancellationToken)
+    {
+        _standing = false;
+        _drawing?.WaitTillItWaits(cancellationToken);
+        return Task.CompletedTask;
+    }
+
+    private void DrawIfStanding()
+    {
+        if (_standing)
+            _drawing?.Ask();
+    }
+
+    // The game ran a frame: it does not stand, whatever was told last.
+    private void OnFrameFinished(object sender, EventArgs e) => _standing = false;
 
     public void MovePointer(float x, float y, bool isOver) => _output?.MovePointer(new Vector2F(x, y), isOver);
 
@@ -176,6 +202,9 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
         _universe = new GameUniverse(container);
         _output = new RemoteUniverseOutput(_universe.Satellites.Get<IUniverseEventAggregator>(), _connection.Viewer,
             _connection.ViewerProcessId, _launch);
+        // Before any of the game's code runs: a stop in its start is drawn too.
+        if (_launch.IsDebugged)
+            _drawing = new WhereItStandsDrawing(_universe, _output, () => _standing);
         List<IAssetResolver> folders = [];
         foreach (var folder in _launch.ContentFolders)
             folders.Add(new FileSystemAssetResolver(folder));
@@ -187,6 +216,7 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
         _universe.Started += OnStarted;
         _universe.ShuttingDown += OnShuttingDown;
         _universe.Stopped += OnStopped;
+        _universe.FrameFinished += OnFrameFinished;
         _universe.Run(_output);
         if (!_stopAsked)
             Fail("the universe stopped by itself; the reason is above");
@@ -284,9 +314,6 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
             service.Project = physics;
 
         _run = GameRun.Start(world.MainScene);
-        if (_launch.IsDebugged)
-            _drawing = new WhereItStandsDrawing(_universe);
-
         _launched.TrySetResult();
     }
 

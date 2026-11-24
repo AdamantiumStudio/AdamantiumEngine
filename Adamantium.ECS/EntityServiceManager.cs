@@ -267,28 +267,59 @@ namespace Adamantium.ECS
 
             foreach (var service in toAdd)
             {
-                lock (syncObject)
-                {
-                    if (activeServices.ContainsKey(service.Uid)) continue;
-                }
-                // A world not yet given its application - not initialized - keeps the service waiting, as one whose
-                // application has not started does.
-                var running = appService is { IsRunning: true };
-                if (running)
-                {
-                    service.Initialize();
-                    service.LoadContent();
-                }
-                lock (syncObject)
-                {
-                    activeServices[service.Uid] = service;
-                    services.Add(service);
-                    if (!running)
-                        pendingServices.Add(service);
-                    RepublishSnapshot();
-                }
-                OnServiceAdded(service);
+                PutIn(service);
             }
+        }
+
+        /// <summary>Puts in only the rendering services added since the last frame ended: for a drawing of the world
+        /// where it stands, outside its frames, its thread held - in its first frame, the output that came with it would
+        /// otherwise have nothing to draw it until an end of the frame that does not come.</summary>
+        public void TakeInRenderingServices()
+        {
+            List<IEntityService> toAdd = null;
+            lock (syncObject)
+            {
+                for (var index = 0; index < servicesToAdd.Count; index++)
+                {
+                    if (servicesToAdd[index].IsRenderingService)
+                        (toAdd ??= []).Add(servicesToAdd[index]);
+                }
+
+                if (toAdd == null) return;
+
+                servicesToAdd.RemoveAll(service => service.IsRenderingService);
+            }
+
+            foreach (var service in toAdd)
+            {
+                PutIn(service);
+            }
+        }
+
+        // Initialized and loaded before it enters the snapshot, so it is never drawn half-made.
+        private void PutIn(IEntityService service)
+        {
+            lock (syncObject)
+            {
+                if (activeServices.ContainsKey(service.Uid)) return;
+            }
+            // A world not yet given its application - not initialized - keeps the service waiting, as one whose
+            // application has not started does.
+            var running = appService is { IsRunning: true };
+            if (running)
+            {
+                service.Initialize();
+                service.LoadContent();
+            }
+            lock (syncObject)
+            {
+                activeServices[service.Uid] = service;
+                services.Add(service);
+                if (!running)
+                    pendingServices.Add(service);
+                RepublishSnapshot();
+            }
+            OnServiceAdded(service);
         }
 
         public void AddService(IEntityService service)

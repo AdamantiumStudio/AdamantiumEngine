@@ -33,6 +33,12 @@ public class RecordingHostService : IUniverseHostService
 
     public void DrawWhereItStands() => Calls.Add("DrawWhereItStands");
 
+    public Task GoOnAsync(CancellationToken cancellationToken)
+    {
+        Calls.Add("GoOn");
+        return Task.CompletedTask;
+    }
+
     public void MovePointer(float x, float y, bool isOver) =>
         Calls.Add(string.Create(CultureInfo.InvariantCulture, $"MovePointer {x},{y} {isOver}"));
 

@@ -25,6 +25,9 @@ internal sealed class UniverseHostServiceProxy(RemoteLink link) : IUniverseHostS
 
     public void DrawWhereItStands() => link.Tell((int)HostMethod.DrawWhereItStands, null);
 
+    public Task GoOnAsync(CancellationToken cancellationToken) =>
+        link.CallAsync<object>((int)HostMethod.GoOn, null, cancellationToken);
+
     public void MovePointer(float x, float y, bool isOver) =>
         link.Tell((int)HostMethod.MovePointer, (ref MessagePackWriter writer) =>
         {

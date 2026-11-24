@@ -28,6 +28,10 @@ public interface IUniverseHostService
     /// (<see cref="UniverseLaunch.IsDebugged"/>).</summary>
     void DrawWhereItStands();
 
+    /// <summary>The game is about to be let go on from a stop: it draws where it stands no more; done once that drawing
+    /// is over, so it never meets a step of the game.</summary>
+    Task GoOnAsync(CancellationToken cancellationToken);
+
     /// <summary>Puts the pointer at <paramref name="x"/>, <paramref name="y"/> in the surface's pixels;
     /// <paramref name="isOver"/> says whether it is over the view.</summary>
     void MovePointer(float x, float y, bool isOver);

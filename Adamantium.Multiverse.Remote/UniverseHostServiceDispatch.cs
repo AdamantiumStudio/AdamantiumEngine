@@ -67,6 +67,9 @@ internal sealed class UniverseHostServiceDispatch(IUniverseHostService service) 
                 case HostMethod.Stop:
                     Reply(id, service.StopAsync(token));
                     break;
+                case HostMethod.GoOn:
+                    Reply(id, service.GoOnAsync(token));
+                    break;
                 case HostMethod.CaptureScene:
                     Reply(id, service.CaptureSceneAsync(token));
                     break;

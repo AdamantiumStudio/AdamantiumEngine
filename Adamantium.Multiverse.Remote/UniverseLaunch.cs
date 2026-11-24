@@ -32,7 +32,7 @@ public sealed class UniverseLaunch
     public uint LargestScreenHeight { get; set; }
 
     /// <summary>Whether a debugger runs the game: a thread of the host's own (<see cref="UniverseHostThreads.Drawing"/>)
-    /// then draws the world where the debugger holds it, as the viewer asks - the debugger lets it run only then, every
-    /// other thread of the game held.</summary>
+    /// then draws the world where the debugger holds it, as the viewer asks at a stop
+    /// (<see cref="IUniverseHostService.DrawWhereItStands"/>) - until the game's loop ends a frame again.</summary>
     public bool IsDebugged { get; set; }
 }

@@ -17,6 +17,39 @@ internal sealed class RemoteLink : IDisposable
     public static readonly MessagePackSerializerOptions Options =
         MessagePackSerializerOptions.Standard.WithResolver(ContractlessStandardResolver.Instance);
 
+    private static int _messagesReady;
+
+    // Each type's writer and reader - and those of what it holds - are made in code the first time one is written or
+    // read. Made as the first link starts, by a message of each written and read back: not first at a stop of a game a
+    // debugger holds, where making code waits on the threads the debugger holds. One that cannot be made is told, and
+    // made as it is first written.
+    private static void ReadyTheMessages()
+    {
+        if (Interlocked.Exchange(ref _messagesReady, 1) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            Ready(new UniverseLaunch());
+            Ready(new RemoteHello());
+            Ready(new RemoteSurface { Buffers = [new RemoteSurfaceBuffer()] });
+            Ready(new Input.KeyboardInput());
+            Ready(new Input.MouseInput());
+            Ready(new Input.GestureInput());
+            Ready(string.Empty);
+            Ready(Array.Empty<byte>());
+        }
+        catch (Exception exception) when (exception is MessagePackSerializationException or InvalidOperationException)
+        {
+            Log.Logger.Warning(exception, "Universe link: a message's writer could not be made ahead");
+        }
+    }
+
+    private static void Ready<T>(T sample) =>
+        MessagePackSerializer.Deserialize<T>(MessagePackSerializer.Serialize(sample, Options), Options);
+
     private readonly Stream _incoming;
     private readonly Stream _outgoing;
     private readonly IRemoteHandler _handler;
@@ -32,6 +65,7 @@ internal sealed class RemoteLink : IDisposable
     /// <paramref name="handler"/>; its threads named after <paramref name="threadName"/>. Not started yet.</summary>
     public RemoteLink(Stream incoming, Stream outgoing, IRemoteHandler handler, string threadName)
     {
+        ReadyTheMessages();
         _incoming = incoming;
         _outgoing = outgoing;
         _handler = handler;

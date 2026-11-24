@@ -1111,6 +1111,9 @@ public class Universe : IUniverse
         try
         {
             MakePreparations();
+            // Held in its first frame, no service draws yet: the one the output that came in it brought is put in now.
+            if (!EntityWorld.ServiceManager.HasActiveRenderingService)
+                EntityWorld.ServiceManager.TakeInRenderingServices();
             foreach (var output in platform.Outputs)
             {
                 output.IsDrawnThisFrame = true;

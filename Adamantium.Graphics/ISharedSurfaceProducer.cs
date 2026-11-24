@@ -16,6 +16,10 @@ public interface ISharedSurfaceProducer : IDisposable
     /// <summary>Tells the consumer of the frame <see cref="Produce"/> copied, once the device's frame is submitted.</summary>
     void NoteSubmitted();
 
+    /// <summary>Whether the surfaces of a new size or a new ring wait to be handed to the consumer with the next frame -
+    /// the frame that started them is in them, not shown yet.</summary>
+    bool HandsOverWithNextFrame { get; }
+
     /// <summary>Waits until the consumer asks for a frame and has given back a surface for it, up to
     /// <paramref name="timeout"/>. Gives whether it did; if not, asks for a frame again on the consumer's next ask.</summary>
     bool WaitUntilShown(TimeSpan timeout);
