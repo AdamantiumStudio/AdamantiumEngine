@@ -249,6 +249,32 @@ public class PdfDocumentWriterTests
         Assert.Throws<PdfException>(() => new PdfDocumentWriter(output).AddPage(A4, new PdfContentBuilder().Draw(form)));
     }
 
+    // A tiling pattern: its cell, its steps and the matrix to the page - colored by what it draws.
+    [Test]
+    public void ATilingPattern_IsReadBack_WithItsCellAndSteps()
+    {
+        var picture = PdfImages.FromRgba(1, 1, [1, 2, 3, 255]);
+        var cell = new PdfContentBuilder().SaveState().Transform(10, 0, 0, 10, 0, 0).Draw(picture).RestoreState();
+        var pattern = cell.ToTilingPattern(new PdfRectangle(0, 0, 10, 10), 10, 12, new PdfMatrix(1, 0, 0, 1, 5, 5));
+        var bytes = Write(writer => writer.AddPage(A4,
+            new PdfContentBuilder().FillPattern(pattern).Rectangle(0, 0, 100, 100).Fill()));
+
+        var document = PdfDocument.Open(bytes);
+        var written = (PdfStream)new PdfResources(document.Pages[0].Resources, document).Pattern("P0");
+        double Number(PdfObject value) => value is PdfInteger integer ? integer.Value : ((PdfReal)value).Value;
+        Assert.Multiple(() =>
+        {
+            Assert.That(((PdfInteger)written.Dictionary["PatternType"]).Value, Is.EqualTo(1));
+            Assert.That(((PdfInteger)written.Dictionary["PaintType"]).Value, Is.EqualTo(1), "colored by itself");
+            Assert.That(Number(written.Dictionary["XStep"]), Is.EqualTo(10));
+            Assert.That(Number(written.Dictionary["YStep"]), Is.EqualTo(12));
+            var inner = (PdfDictionary)document.Resolve(written.Dictionary[PdfKeys.Resources]);
+            Assert.That(((PdfDictionary)inner[PdfKeys.XObject])["Im0"], Is.TypeOf<PdfReference>());
+        });
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            cell.ToTilingPattern(new PdfRectangle(0, 0, 10, 10), 0, 10, PdfMatrix.Identity));
+    }
+
     [Test]
     public void TrianglesAtNoPlace_AreRefused()
     {

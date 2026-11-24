@@ -6,7 +6,8 @@
   stream drawn on several pages - one picture - is written once. Read back by our reader and by MuPDF.
 - `PdfContentBuilder` draws pictures and forms (`Draw`), shadings (`Shade`), shading patterns (`FillPattern`,
   `StrokePattern`) and soft masks (`SoftMask`, by luminosity or alpha), each named once however often it is drawn;
-  `ToFormXObject(bbox, PdfTransparencyGroup)` makes a transparency group, `ToContentStream` and `ToResources` a page.
+  `ToFormXObject(bbox, PdfTransparencyGroup)` makes a transparency group, `ToTilingPattern` a colored tiling pattern
+  of one cell, `ToContentStream` and `ToResources` a page.
 - `PdfTransparencyGroup`, read from forms before, is made too: its constructor, `Layer` (isolated, DeviceRGB) and
   `GrayMask` (isolated, DeviceGray).
 - `PdfImages.FromRgba`: a picture from straight RGBA pixels, its alpha a soft mask of its own when it has any.

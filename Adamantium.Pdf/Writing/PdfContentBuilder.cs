@@ -8,6 +8,7 @@ using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Filters;
 using Adamantium.Pdf.Graphics;
 using Adamantium.Pdf.Objects;
+using Adamantium.Pdf.Shadings;
 
 namespace Adamantium.Pdf.Writing;
 
@@ -249,6 +250,39 @@ public sealed class PdfContentBuilder
             dictionary.Set(PdfGraphicsKeys.FormGroup, attributes);
         }
 
+        dictionary.Set(PdfKeys.Resources, ToResources());
+        dictionary.Set(PdfKeys.Filter, new PdfName(PdfFilterNames.FlateDecode));
+        return new PdfStream(dictionary, Deflate(ToContent()));
+    }
+
+    /// <summary>The operators as a tiling pattern (ISO 32000-2, 8.7.3.1): one cell of <paramref name="cell"/>, laid
+    /// every <paramref name="xStep"/> across and <paramref name="yStep"/> down, colored by what it draws. Fill or stroke
+    /// with it by <see cref="FillPattern"/> or <see cref="StrokePattern"/>. <paramref name="matrix"/> maps the cell's
+    /// space to the page's (or the form's) own default space - not to the transformation current when it is used.
+    /// </summary>
+    public PdfStream ToTilingPattern(PdfRectangle cell, double xStep, double yStep, PdfMatrix matrix)
+    {
+        if (!(cell.Width > 0) || !(cell.Height > 0))
+        {
+            throw new ArgumentOutOfRangeException(nameof(cell), "A pattern's cell has a width and a height.");
+        }
+
+        if (!double.IsFinite(xStep) || xStep == 0 || !double.IsFinite(yStep) || yStep == 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(xStep), "A pattern steps a finite, non-zero way each way.");
+        }
+
+        var dictionary = new PdfDictionary();
+        dictionary.Set(PdfKeys.Type, new PdfName(PdfKeys.Pattern));
+        dictionary.Set(PdfShadingKeys.PatternType, new PdfInteger(1));
+        dictionary.Set(PdfShadingKeys.PaintType, new PdfInteger(1));
+        dictionary.Set(PdfShadingKeys.TilingType, new PdfInteger(1));
+        dictionary.Set(PdfKeys.BBox, new PdfArray([new PdfReal(cell.Left), new PdfReal(cell.Bottom),
+            new PdfReal(cell.Right), new PdfReal(cell.Top)]));
+        dictionary.Set(PdfShadingKeys.XStep, new PdfReal(xStep));
+        dictionary.Set(PdfShadingKeys.YStep, new PdfReal(yStep));
+        dictionary.Set(PdfShadingKeys.Matrix, new PdfArray([new PdfReal(matrix.A), new PdfReal(matrix.B),
+            new PdfReal(matrix.C), new PdfReal(matrix.D), new PdfReal(matrix.E), new PdfReal(matrix.F)]));
         dictionary.Set(PdfKeys.Resources, ToResources());
         dictionary.Set(PdfKeys.Filter, new PdfName(PdfFilterNames.FlateDecode));
         return new PdfStream(dictionary, Deflate(ToContent()));
