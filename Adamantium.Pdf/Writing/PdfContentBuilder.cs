@@ -10,14 +10,20 @@ using Adamantium.Pdf.Objects;
 
 namespace Adamantium.Pdf.Writing;
 
-/// <summary>Builds a content stream (ISO 32000-2, 8.2): paths, their paint, line style and opacity - what an
-/// annotation's appearance is drawn with (<see cref="ToFormXObject"/>). Text is drawn by its outlines, as paths.
-/// Opacity and blend modes go through graphics state parameter dictionaries the builder names itself.</summary>
+/// <summary>Builds a content stream (ISO 32000-2, 8.2): paths, their paint, line style and opacity, pictures, forms,
+/// shadings and soft masks - a page (<see cref="ToContentStream"/> and <see cref="ToResources"/>) or an annotation's
+/// appearance (<see cref="ToFormXObject(PdfRectangle)"/>). Text is drawn by its outlines, as paths. Opacity, blend modes
+/// and soft masks go through graphics state parameter dictionaries the builder names itself, and so do the pictures,
+/// forms, shadings and patterns drawn: each one object, named once however often it is drawn.</summary>
 public sealed class PdfContentBuilder
 {
     private readonly StringBuilder _operations = new();
     private readonly Dictionary<(double Stroke, double Fill), string> _opacities = [];
     private readonly Dictionary<PdfBlendMode, string> _blends = [];
+    private readonly Dictionary<(PdfStream Group, bool Luminosity), string> _masks = [];
+    private readonly Dictionary<PdfObject, string> _xObjects = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<PdfObject, string> _shadings = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<PdfObject, string> _patterns = new(ReferenceEqualityComparer.Instance);
 
     public PdfContentBuilder SaveState() => Operator("q");
 
@@ -92,6 +98,70 @@ public sealed class PdfContentBuilder
         return this;
     }
 
+    /// <summary>What is painted from here on is masked by <paramref name="group"/>, a transparency group form
+    /// (<see cref="ToFormXObject(PdfRectangle, PdfTransparencyGroup)"/>): by its luminosity, or with
+    /// <paramref name="luminosity"/> false by its alpha (ISO 32000-2, 11.6.5.2). It lasts until the state is restored.
+    /// </summary>
+    public PdfContentBuilder SoftMask(PdfStream group, bool luminosity)
+    {
+        ArgumentNullException.ThrowIfNull(group);
+        if (!_masks.TryGetValue((group, luminosity), out var name))
+        {
+            name = "SM" + _masks.Count;
+            _masks[(group, luminosity)] = name;
+        }
+
+        _operations.Append('/').Append(name).Append(" gs\n");
+        return this;
+    }
+
+    /// <summary>Paints the external object <paramref name="xObject"/> - a picture fills the unit square of the current
+    /// transformation, a form is drawn under it (ISO 32000-2, 8.8).</summary>
+    public PdfContentBuilder Draw(PdfStream xObject)
+    {
+        ArgumentNullException.ThrowIfNull(xObject);
+        var prefix = xObject.Dictionary[PdfKeys.Subtype] is PdfName { Value: PdfKeys.Form } ? "Fm" : "Im";
+        _operations.Append('/').Append(Named(_xObjects, xObject, prefix)).Append(" Do\n");
+        return this;
+    }
+
+    /// <summary>Paints <paramref name="shading"/> (<see cref="PdfShadings"/>) over the whole clip, in the current
+    /// transformation (ISO 32000-2, 8.7.4.2).</summary>
+    public PdfContentBuilder Shade(PdfObject shading)
+    {
+        ArgumentNullException.ThrowIfNull(shading);
+        _operations.Append('/').Append(Named(_shadings, shading, "Sh")).Append(" sh\n");
+        return this;
+    }
+
+    /// <summary>Fills from here on with <paramref name="pattern"/> - a shading pattern (<see
+    /// cref="PdfShadings.Pattern"/>).</summary>
+    public PdfContentBuilder FillPattern(PdfObject pattern)
+    {
+        ArgumentNullException.ThrowIfNull(pattern);
+        _operations.Append("/Pattern cs /").Append(Named(_patterns, pattern, "P")).Append(" scn\n");
+        return this;
+    }
+
+    /// <summary>Strokes from here on with <paramref name="pattern"/>, a shading pattern.</summary>
+    public PdfContentBuilder StrokePattern(PdfObject pattern)
+    {
+        ArgumentNullException.ThrowIfNull(pattern);
+        _operations.Append("/Pattern CS /").Append(Named(_patterns, pattern, "P")).Append(" SCN\n");
+        return this;
+    }
+
+    private static string Named(Dictionary<PdfObject, string> names, PdfObject value, string prefix)
+    {
+        if (!names.TryGetValue(value, out var name))
+        {
+            name = prefix + names.Count;
+            names[value] = name;
+        }
+
+        return name;
+    }
+
     public PdfContentBuilder MoveTo(double x, double y) => Operator("m", x, y);
 
     public PdfContentBuilder LineTo(double x, double y) => Operator("l", x, y);
@@ -124,21 +194,61 @@ public sealed class PdfContentBuilder
 
     /// <summary>The operators as a form XObject of <paramref name="bbox"/>, its resources named - an appearance
     /// stream (ISO 32000-2, 12.5.5).</summary>
-    public PdfStream ToFormXObject(PdfRectangle bbox)
+    public PdfStream ToFormXObject(PdfRectangle bbox) => ToFormXObject(bbox, null);
+
+    /// <summary>The operators as a form XObject of <paramref name="bbox"/>; with <paramref name="group"/>, a
+    /// transparency group (ISO 32000-2, 11.6.6) - drawn as one, faded or masked as one. The pictures, forms and
+    /// masks it draws stay inside it as streams; a writer makes them indirect objects when it writes it.</summary>
+    public PdfStream ToFormXObject(PdfRectangle bbox, PdfTransparencyGroup group)
     {
         var dictionary = new PdfDictionary();
         dictionary.Set(PdfKeys.Type, new PdfName(PdfKeys.XObject));
         dictionary.Set(PdfKeys.Subtype, new PdfName(PdfKeys.Form));
         dictionary.Set(PdfKeys.BBox, new PdfArray([new PdfReal(bbox.Left), new PdfReal(bbox.Bottom),
             new PdfReal(bbox.Right), new PdfReal(bbox.Top)]));
+        if (group != null)
+        {
+            var attributes = new PdfDictionary();
+            attributes.Set(PdfKeys.Type, new PdfName(PdfGraphicsKeys.FormGroup));
+            attributes.Set(PdfGraphicsKeys.Kind, new PdfName(PdfGraphicsKeys.Transparency));
+            attributes.Set(PdfGraphicsKeys.ColorSpace, new PdfName(group.ColorSpace));
+            if (group.Isolated)
+            {
+                attributes.Set(PdfGraphicsKeys.Isolated, PdfBoolean.True);
+            }
+
+            if (group.Knockout)
+            {
+                attributes.Set(PdfGraphicsKeys.Knockout, PdfBoolean.True);
+            }
+
+            dictionary.Set(PdfGraphicsKeys.FormGroup, attributes);
+        }
+
+        dictionary.Set(PdfKeys.Resources, ToResources());
+        dictionary.Set(PdfKeys.Filter, new PdfName(PdfFilterNames.FlateDecode));
+        return new PdfStream(dictionary, Deflate(ToContent()));
+    }
+
+    /// <summary>The operators as a page's content stream, compressed; its resources are <see cref="ToResources"/>.
+    /// </summary>
+    public PdfStream ToContentStream()
+    {
+        var dictionary = new PdfDictionary();
+        dictionary.Set(PdfKeys.Filter, new PdfName(PdfFilterNames.FlateDecode));
+        return new PdfStream(dictionary, Deflate(ToContent()));
+    }
+
+    /// <summary>The resources the operators name: graphics states, external objects, shadings, patterns.</summary>
+    public PdfDictionary ToResources()
+    {
         var resources = new PdfDictionary();
-        if (_opacities.Count > 0 || _blends.Count > 0)
+        if (_opacities.Count > 0 || _blends.Count > 0 || _masks.Count > 0)
         {
             var states = new PdfDictionary();
             foreach (var ((stroke, fill), name) in _opacities)
             {
-                var state = new PdfDictionary();
-                state.Set(PdfKeys.Type, new PdfName(PdfKeys.ExtGState));
+                var state = State();
                 state.Set(PdfKeys.StrokeOpacity, new PdfReal(stroke));
                 state.Set(PdfKeys.FillOpacity, new PdfReal(fill));
                 states.Set(name, state);
@@ -146,24 +256,64 @@ public sealed class PdfContentBuilder
 
             foreach (var (mode, name) in _blends)
             {
-                var state = new PdfDictionary();
-                state.Set(PdfKeys.Type, new PdfName(PdfKeys.ExtGState));
+                var state = State();
                 state.Set(PdfGraphicsKeys.BlendMode, new PdfName(mode.ToString()));
+                states.Set(name, state);
+            }
+
+            foreach (var ((group, luminosity), name) in _masks)
+            {
+                var mask = new PdfDictionary();
+                mask.Set(PdfKeys.Type, new PdfName(PdfKeys.Mask));
+                mask.Set(PdfGraphicsKeys.Kind,
+                    new PdfName(luminosity ? PdfGraphicsKeys.Luminosity : PdfGraphicsKeys.Alpha));
+                mask.Set(PdfGraphicsKeys.Group, group);
+                var state = State();
+                state.Set(PdfGraphicsKeys.SoftMask, mask);
                 states.Set(name, state);
             }
 
             resources.Set(PdfKeys.ExtGState, states);
         }
 
-        dictionary.Set(PdfKeys.Resources, resources);
-        dictionary.Set(PdfKeys.Filter, new PdfName(PdfFilterNames.FlateDecode));
+        Section(resources, PdfKeys.XObject, _xObjects);
+        Section(resources, PdfKeys.Shading, _shadings);
+        Section(resources, PdfKeys.Pattern, _patterns);
+        return resources;
+    }
+
+    private static PdfDictionary State()
+    {
+        var state = new PdfDictionary();
+        state.Set(PdfKeys.Type, new PdfName(PdfKeys.ExtGState));
+        return state;
+    }
+
+    private static void Section(PdfDictionary resources, string key, Dictionary<PdfObject, string> names)
+    {
+        if (names.Count == 0)
+        {
+            return;
+        }
+
+        var section = new PdfDictionary();
+        foreach (var (value, name) in names)
+        {
+            section.Set(name, value);
+        }
+
+        resources.Set(key, section);
+    }
+
+    private static byte[] Deflate(byte[] data)
+    {
         using var output = new MemoryStream();
         using (var zlib = new ZLibStream(output, CompressionLevel.Optimal, true))
         {
-            zlib.Write(ToContent());
+            zlib.Write(data);
         }
 
-        return new PdfStream(dictionary, output.ToArray());
+        return output.ToArray();
     }
 
     private static double Unit(double value) => double.IsFinite(value) ? Math.Clamp(value, 0, 1) : 0;

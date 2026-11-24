@@ -48,10 +48,12 @@ public sealed class PdfIncrementalUpdate
     /// <summary>Whether anything was added, replaced or freed.</summary>
     public bool HasChanges => _written.Count > 0 || _freed.Count > 0;
 
-    /// <summary>Adds <paramref name="value"/> as a new indirect object, and returns the reference to it.</summary>
+    /// <summary>Adds <paramref name="value"/> as a new indirect object, and the streams inside it - an appearance's
+    /// pictures and masks - as their own; returns the reference to it.</summary>
     public PdfReference Add(PdfObject value)
     {
         ArgumentNullException.ThrowIfNull(value);
+        value = PdfIndirection.Lift(value, Add);
         if (_next >= MaxObjectNumber)
         {
             throw new PdfException("The file has as many objects as a file may have.");

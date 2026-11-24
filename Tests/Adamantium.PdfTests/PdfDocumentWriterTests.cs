@@ -1,0 +1,198 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Text;
+using Adamantium.Pdf.Document;
+using Adamantium.Pdf.Images;
+using Adamantium.Pdf.Objects;
+using Adamantium.Pdf.Resources;
+using Adamantium.Pdf.Writing;
+using NUnit.Framework;
+
+namespace Adamantium.PdfTests;
+
+/// <summary>New documents written page by page, each read back by opening what was written: pages, their content and
+/// resources, pictures with alpha, gradients, soft masks and groups, a picture shared by pages written once.</summary>
+public class PdfDocumentWriterTests
+{
+    private static readonly PdfRectangle A4 = new(0, 0, 595.276, 841.89);
+
+    private static byte[] Write(Action<PdfDocumentWriter> fill)
+    {
+        using var output = new MemoryStream();
+        var writer = new PdfDocumentWriter(output);
+        fill(writer);
+        writer.Finish();
+        return output.ToArray();
+    }
+
+    private static string Content(PdfDocument document, PdfPage page) =>
+        Encoding.ASCII.GetString(page.GetContents().Span);
+
+    [Test]
+    public void Pages_AreReadBack_InOrder_WithTheirBoxesAndContent()
+    {
+        var bytes = Write(writer =>
+        {
+            writer.AddPage(A4, new PdfContentBuilder().FillColor(1, 0, 0).Rectangle(10, 20, 30, 40).Fill());
+            writer.AddPage(new PdfRectangle(0, 0, 612, 792),
+                new PdfContentBuilder().StrokeColor(0, 0, 1).MoveTo(0, 0).LineTo(100, 100).Stroke());
+        });
+
+        var document = PdfDocument.Open(bytes);
+        Assert.That(document.IsRepaired, Is.False, "the cross-reference table is read as written");
+        Assert.That(document.PageCount, Is.EqualTo(2));
+        Assert.That(document.Pages[0].MediaBox, Is.EqualTo(A4));
+        Assert.That(document.Pages[1].MediaBox, Is.EqualTo(new PdfRectangle(0, 0, 612, 792)));
+        Assert.That(Content(document, document.Pages[0]), Does.Contain("10 20 30 40 re").And.Contain("1 0 0 rg"));
+        Assert.That(Content(document, document.Pages[1]), Does.Contain("100 100 l").And.Contain("S"));
+    }
+
+    [Test]
+    public void Information_IsWritten_AndTheFileHasAnIdentifier()
+    {
+        var created = new DateTimeOffset(2026, 11, 24, 21, 0, 0, TimeSpan.FromHours(3));
+        var bytes = Write(writer =>
+        {
+            writer.Title = "Отчёт (ноябрь)";
+            writer.Author = "Тестер";
+            writer.Created = created;
+            writer.AddPage(A4, new PdfContentBuilder());
+        });
+
+        var document = PdfDocument.Open(bytes);
+        Assert.That(document.Properties.Title, Is.EqualTo("Отчёт (ноябрь)"));
+        Assert.That(document.Properties.Author, Is.EqualTo("Тестер"));
+        Assert.That(document.Properties.Producer, Is.EqualTo("Adamantium"));
+        Assert.That(document.Properties.Created, Is.EqualTo(created));
+        Assert.That(document.Trailer[PdfKeys.Id], Is.TypeOf<PdfArray>());
+    }
+
+    [Test]
+    public void APicture_WithAlpha_IsReadBack_PixelForPixel()
+    {
+        var rgba = new byte[]
+        {
+            255, 0, 0, 255, 0, 255, 0, 128,
+            0, 0, 255, 0, 10, 20, 30, 255,
+        };
+        var picture = PdfImages.FromRgba(2, 2, rgba);
+        var bytes = Write(writer => writer.AddPage(A4,
+            new PdfContentBuilder().SaveState().Transform(100, 0, 0, 100, 50, 50).Draw(picture).RestoreState()));
+
+        var document = PdfDocument.Open(bytes);
+        var page = document.Pages[0];
+        var resources = new PdfResources(page.Resources, document);
+        Assert.That(Content(document, page), Does.Contain("/Im0 Do"));
+        var image = resources.XObject("Im0");
+        Assert.That(image.Dictionary[PdfKeys.SMask], Is.TypeOf<PdfReference>(), "the alpha is a stream of its own");
+        var bitmap = PdfImageDecoder.Decode(image, resources, document);
+        Assert.That(bitmap.Width, Is.EqualTo(2));
+        Assert.That(bitmap.Height, Is.EqualTo(2));
+        Assert.That(bitmap.Rgba, Is.EqualTo(rgba));
+    }
+
+    [Test]
+    public void AnOpaquePicture_HasNoSoftMask()
+    {
+        var picture = PdfImages.FromRgba(1, 1, [1, 2, 3, 255]);
+        Assert.That(picture.Dictionary.ContainsKey(PdfKeys.SMask), Is.False);
+    }
+
+    [Test]
+    public void APictureOnEveryPage_IsWrittenOnce()
+    {
+        var rgba = Enumerable.Repeat((byte)200, 64 * 64 * 4).ToArray();
+        var picture = PdfImages.FromRgba(64, 64, rgba);
+        var bytes = Write(writer =>
+        {
+            for (var index = 0; index < 3; index++)
+            {
+                writer.AddPage(A4, new PdfContentBuilder().Draw(picture));
+            }
+        });
+
+        var document = PdfDocument.Open(bytes);
+        var references = document.Pages.Select(page =>
+            ((PdfDictionary)page.Resources[PdfKeys.XObject])["Im0"]).Cast<PdfReference>().Select(r => r.Id).Distinct();
+        Assert.That(references.Count(), Is.EqualTo(1));
+    }
+
+    [Test]
+    public void Gradients_ThroughStops_AreStitched_AndEndsCarryOn()
+    {
+        var axial = PdfShadings.Axial(0, 0, 100, 0,
+        [
+            new PdfGradientStop(0.2, 1, 0, 0), new PdfGradientStop(0.5, 0, 1, 0), new PdfGradientStop(0.9, 0, 0, 1),
+        ]);
+        var function = (PdfDictionary)axial["Function"];
+        Assert.That(((PdfInteger)function[PdfKeys.FunctionType]).Value, Is.EqualTo(3));
+        Assert.That(((PdfArray)function[PdfKeys.Functions]).Count, Is.EqualTo(4), "0..0.2, 0.2..0.5, 0.5..0.9, 0.9..1");
+        var bounds = ((PdfArray)function[PdfKeys.Bounds]).Cast<PdfReal>().Select(real => real.Value);
+        Assert.That(bounds, Is.EqualTo(new[] { 0.2, 0.5, 0.9 }));
+
+        var two = PdfShadings.Radial(50, 50, 0, 50, 50, 40, [new PdfGradientStop(0, 1, 1, 1), new PdfGradientStop(1, 0, 0, 0)]);
+        Assert.That(((PdfInteger)((PdfDictionary)two["Function"])[PdfKeys.FunctionType]).Value, Is.EqualTo(2));
+
+        var bytes = Write(writer => writer.AddPage(A4, new PdfContentBuilder()
+            .SaveState().Rectangle(0, 0, 100, 100).Clip().Shade(axial).RestoreState()
+            .SaveState().FillPattern(PdfShadings.Pattern(two, new PdfMatrix(1, 0, 0, 1, 0, 0)))
+            .Rectangle(100, 0, 100, 100).Fill().RestoreState()));
+
+        var document = PdfDocument.Open(bytes);
+        var resources = new PdfResources(document.Pages[0].Resources, document);
+        Assert.That(resources.Shading("Sh0"), Is.TypeOf<PdfDictionary>());
+        Assert.That(resources.Pattern("P0"), Is.TypeOf<PdfDictionary>());
+        Assert.That(Content(document, document.Pages[0]), Does.Contain("/Sh0 sh").And.Contain("/Pattern cs /P0 scn"));
+    }
+
+    [Test]
+    public void ASoftMask_AndAGroup_AreWritten_WithTheirStreamsIndirect()
+    {
+        var mask = new PdfContentBuilder()
+            .Shade(PdfShadings.Axial(0, 0, 100, 0, [PdfGradientStop.Gray(0, 1), PdfGradientStop.Gray(1, 0)], true))
+            .ToFormXObject(new PdfRectangle(0, 0, 100, 100), new PdfTransparencyGroup(ColorSpace: "DeviceGray"));
+        var layer = new PdfContentBuilder().FillColor(0, 0, 1).Rectangle(0, 0, 100, 100).Fill()
+            .Draw(PdfImages.FromRgba(1, 1, [1, 2, 3, 4]))
+            .ToFormXObject(new PdfRectangle(0, 0, 100, 100), PdfTransparencyGroup.Layer);
+        var bytes = Write(writer => writer.AddPage(A4, new PdfContentBuilder()
+            .SaveState().SoftMask(mask, true).Opacity(0.5, 0.5).Draw(layer).RestoreState()));
+
+        var document = PdfDocument.Open(bytes);
+        var resources = new PdfResources(document.Pages[0].Resources, document);
+        var state = resources.ExtGState("SM0");
+        var softMask = (PdfDictionary)document.Resolve(state["SMask"]);
+        Assert.That(((PdfName)softMask["S"]).Value, Is.EqualTo("Luminosity"));
+        Assert.That(softMask["G"], Is.TypeOf<PdfReference>());
+        var form = resources.XObject("Fm0");
+        var group = (PdfDictionary)form.Dictionary["Group"];
+        Assert.That(((PdfName)group["S"]).Value, Is.EqualTo("Transparency"));
+        Assert.That(group["I"], Is.EqualTo(PdfBoolean.True));
+        var inner = new PdfResources((PdfDictionary)document.Resolve(form.Dictionary[PdfKeys.Resources]), document);
+        Assert.That(inner.XObject("Im0"), Is.Not.Null, "the group's own picture is written as an object of its own");
+    }
+
+    [Test]
+    public void Triangles_AreAFreeFormShading()
+    {
+        var shading = PdfShadings.Triangles(
+        [
+            new PdfShadedVertex(0, 0, 1, 0, 0), new PdfShadedVertex(100, 0, 0, 1, 0), new PdfShadedVertex(0, 100, 0, 0, 1),
+        ]);
+        var bytes = Write(writer => writer.AddPage(A4, new PdfContentBuilder().Shade(shading)));
+        var document = PdfDocument.Open(bytes);
+        var written = (PdfStream)new PdfResources(document.Pages[0].Resources, document).Shading("Sh0");
+        Assert.That(((PdfInteger)written.Dictionary["ShadingType"]).Value, Is.EqualTo(4));
+        Assert.That(document.Decode(written).Data.Length, Is.EqualTo(3 * (1 + 4 + 4 + 6)));
+    }
+
+    [Test]
+    public void Finished_TakesNoMorePages()
+    {
+        using var output = new MemoryStream();
+        var writer = new PdfDocumentWriter(output);
+        writer.Finish();
+        Assert.Throws<InvalidOperationException>(() => writer.AddPage(A4, new PdfContentBuilder()));
+        Assert.That(PdfDocument.Open(output.ToArray()).PageCount, Is.Zero);
+    }
+}
