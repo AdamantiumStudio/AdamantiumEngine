@@ -6,7 +6,8 @@
         <Configurations>Debug;Release</Configurations>
         <LangVersion>latest</LangVersion>
         <IsPackable>true</IsPackable>
-        <Description>macOS interop for the Adamantium engine: application, windows and cursors through a native app wrapper.</Description>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <Description>macOS interop for the Adamantium engine: AppKit, Foundation and QuartzCore reached from C# through the Objective-C runtime - the application and its event loop, windows, views, events, screens, cursors and the CAMetalLayer Vulkan draws into.</Description>
         <PackageTags>adamantium;macos;interop</PackageTags>
     </PropertyGroup>
 
