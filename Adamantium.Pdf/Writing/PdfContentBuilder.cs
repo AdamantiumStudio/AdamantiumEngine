@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Text;
+using Adamantium.Pdf.ColorSpaces;
 using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Filters;
 using Adamantium.Pdf.Graphics;
@@ -211,7 +212,17 @@ public sealed class PdfContentBuilder
             var attributes = new PdfDictionary();
             attributes.Set(PdfKeys.Type, new PdfName(PdfGraphicsKeys.FormGroup));
             attributes.Set(PdfGraphicsKeys.Kind, new PdfName(PdfGraphicsKeys.Transparency));
-            attributes.Set(PdfGraphicsKeys.ColorSpace, new PdfName(group.ColorSpace));
+            if (group.ColorSpace != null)
+            {
+                if (group.ColorSpace.Family is not (PdfColorSpaceFamilies.DeviceGray or PdfColorSpaceFamilies.DeviceRGB
+                    or PdfColorSpaceFamilies.DeviceCMYK))
+                {
+                    throw new NotSupportedException(
+                        $"A group is written blended in a device space, not in {group.ColorSpace.Family}.");
+                }
+
+                attributes.Set(PdfGraphicsKeys.ColorSpace, new PdfName(group.ColorSpace.Family));
+            }
             if (group.Isolated)
             {
                 attributes.Set(PdfGraphicsKeys.Isolated, PdfBoolean.True);

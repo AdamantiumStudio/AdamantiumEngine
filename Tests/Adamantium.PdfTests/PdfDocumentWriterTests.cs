@@ -3,6 +3,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Adamantium.Pdf.Document;
+using Adamantium.Pdf.Graphics;
 using Adamantium.Pdf.Images;
 using Adamantium.Pdf.Objects;
 using Adamantium.Pdf.Resources;
@@ -151,7 +152,7 @@ public class PdfDocumentWriterTests
     {
         var mask = new PdfContentBuilder()
             .Shade(PdfShadings.Axial(0, 0, 100, 0, [PdfGradientStop.Gray(0, 1), PdfGradientStop.Gray(1, 0)], true))
-            .ToFormXObject(new PdfRectangle(0, 0, 100, 100), new PdfTransparencyGroup(ColorSpace: "DeviceGray"));
+            .ToFormXObject(new PdfRectangle(0, 0, 100, 100), PdfTransparencyGroup.GrayMask);
         var layer = new PdfContentBuilder().FillColor(0, 0, 1).Rectangle(0, 0, 100, 100).Fill()
             .Draw(PdfImages.FromRgba(1, 1, [1, 2, 3, 4]))
             .ToFormXObject(new PdfRectangle(0, 0, 100, 100), PdfTransparencyGroup.Layer);

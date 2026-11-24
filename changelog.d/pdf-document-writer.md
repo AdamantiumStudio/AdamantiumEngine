@@ -7,6 +7,8 @@
 - `PdfContentBuilder` draws pictures and forms (`Draw`), shadings (`Shade`), shading patterns (`FillPattern`,
   `StrokePattern`) and soft masks (`SoftMask`, by luminosity or alpha), each named once however often it is drawn;
   `ToFormXObject(bbox, PdfTransparencyGroup)` makes a transparency group, `ToContentStream` and `ToResources` a page.
+- `PdfTransparencyGroup`, read from forms before, is made too: its constructor, `Layer` (isolated, DeviceRGB) and
+  `GrayMask` (isolated, DeviceGray).
 - `PdfImages.FromRgba`: a picture from straight RGBA pixels, its alpha a soft mask of its own when it has any.
 - `PdfShadings`: axial and radial gradients through any number of stops (`PdfGradientStop`, in color or gray for a
   mask), stitched, their end colors carried on; triangles shaded between their corners (`PdfShadedVertex`, type 4);
