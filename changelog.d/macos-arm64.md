@@ -4,6 +4,8 @@
   application (`vulkan/icd.d`), in the Vulkan SDK, `/usr/local` or Homebrew - and hands it to the Vulkan loader as its
   only driver (`VK_LUNARG_direct_driver_loading`), so another driver installed beside it (MoltenVK) takes no part. The
   effects generator compiles shaders on the Mac.
+- `Adamantium.MacOS` calls AppKit from C# through the Objective-C runtime: the application and its events, windows,
+  views, screens, cursors, images and `CAMetalLayer`.
 
 ### Changed
 

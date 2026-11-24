@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 
 namespace Adamantium.MacOS.CoreGraphics;
 
-/// <summary>The Core Graphics and Core Foundation calls that make an image from pixels.</summary>
+/// <summary>The Core Graphics and Core Foundation calls that make an image from pixels and tell displays apart.</summary>
 public static unsafe class CoreGraphicsInterop
 {
     private const string CoreGraphics = "/System/Library/Frameworks/CoreGraphics.framework/CoreGraphics";
@@ -30,4 +30,16 @@ public static unsafe class CoreGraphicsInterop
     public static extern IntPtr CreateImage(nuint width, nuint height, nuint bitsPerComponent, nuint bitsPerPixel,
         nuint bytesPerRow, IntPtr colorSpace, uint bitmapInfo, IntPtr provider, double* decode,
         [MarshalAs(UnmanagedType.U1)] bool shouldInterpolate, int intent);
+
+    /// <summary>CGDisplayVendorNumber.</summary>
+    [DllImport(CoreGraphics, EntryPoint = "CGDisplayVendorNumber")]
+    public static extern uint DisplayVendor(uint display);
+
+    /// <summary>CGDisplayModelNumber.</summary>
+    [DllImport(CoreGraphics, EntryPoint = "CGDisplayModelNumber")]
+    public static extern uint DisplayModel(uint display);
+
+    /// <summary>CGDisplaySerialNumber.</summary>
+    [DllImport(CoreGraphics, EntryPoint = "CGDisplaySerialNumber")]
+    public static extern uint DisplaySerial(uint display);
 }

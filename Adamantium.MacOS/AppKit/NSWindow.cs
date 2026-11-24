@@ -10,6 +10,8 @@ namespace Adamantium.MacOS.AppKit;
 public static unsafe class NSWindow
 {
     private const ulong BufferedBacking = 2;
+    private const ulong FullScreenPrimary = 1 << 7;
+    private const ulong FullScreenNone = 1 << 9;
 
     private static readonly IntPtr Class = ObjCFrameworks.GetClass("NSWindow");
     private static readonly IntPtr InitSelector =
@@ -51,6 +53,10 @@ public static unsafe class NSWindow
     private static readonly IntPtr SetHiddenSelector = ObjCRuntime.RegisterSelector("setHidden:");
     private static readonly IntPtr PerformWindowDragSelector = ObjCRuntime.RegisterSelector("performWindowDragWithEvent:");
     private static readonly IntPtr SetStyleMaskSelector = ObjCRuntime.RegisterSelector("setStyleMask:");
+    private static readonly IntPtr StyleMaskSelector = ObjCRuntime.RegisterSelector("styleMask");
+    private static readonly IntPtr SetCollectionBehaviorSelector = ObjCRuntime.RegisterSelector("setCollectionBehavior:");
+    private static readonly IntPtr ToggleFullScreenSelector = ObjCRuntime.RegisterSelector("toggleFullScreen:");
+    private static readonly IntPtr IsVisibleSelector = ObjCRuntime.RegisterSelector("isVisible");
     private static readonly IntPtr SetContentMinSizeSelector = ObjCRuntime.RegisterSelector("setContentMinSize:");
     private static readonly IntPtr SetContentMaxSizeSelector = ObjCRuntime.RegisterSelector("setContentMaxSize:");
     private static readonly IntPtr SetAlphaValueSelector = ObjCRuntime.RegisterSelector("setAlphaValue:");
@@ -197,6 +203,21 @@ public static unsafe class NSWindow
     public static void MakeFirstResponder(IntPtr window, IntPtr view) =>
         ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, byte>)ObjCRuntime.MessageSend)(window, MakeFirstResponderSelector,
             view);
+
+    /// <summary>What the window has now: title bar, buttons, resizing, full screen.</summary>
+    public static NSWindowStyleMask StyleMaskOf(IntPtr window) =>
+        (NSWindowStyleMask)(ulong)NSObject.SendForInteger(window, StyleMaskSelector);
+
+    /// <summary>Sets whether the window may have a full screen of its own.</summary>
+    public static void SetAllowsFullScreen(IntPtr window, bool allows) =>
+        ((delegate* unmanaged<IntPtr, IntPtr, ulong, void>)ObjCRuntime.MessageSend)(window,
+            SetCollectionBehaviorSelector, allows ? FullScreenPrimary : FullScreenNone);
+
+    /// <summary>Takes the window to a full screen of its own, or back.</summary>
+    public static void ToggleFullScreen(IntPtr window) => NSObject.Send(window, ToggleFullScreenSelector, IntPtr.Zero);
+
+    /// <summary>Whether the window is on screen, even behind others.</summary>
+    public static bool IsVisible(IntPtr window) => NSObject.SendForBoolean(window, IsVisibleSelector);
 
     /// <summary>Changes what the window has: title bar, buttons, resizing.</summary>
     public static void SetStyleMask(IntPtr window, NSWindowStyleMask style) =>

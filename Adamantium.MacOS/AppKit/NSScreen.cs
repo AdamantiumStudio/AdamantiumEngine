@@ -16,6 +16,38 @@ public static unsafe class NSScreen
     private static readonly IntPtr MaximumFramesPerSecondSelector =
         ObjCRuntime.RegisterSelector("maximumFramesPerSecond");
 
+    private static readonly IntPtr ScreensSelector = ObjCRuntime.RegisterSelector("screens");
+    private static readonly IntPtr DeviceDescriptionSelector = ObjCRuntime.RegisterSelector("deviceDescription");
+    private static readonly IntPtr ObjectForKeySelector = ObjCRuntime.RegisterSelector("objectForKey:");
+    private static readonly IntPtr IntegerValueSelector = ObjCRuntime.RegisterSelector("integerValue");
+
+    /// <summary>Posted when displays are connected, disconnected or rearranged.</summary>
+    public const string ParametersChangedNotification = "NSApplicationDidChangeScreenParametersNotification";
+
+    /// <summary>The connected screens; the first is the one with the menu bar, at whose corner coordinates start.</summary>
+    public static IntPtr[] All
+    {
+        get
+        {
+            var screens = NSObject.Send(Class, ScreensSelector);
+            var all = new IntPtr[NSArray.CountOf(screens)];
+            for (var i = 0; i < all.Length; i++)
+                all[i] = NSArray.ObjectAt(screens, i);
+
+            return all;
+        }
+    }
+
+    /// <summary>The CGDirectDisplayID of the screen, good while it stays connected.</summary>
+    public static uint DisplayIdOf(IntPtr screen)
+    {
+        var key = NSString.Create("NSScreenNumber");
+        var number = ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, IntPtr>)ObjCRuntime.MessageSend)(
+            NSObject.Send(screen, DeviceDescriptionSelector), ObjectForKeySelector, key);
+        NSObject.Release(key);
+        return number == IntPtr.Zero ? 0 : (uint)NSObject.SendForInteger(number, IntegerValueSelector);
+    }
+
     /// <summary>The screen with the window that has the keyboard, else the one with the menu bar.</summary>
     public static IntPtr Main => NSObject.Send(Class, MainScreenSelector);
 

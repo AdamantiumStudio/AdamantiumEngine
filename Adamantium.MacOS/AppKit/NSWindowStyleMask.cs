@@ -11,5 +11,6 @@ public enum NSWindowStyleMask : ulong
     Closable = 1 << 1,
     Miniaturizable = 1 << 2,
     Resizable = 1 << 3,
+    FullScreen = 1 << 14,
     FullSizeContentView = 1 << 15
 }
