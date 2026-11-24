@@ -16,5 +16,8 @@
 
 ### Changed
 
-- `PdfIncrementalUpdate.Add` writes the streams inside what it adds - an appearance's pictures and masks - as objects of
-  their own; before, an appearance that held one could not be written.
+- `PdfIncrementalUpdate.Add` and `Replace` write the streams inside what they are given - an appearance's pictures
+  and masks - as objects of their own, each once however many objects of the update hold it; a stream of an encrypted
+  file copied for that keeps its bytes decrypted once. Before, an object holding a stream could not be written.
+- A stream holding itself, directly or through others, is refused with a `PdfException` - not a stack overflow; the
+  new document refuses a stream read from another file, whose references are that file's.
