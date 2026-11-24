@@ -17,6 +17,11 @@ public static unsafe class CAMetalLayer
     /// <summary>A new CAMetalLayer, autoreleased: a view that hosts it keeps it.</summary>
     public static IntPtr Create() => NSObject.Send(Class, LayerSelector);
 
+    private static readonly IntPtr SetOpaqueSelector = ObjCRuntime.RegisterSelector("setOpaque:");
+
+    /// <summary>Sets whether the layer hides what is below it, whatever the alpha drawn.</summary>
+    public static void SetOpaque(IntPtr layer, bool opaque) => NSObject.Send(layer, SetOpaqueSelector, opaque);
+
     /// <summary>Sets the pixels per point the layer draws at.</summary>
     public static void SetContentsScale(IntPtr layer, double scale) =>
         ((delegate* unmanaged<IntPtr, IntPtr, double, void>)ObjCRuntime.MessageSend)(layer, SetContentsScaleSelector, scale);

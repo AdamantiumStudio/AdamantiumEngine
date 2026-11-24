@@ -25,6 +25,16 @@ public static unsafe class NSApplication
         ObjCRuntime.RegisterSelector("setApplicationIconImage:");
     private static readonly IntPtr DefaultRunLoopMode = NSString.Create("kCFRunLoopDefaultMode");
 
+    private static readonly IntPtr KeyWindowSelector = ObjCRuntime.RegisterSelector("keyWindow");
+    private static readonly IntPtr SetDelegateSelector = ObjCRuntime.RegisterSelector("setDelegate:");
+
+    /// <summary>The window that has the keyboard; zero when none has.</summary>
+    public static IntPtr KeyWindow => NSObject.Send(Shared, KeyWindowSelector);
+
+    /// <summary>Sets the application's delegate (not retained).</summary>
+    public static void SetDelegate(IntPtr applicationDelegate) =>
+        NSObject.Send(Shared, SetDelegateSelector, applicationDelegate);
+
     /// <summary>Sets the icon the Dock and the application switcher show (an NSImage, retained).</summary>
     public static void SetIconImage(IntPtr image) => NSObject.Send(Shared, SetApplicationIconImageSelector, image);
 

@@ -17,8 +17,7 @@ public static unsafe class NSWindow
     private static readonly IntPtr InitSelector =
         ObjCRuntime.RegisterSelector("initWithContentRect:styleMask:backing:defer:");
     private static readonly IntPtr SetReleasedWhenClosedSelector = ObjCRuntime.RegisterSelector("setReleasedWhenClosed:");
-    private static readonly IntPtr SetAcceptsMouseMovedEventsSelector =
-        ObjCRuntime.RegisterSelector("setAcceptsMouseMovedEvents:");
+    private static readonly IntPtr SendEventSelector = ObjCRuntime.RegisterSelector("sendEvent:");
     private static readonly IntPtr SetTitleSelector = ObjCRuntime.RegisterSelector("setTitle:");
     private static readonly IntPtr SetContentViewSelector = ObjCRuntime.RegisterSelector("setContentView:");
     private static readonly IntPtr ContentViewSelector = ObjCRuntime.RegisterSelector("contentView");
@@ -79,9 +78,11 @@ public static unsafe class NSWindow
         var window = ((delegate* unmanaged<IntPtr, IntPtr, CGRect, ulong, ulong, byte, IntPtr>)ObjCRuntime.MessageSend)(
             NSObject.Alloc(Class), InitSelector, contentRect, (ulong)style, BufferedBacking, 0);
         NSObject.Send(window, SetReleasedWhenClosedSelector, false);
-        NSObject.Send(window, SetAcceptsMouseMovedEventsSelector, true);
         return window;
     }
+
+    /// <summary>Hands an event to the window's views.</summary>
+    public static void SendEvent(IntPtr window, IntPtr nsEvent) => NSObject.Send(window, SendEventSelector, nsEvent);
 
     /// <summary>Sets the title shown in the title bar.</summary>
     public static void SetTitle(IntPtr window, string title)
@@ -167,8 +168,19 @@ public static unsafe class NSWindow
     {
         NSObject.Send(window, SetOpaqueSelector, false);
         NSObject.Send(window, SetBackgroundColorSelector, NSColor.Clear);
-        NSObject.Send(window, SetHasShadowSelector, false);
+        SetHasShadow(window, false);
     }
+
+    /// <summary>Makes the window opaque again, of the system's background.</summary>
+    public static void MakeOpaque(IntPtr window)
+    {
+        NSObject.Send(window, SetOpaqueSelector, true);
+        NSObject.Send(window, SetBackgroundColorSelector, NSColor.WindowBackground);
+    }
+
+    /// <summary>Sets whether the window casts a shadow.</summary>
+    public static void SetHasShadow(IntPtr window, bool hasShadow) =>
+        NSObject.Send(window, SetHasShadowSelector, hasShadow);
 
     /// <summary>Hands the title bar to the content: a window made with <see cref="NSWindowStyleMask.FullSizeContentView"/>
     /// keeps its frame, shadow and resizing, while its title bar shows no title, no buttons and nothing of its own.

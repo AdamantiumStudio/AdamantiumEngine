@@ -12,4 +12,9 @@ public static class NSColor
 
     /// <summary>No color at all: a window of it shows only what is drawn in it.</summary>
     public static IntPtr Clear => NSObject.Send(Class, ClearColorSelector);
+
+    private static readonly IntPtr WindowBackgroundColorSelector = ObjCRuntime.RegisterSelector("windowBackgroundColor");
+
+    /// <summary>What an ordinary window is filled with.</summary>
+    public static IntPtr WindowBackground => NSObject.Send(Class, WindowBackgroundColorSelector);
 }
