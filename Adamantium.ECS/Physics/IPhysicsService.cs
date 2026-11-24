@@ -12,14 +12,14 @@ public interface IPhysicsService : IGameService
 {
     /// <summary>How the next game's physics steps and solves; a game playing keeps those it started with, and ones set
     /// during it go back when it stops. Their gravity is not used: <see cref="Gravity"/> is; with a <see cref="Project"/>,
-    /// its steps a second are the project's.</summary>
+    /// the project's settings are used instead (<see cref="ProjectPhysics.ToSettings"/>).</summary>
     PhysicsSettings Settings { get; set; }
 
     /// <summary>The pull every dynamic body feels while the game plays, in meters per second squared - the
     /// <see cref="Project"/>'s as a game starts with one; set during a game, it goes back when the game stops.</summary>
     Vector3F Gravity { get; set; }
 
-    /// <summary>The game project's physics - its layers, which collide, its gravity and steps a second - taken as the
+    /// <summary>The game project's physics - its layers, which collide, its gravity and how it steps - taken as the
     /// next game starts; null for the defaults, the default layer alone. Changed only while no game plays.</summary>
     ProjectPhysics Project { get; set; }
 

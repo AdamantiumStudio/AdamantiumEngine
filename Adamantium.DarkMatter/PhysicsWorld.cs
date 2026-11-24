@@ -1473,23 +1473,8 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
 
     private static void ValidateSettings(PhysicsSettings settings)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(settings.StepRate, nameof(settings));
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(settings.Substeps, nameof(settings));
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(settings.MaxContactPointsPerPair, nameof(settings));
-        ArgumentOutOfRangeException.ThrowIfGreaterThan(settings.MaxContactPointsPerPair, ManifoldBuffer.Capacity,
-            nameof(settings));
-        RequireFinite(settings.Gravity, nameof(settings));
-        RequirePositiveFinite(settings.MaxLinearSpeed, nameof(settings));
-        if (!float.IsFinite(settings.MaxLinearSpeed * settings.MaxLinearSpeed))
-            throw new ArgumentOutOfRangeException(nameof(settings), settings.MaxLinearSpeed, "The speed limit is too large.");
-        RequireFiniteNotNegative(settings.SpeculativeDistance, nameof(settings));
-        RequireFiniteNotNegative(settings.ContactHertz, nameof(settings));
-        RequireFiniteNotNegative(settings.ContactDampingRatio, nameof(settings));
-        RequireFiniteNotNegative(settings.MaxPushOutSpeed, nameof(settings));
-        RequireFiniteNotNegative(settings.RestitutionThreshold, nameof(settings));
-        RequireFiniteNotNegative(settings.SleepSpeed, nameof(settings));
-        if (!(settings.TimeToSleep >= 0))
-            throw new ArgumentOutOfRangeException(nameof(settings), "The time to sleep must not be negative.");
+        if (settings.FindProblem() is { } problem)
+            throw new ArgumentOutOfRangeException(nameof(settings), problem);
     }
 
     private static void ValidateDescription(BodyDescription description)
@@ -1619,12 +1604,6 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
     }
 
     private static float InfinityToUnit(float value) => float.IsInfinity(value) ? MathF.Sign(value) : 0;
-
-    private static void RequirePositiveFinite(float value, string parameterName)
-    {
-        if (!float.IsFinite(value) || value <= 0)
-            throw new ArgumentOutOfRangeException(parameterName, value, "The value must be finite and above zero.");
-    }
 
     private static bool IsInvertible(float value) => value > 0 && float.IsFinite(value) && float.IsFinite(1f / value);
 

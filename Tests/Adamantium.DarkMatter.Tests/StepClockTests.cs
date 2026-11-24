@@ -8,7 +8,7 @@ public class StepClockTests
     [Test]
     public void Frame_GivesTheStepsDueAndKeepsTheRest()
     {
-        var clock = new StepClock(120);
+        var clock = new StepClock(120, 8);
 
         Assert.That(clock.Advance(1.0 / 60), Is.EqualTo(2));
         Assert.That(clock.Advance(1.0 / 240), Is.EqualTo(0));
@@ -22,7 +22,7 @@ public class StepClockTests
     [TestCase(-0.01)]
     public void BadTime_IsRefused(double elapsed)
     {
-        var clock = new StepClock(120);
+        var clock = new StepClock(120, 8);
 
         Assert.Throws<System.ArgumentOutOfRangeException>(() => clock.Advance(elapsed));
         Assert.That(clock.Advance(1.0 / 120), Is.EqualTo(1));
@@ -41,7 +41,7 @@ public class StepClockTests
     [Test]
     public void Reset_ForgetsTheTimeNotYetStepped()
     {
-        var clock = new StepClock(120);
+        var clock = new StepClock(120, 8);
         clock.Advance(1.0 / 240);
 
         clock.Reset();
