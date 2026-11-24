@@ -12,9 +12,9 @@ using NUnit.Framework;
 
 namespace Adamantium.EngineTests;
 
-/// <summary>At a debugger's stop, what the game moved since the last frame is placed where it is now, to be drawn there:
-/// a breakpoint in the loop that moves the planets shows each moved.</summary>
-public class TransformsWhereItStandsTests
+/// <summary>At a breakpoint, what the game moved since the last frame is placed where it is now, to be drawn there: a
+/// breakpoint in the loop that moves the planets shows each moved.</summary>
+public class TransformsAtBreakpointTests
 {
     private TestUniverse universe;
     private TestOutput output;
@@ -44,7 +44,7 @@ public class TransformsWhereItStandsTests
         Frame();
 
         planet.Transform.Position = new WorldPosition(3, 0, 0);
-        transforms.UpdateWhereItStands();
+        transforms.UpdateAtBreakpoint();
 
         Assert.That((DrawnAt(planet) - PlacedAt(planet)).Length(), Is.LessThan(1e-4f),
             $"drawn at {DrawnAt(planet)}, placed at {PlacedAt(planet)}");

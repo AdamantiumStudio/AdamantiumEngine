@@ -45,7 +45,7 @@ public class TransformService : EntityService
     public override void Update(AppTime appTime) => UpdateShownScenes(appTime, animates: true);
 
     // What the game moved since the last frame placed where it is now, no animation stepped.
-    public override void UpdateWhereItStands() => UpdateShownScenes(default, animates: false);
+    public override void UpdateAtBreakpoint() => UpdateShownScenes(default, animates: false);
 
     private void UpdateShownScenes(AppTime appTime, bool animates)
     {

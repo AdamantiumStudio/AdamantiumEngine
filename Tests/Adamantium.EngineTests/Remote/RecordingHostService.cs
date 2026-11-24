@@ -31,7 +31,7 @@ public class RecordingHostService : IUniverseHostService
 
     public void AskNewSurface() => Calls.Add("AskNewSurface");
 
-    public void DrawWhereItStands(bool heldAtAStatement) => Calls.Add($"DrawWhereItStands {heldAtAStatement}");
+    public void DrawAtBreakpoint(bool atBreakpointOrStep) => Calls.Add($"DrawAtBreakpoint {atBreakpointOrStep}");
 
     public Task GoOnAsync(CancellationToken cancellationToken)
     {

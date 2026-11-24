@@ -23,12 +23,12 @@ public interface IUniverseHostService
     /// by a view it left - and is shown them as any new surface.</summary>
     void AskNewSurface();
 
-    /// <summary>Draws the world as it stands, at once, with no step of the game: for a game a debugger holds, whose own
-    /// thread cannot draw - at each stop, its view to show where it stands. Nothing for a game not launched debugged
-    /// (<see cref="UniverseLaunch.IsDebugged"/>). <paramref name="heldAtAStatement"/>: held at a breakpoint or a step,
-    /// between two statements of the game's code - what it moved so far is drawn where it is; paused anywhere, maybe
-    /// halfway through changing the world, it is drawn as the last frame placed it.</summary>
-    void DrawWhereItStands(bool heldAtAStatement);
+    /// <summary>Draws the world as it is, at once, with no step of the game: for a game a debugger holds, whose own
+    /// thread cannot draw - at each stop, its view to show the game there. Nothing for a game not launched debugged
+    /// (<see cref="UniverseLaunch.IsDebugged"/>). <paramref name="atBreakpointOrStep"/>: held between two statements of
+    /// the game's code - what it moved so far is drawn where it is; paused anywhere, maybe halfway through changing the
+    /// world, it is drawn as the last frame placed it.</summary>
+    void DrawAtBreakpoint(bool atBreakpointOrStep);
 
     /// <summary>The game is about to be let go on from a stop: it draws where it stands no more; done once that drawing
     /// is over, so it never meets a step of the game.</summary>

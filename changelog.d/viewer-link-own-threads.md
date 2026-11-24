@@ -10,17 +10,17 @@
 ### Added
 
 - `UniverseLaunch.IsDebugged`: a thread of the host's own (`UniverseHostThreads.Drawing`), made before any of the
-  game's code runs, draws the world where a debugger holds the game: `IUniverseHostService.DrawWhereItStands` at a
+  game's code runs, draws the world where a debugger holds the game: `IUniverseHostService.DrawAtBreakpoint` at a
   stop, then a size given or a surface asked for, until `GoOnAsync` - asked before the game is let go on, done once the
   drawing is over, answered from the drawing's thread: the link reads on meanwhile, a call off or a Stop among it. A
   new size or ring of the frames' sharing is handed to the viewer with a second drawing
   (`ISharedSurfaceProducer.HandsOverWithNextFrame`).
-- `Universe.DrawWhereItStands`: every output drawn once, the world as it stands - the outputs' size taken first, no
+- `Universe.DrawAtBreakpoint`: every output drawn once, the world as it is - the outputs' size taken first, no
   step of the game, no action posted, no end of a frame; never beside the loop's own drawing or its GPU calls, its
   drawing lock taken only if free. Held in the game's first frame, before any service draws, the service of the output
   that came with it is put in first (`EntityServiceManager.TakeInRenderingServices`).
-- `IEntityService.UpdateWhereItStands`, called by `Universe.DrawWhereItStands(placesWhatMoved)` before it draws -
-  held at a breakpoint or a step (`IUniverseHostService.DrawWhereItStands(heldAtAStatement)`), not paused anywhere:
+- `IEntityService.UpdateAtBreakpoint`, called by `Universe.DrawAtBreakpoint(atBreakpointOrStep)` before it draws -
+  held at a breakpoint or a step (`IUniverseHostService.DrawAtBreakpoint(atBreakpointOrStep)`), not paused anywhere:
   what the game changed since the last frame is drawn where it is - no time goes by, nothing steps.
   `TransformService` places what moved, no
   animation stepped; `InputService` has the cameras take a size given and a move made meanwhile. Only the engine's

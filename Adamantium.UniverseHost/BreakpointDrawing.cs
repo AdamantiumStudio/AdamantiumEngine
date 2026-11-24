@@ -9,7 +9,7 @@ namespace Adamantium.UniverseHost;
 /// with the link while every other thread of the game is held, the universe's own among them; before the game is let go
 /// on, <see cref="WaitTillItWaitsAsync"/> sees it is done; the universe's drawing lock keeps it from ever drawing beside
 /// the game's own drawing.</summary>
-internal sealed class WhereItStandsDrawing : IDisposable
+internal sealed class BreakpointDrawing : IDisposable
 {
     private readonly Universe _universe;
     private readonly RemoteUniverseOutput _output;
@@ -17,9 +17,9 @@ internal sealed class WhereItStandsDrawing : IDisposable
     private readonly AutoResetEvent _asked = new(false);
     private readonly DrawingWatch _watch = new();
     private volatile bool _ended;
-    private bool _placesWhatMoved;
+    private bool _atBreakpointOrStep;
 
-    public WhereItStandsDrawing(Universe universe, RemoteUniverseOutput output, Func<bool> standing)
+    public BreakpointDrawing(Universe universe, RemoteUniverseOutput output, Func<bool> standing)
     {
         _universe = universe;
         _output = output;
@@ -30,12 +30,12 @@ internal sealed class WhereItStandsDrawing : IDisposable
     /// <summary>Asks for a drawing; asks made before it starts come to one.</summary>
     public void Ask() => _asked.Set();
 
-    /// <summary>Whether what the game moved so far is drawn where it is - held at a statement of its code, a breakpoint or
-    /// a step; else it is drawn as the last frame placed it (see <see cref="Universe.DrawWhereItStands"/>).</summary>
-    public bool PlacesWhatMoved
+    /// <summary>Whether the game is held at a breakpoint or a step: what it moved so far is drawn where it is; else it is
+    /// drawn as the last frame placed it (see <see cref="Universe.DrawAtBreakpoint"/>).</summary>
+    public bool AtBreakpointOrStep
     {
-        get => Volatile.Read(ref _placesWhatMoved);
-        set => Volatile.Write(ref _placesWhatMoved, value);
+        get => Volatile.Read(ref _atBreakpointOrStep);
+        set => Volatile.Write(ref _atBreakpointOrStep, value);
     }
 
     /// <summary>Done once it draws no more - at once while it waits to be asked. No thread waits for it: the link's reading
@@ -63,13 +63,13 @@ internal sealed class WhereItStandsDrawing : IDisposable
             {
                 // Standing when it starts - not let go on meanwhile; a new size or ring reaches the viewer only with the
                 // next frame, and no frame of the game's own comes.
-                while (_standing() && _universe.DrawWhereItStands(PlacesWhatMoved) && _output.HandsOverWithNextFrame)
+                while (_standing() && _universe.DrawAtBreakpoint(AtBreakpointOrStep) && _output.HandsOverWithNextFrame)
                 {
                 }
             }
             catch (Exception exception)
             {
-                Log.Logger.Error(exception, "Drawing the world where it stands failed");
+                Log.Logger.Error(exception, "Drawing the world at a breakpoint failed");
             }
             finally
             {

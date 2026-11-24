@@ -7,12 +7,12 @@ using NUnit.Framework;
 
 namespace Adamantium.Engine.GraphicsTests;
 
-/// <summary>At a debugger's stop, the engine's services bring the world up to date where it stands - called here from
+/// <summary>At a breakpoint, the engine's services bring the world up to date as the game left it - called here from
 /// inside a service's own update, as the drawing does while the world's thread is held there. Held in a game service's
 /// update, each of the engine's does it, one that fails leaving the others to it, and no game service; held anywhere
 /// else, none does.</summary>
 [TestFixture]
-public class ServicesWhereItStandsTests
+public class ServicesAtBreakpointTests
 {
     private AdamantiumDependencyContainer container;
     private Universe universe;
@@ -78,7 +78,7 @@ public class ServicesWhereItStandsTests
         var placing = world.CreateService<PlacingService>(world);
         services.OnFrameEnded();
 
-        services.UpdateWhereItStands();
+        services.UpdateAtBreakpoint();
 
         Assert.That(placing.Placed, Is.EqualTo(0), "the engine may be halfway through changing the world");
     }
@@ -93,14 +93,14 @@ public class ServicesWhereItStandsTests
 
         public override EntityServiceType ServiceType => EntityServiceType.Update;
 
-        public override void UpdateWhereItStands() => Placed++;
+        public override void UpdateAtBreakpoint() => Placed++;
     }
 
     private sealed class FailingService(EntityWorld world) : PlacingService(world)
     {
         public int Asked { get; private set; }
 
-        public override void UpdateWhereItStands()
+        public override void UpdateAtBreakpoint()
         {
             Asked++;
             throw new InvalidOperationException("Fails to bring it up to date.");
@@ -112,13 +112,13 @@ public class ServicesWhereItStandsTests
     {
         public int Placed { get; private set; }
 
-        public override void Update(AppTime appTime) => EntityWorld.ServiceManager.UpdateWhereItStands();
+        public override void Update(AppTime appTime) => EntityWorld.ServiceManager.UpdateAtBreakpoint();
 
-        public override void UpdateWhereItStands() => Placed++;
+        public override void UpdateAtBreakpoint() => Placed++;
     }
 
     private sealed class HeldEngineService(EntityWorld world) : PlacingService(world)
     {
-        public override void Update(AppTime appTime) => EntityWorld.ServiceManager.UpdateWhereItStands();
+        public override void Update(AppTime appTime) => EntityWorld.ServiceManager.UpdateAtBreakpoint();
     }
 }

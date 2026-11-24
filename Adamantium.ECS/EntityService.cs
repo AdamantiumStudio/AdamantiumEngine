@@ -215,7 +215,7 @@ namespace Adamantium.ECS
 
         }
 
-        public virtual void UpdateWhereItStands()
+        public virtual void UpdateAtBreakpoint()
         {
         }
 

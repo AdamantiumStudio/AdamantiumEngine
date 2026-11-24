@@ -182,8 +182,8 @@ public class InputService : EntityService
         UpdateIdleCameras(appTime);
     }
 
-    // At a debugger's stop: the cameras take a size given and a move the game made meanwhile - no time goes by.
-    public override void UpdateWhereItStands()
+    // At a breakpoint: the cameras take a size given and a move the game made meanwhile - no time goes by.
+    public override void UpdateAtBreakpoint()
     {
         var cameras = observatory.CurrentCameras;
         for (int i = 0; i < cameras.Count; i++)

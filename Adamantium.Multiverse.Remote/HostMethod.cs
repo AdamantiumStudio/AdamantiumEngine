@@ -7,7 +7,7 @@ internal enum HostMethod
     Resize,
     AskFrame,
     AskNewSurface,
-    DrawWhereItStands,
+    DrawAtBreakpoint,
     GoOn,
     MovePointer,
     Focus,

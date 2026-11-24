@@ -175,12 +175,12 @@ namespace Adamantium.ECS
             }
         }
 
-        /// <summary>Brings what each active service of the engine's draws from up to date with the world where the game
-        /// stands - at a debugger's stop, before it is drawn there, on another thread, the world's own held. Only while it
+        /// <summary>Brings what each active service of the engine's draws from up to date with the world as the game left
+        /// it - at a breakpoint or a step, before it is drawn there, on another thread, the world's own held. Only while it
         /// is held inside a game service's update, where breakpoints are: anywhere else the engine may be halfway through
         /// changing the world, and nothing is touched. The game's own services are left as they are - their code would run
         /// where no breakpoint stops it. One that fails leaves the others to it.</summary>
-        public void UpdateWhereItStands()
+        public void UpdateAtBreakpoint()
         {
             if (_updating is not IGameService)
                 return;
@@ -192,11 +192,11 @@ namespace Adamantium.ECS
 
                 try
                 {
-                    handler.UpdateWhereItStands();
+                    handler.UpdateAtBreakpoint();
                 }
                 catch (Exception exception)
                 {
-                    Log.Logger.Error(exception, "The service {Service} failed to bring the world where it stands up to date",
+                    Log.Logger.Error(exception, "The service {Service} failed to update at a breakpoint",
                         handler.GetType().FullName);
                 }
             }

@@ -1100,11 +1100,11 @@ public class Universe : IUniverse
     /// frame: for a universe whose own thread is held where it stands, by a debugger, called on another thread that is
     /// let run meanwhile. A size asked for since is taken first, as a frame's start takes it; a surface asked for, as the
     /// drawing does. Nothing - the outputs keep their last frame - while the loop readies the outputs or draws, held
-    /// there or in a GPU call: whether anything was drawn. <paramref name="placesWhatMoved"/>: held at a statement of the
-    /// game's code - a breakpoint or a step - what it moved since the last frame is drawn where it is
-    /// (<see cref="EntityServiceManager.UpdateWhereItStands"/>); paused anywhere, it is drawn as the last frame placed it.
+    /// there or in a GPU call: whether anything was drawn. <paramref name="atBreakpointOrStep"/>: held at a statement of
+    /// the game's code - what it moved since the last frame is drawn where it is
+    /// (<see cref="EntityServiceManager.UpdateAtBreakpoint"/>); paused anywhere, it is drawn as the last frame placed it.
     /// </summary>
-    public bool DrawWhereItStands(bool placesWhatMoved)
+    public bool DrawAtBreakpoint(bool atBreakpointOrStep)
     {
         if (!drawing.TryEnter())
         {
@@ -1118,8 +1118,8 @@ public class Universe : IUniverse
             if (!EntityWorld.ServiceManager.HasActiveRenderingService)
                 EntityWorld.ServiceManager.TakeInRenderingServices();
             // What the game moved since the last frame - a breakpoint in the loop that moves it - is drawn where it is.
-            if (placesWhatMoved)
-                EntityWorld.ServiceManager.UpdateWhereItStands();
+            if (atBreakpointOrStep)
+                EntityWorld.ServiceManager.UpdateAtBreakpoint();
             foreach (var output in platform.Outputs)
             {
                 output.IsDrawnThisFrame = true;

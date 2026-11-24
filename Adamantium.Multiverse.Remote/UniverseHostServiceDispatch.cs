@@ -26,8 +26,8 @@ internal sealed class UniverseHostServiceDispatch(IUniverseHostService service) 
             case HostMethod.AskNewSurface:
                 service.AskNewSurface();
                 break;
-            case HostMethod.DrawWhereItStands:
-                service.DrawWhereItStands(arguments.ReadBoolean());
+            case HostMethod.DrawAtBreakpoint:
+                service.DrawAtBreakpoint(arguments.ReadBoolean());
                 break;
             case HostMethod.MovePointer:
                 service.MovePointer(arguments.ReadSingle(), arguments.ReadSingle(), arguments.ReadBoolean());

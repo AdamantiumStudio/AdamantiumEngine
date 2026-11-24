@@ -30,7 +30,7 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
     private RemoteUniverseOutput _output;
     private UniverseLaunch _launch;
     private GameRun _run;
-    private WhereItStandsDrawing _drawing;
+    private BreakpointDrawing _drawing;
     // Whether the game stands where a debugger holds it: told by its viewer at a stop, forgotten as its loop ends a frame.
     private volatile bool _standing;
     private volatile bool _stopAsked;
@@ -135,12 +135,12 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
     }
 
     // Asked at a stop: the game stands from now until it is let go on (GoOnAsync).
-    public void DrawWhereItStands(bool heldAtAStatement)
+    public void DrawAtBreakpoint(bool atBreakpointOrStep)
     {
         _standing = true;
         if (_drawing != null)
         {
-            _drawing.PlacesWhatMoved = heldAtAStatement;
+            _drawing.AtBreakpointOrStep = atBreakpointOrStep;
             _drawing.Ask();
         }
     }
@@ -207,7 +207,7 @@ public sealed class UniverseHost : IUniverseHostService, IDisposable
             _connection.ViewerProcessId, _launch);
         // Before any of the game's code runs: a stop in its start is drawn too.
         if (_launch.IsDebugged)
-            _drawing = new WhereItStandsDrawing(_universe, _output, () => _standing);
+            _drawing = new BreakpointDrawing(_universe, _output, () => _standing);
         List<IAssetResolver> folders = [];
         foreach (var folder in _launch.ContentFolders)
             folders.Add(new FileSystemAssetResolver(folder));

@@ -33,6 +33,6 @@ public sealed class UniverseLaunch
 
     /// <summary>Whether a debugger runs the game: a thread of the host's own (<see cref="UniverseHostThreads.Drawing"/>)
     /// then draws the world where the debugger holds it, as the viewer asks at a stop
-    /// (<see cref="IUniverseHostService.DrawWhereItStands"/>) - until the game's loop ends a frame again.</summary>
+    /// (<see cref="IUniverseHostService.DrawAtBreakpoint"/>) - until the game's loop ends a frame again.</summary>
     public bool IsDebugged { get; set; }
 }
