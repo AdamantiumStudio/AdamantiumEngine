@@ -44,6 +44,12 @@ public static unsafe class NSWindow
     private static readonly IntPtr SetIgnoresMouseEventsSelector = ObjCRuntime.RegisterSelector("setIgnoresMouseEvents:");
     private static readonly IntPtr SetHasShadowSelector = ObjCRuntime.RegisterSelector("setHasShadow:");
     private static readonly IntPtr SetLevelSelector = ObjCRuntime.RegisterSelector("setLevel:");
+    private static readonly IntPtr SetTitlebarAppearsTransparentSelector =
+        ObjCRuntime.RegisterSelector("setTitlebarAppearsTransparent:");
+    private static readonly IntPtr SetTitleVisibilitySelector = ObjCRuntime.RegisterSelector("setTitleVisibility:");
+    private static readonly IntPtr StandardWindowButtonSelector = ObjCRuntime.RegisterSelector("standardWindowButton:");
+    private static readonly IntPtr SetHiddenSelector = ObjCRuntime.RegisterSelector("setHidden:");
+    private static readonly IntPtr PerformWindowDragSelector = ObjCRuntime.RegisterSelector("performWindowDragWithEvent:");
 
     /// <summary>NSPopUpMenuWindowLevel: above the windows of every application, as a drag's image is.</summary>
     public const nint PopUpMenuLevel = 101;
@@ -145,6 +151,27 @@ public static unsafe class NSWindow
         NSObject.Send(window, SetBackgroundColorSelector, NSColor.Clear);
         NSObject.Send(window, SetHasShadowSelector, false);
     }
+
+    /// <summary>Hands the title bar to the content: a window made with <see cref="NSWindowStyleMask.FullSizeContentView"/>
+    /// keeps its frame, shadow and resizing, while its title bar shows no title, no buttons and nothing of its own.
+    /// </summary>
+    public static void HideTitleBar(IntPtr window)
+    {
+        NSObject.Send(window, SetTitlebarAppearsTransparentSelector, true);
+        ((delegate* unmanaged<IntPtr, IntPtr, nint, void>)ObjCRuntime.MessageSend)(window, SetTitleVisibilitySelector, 1);
+        for (nint button = 0; button <= 2; button++)
+        {
+            var standard = ((delegate* unmanaged<IntPtr, IntPtr, nint, IntPtr>)ObjCRuntime.MessageSend)(window,
+                StandardWindowButtonSelector, button);
+            if (standard != IntPtr.Zero)
+                NSObject.Send(standard, SetHiddenSelector, true);
+        }
+    }
+
+    /// <summary>Moves the window with the mouse from the press <paramref name="mouseDown"/>, as dragging its title bar
+    /// would - while the button is still held.</summary>
+    public static void PerformWindowDrag(IntPtr window, IntPtr mouseDown) =>
+        NSObject.Send(window, PerformWindowDragSelector, mouseDown);
 
     /// <summary>Lets the mouse through the window to what is below it.</summary>
     public static void SetIgnoresMouseEvents(IntPtr window, bool ignores) =>

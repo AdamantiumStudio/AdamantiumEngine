@@ -21,7 +21,12 @@ public static unsafe class NSApplication
     private static readonly IntPtr SendEventSelector = ObjCRuntime.RegisterSelector("sendEvent:");
     private static readonly IntPtr UpdateWindowsSelector = ObjCRuntime.RegisterSelector("updateWindows");
     private static readonly IntPtr PostEventSelector = ObjCRuntime.RegisterSelector("postEvent:atStart:");
+    private static readonly IntPtr SetApplicationIconImageSelector =
+        ObjCRuntime.RegisterSelector("setApplicationIconImage:");
     private static readonly IntPtr DefaultRunLoopMode = NSString.Create("kCFRunLoopDefaultMode");
+
+    /// <summary>Sets the icon the Dock and the application switcher show (an NSImage, retained).</summary>
+    public static void SetIconImage(IntPtr image) => NSObject.Send(Shared, SetApplicationIconImageSelector, image);
 
     /// <summary>[NSApplication sharedApplication], made on first use.</summary>
     public static IntPtr Shared => NSObject.Send(Class, SharedApplicationSelector);
