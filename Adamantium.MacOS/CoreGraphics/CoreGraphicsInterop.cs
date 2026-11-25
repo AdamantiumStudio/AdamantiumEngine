@@ -42,4 +42,9 @@ public static unsafe class CoreGraphicsInterop
     /// <summary>CGDisplaySerialNumber.</summary>
     [DllImport(CoreGraphics, EntryPoint = "CGDisplaySerialNumber")]
     public static extern uint DisplaySerial(uint display);
+
+    /// <summary>CGAssociateMouseAndMouseCursorPosition: whether the cursor goes with the mouse; off, the mouse still says
+    /// how far it moves.</summary>
+    [DllImport(CoreGraphics, EntryPoint = "CGAssociateMouseAndMouseCursorPosition")]
+    public static extern int AssociateMouseAndCursor([MarshalAs(UnmanagedType.Bool)] bool connected);
 }

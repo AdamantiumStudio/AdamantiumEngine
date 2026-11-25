@@ -24,6 +24,14 @@ public static unsafe class NSEvent
     private static readonly IntPtr ScrollingDeltaYSelector = ObjCRuntime.RegisterSelector("scrollingDeltaY");
     private static readonly IntPtr HasPreciseScrollingDeltasSelector =
         ObjCRuntime.RegisterSelector("hasPreciseScrollingDeltas");
+    private static readonly IntPtr IsDirectionInvertedFromDeviceSelector =
+        ObjCRuntime.RegisterSelector("isDirectionInvertedFromDevice");
+    private static readonly IntPtr PhaseSelector = ObjCRuntime.RegisterSelector("phase");
+    private static readonly IntPtr MomentumPhaseSelector = ObjCRuntime.RegisterSelector("momentumPhase");
+    private static readonly IntPtr MagnificationSelector = ObjCRuntime.RegisterSelector("magnification");
+    private static readonly IntPtr RotationSelector = ObjCRuntime.RegisterSelector("rotation");
+    private static readonly IntPtr DeltaXSelector = ObjCRuntime.RegisterSelector("deltaX");
+    private static readonly IntPtr DeltaYSelector = ObjCRuntime.RegisterSelector("deltaY");
     private static readonly IntPtr OtherEventSelector = ObjCRuntime.RegisterSelector(
         "otherEventWithType:location:modifierFlags:timestamp:windowNumber:context:subtype:data1:data2:");
 
@@ -69,6 +77,30 @@ public static unsafe class NSEvent
     /// <summary>Whether a scroll event comes in points from a trackpad rather than in lines from a wheel.</summary>
     public static bool HasPreciseScrollingDeltas(IntPtr nsEvent) =>
         NSObject.SendForBoolean(nsEvent, HasPreciseScrollingDeltasSelector);
+
+    /// <summary>Whether the deltas go with the fingers (natural scrolling) rather than against them.</summary>
+    public static bool IsDirectionInvertedFromDevice(IntPtr nsEvent) =>
+        NSObject.SendForBoolean(nsEvent, IsDirectionInvertedFromDeviceSelector);
+
+    /// <summary>Where a gesture is; none for a wheel and for what the system goes on scrolling by itself.</summary>
+    public static NSEventPhase PhaseOf(IntPtr nsEvent) => (NSEventPhase)NSObject.SendForInteger(nsEvent, PhaseSelector);
+
+    /// <summary>Where the scrolling that goes on after the fingers lift is; none for a gesture of fingers.</summary>
+    public static NSEventPhase MomentumPhaseOf(IntPtr nsEvent) =>
+        (NSEventPhase)NSObject.SendForInteger(nsEvent, MomentumPhaseSelector);
+
+    /// <summary>How much the fingers of a magnify event spread since the last one: 0.1 for a tenth farther apart.</summary>
+    public static double MagnificationOf(IntPtr nsEvent) => NSObject.SendForDouble(nsEvent, MagnificationSelector);
+
+    /// <summary>How far the fingers of a rotate event turned since the last one, in degrees counterclockwise.</summary>
+    public static float RotationOf(IntPtr nsEvent) =>
+        ((delegate* unmanaged<IntPtr, IntPtr, float>)ObjCRuntime.MessageSend)(nsEvent, RotationSelector);
+
+    /// <summary>How far the mouse itself moved across, in points.</summary>
+    public static double DeltaXOf(IntPtr nsEvent) => NSObject.SendForDouble(nsEvent, DeltaXSelector);
+
+    /// <summary>How far the mouse itself moved down, in points.</summary>
+    public static double DeltaYOf(IntPtr nsEvent) => NSObject.SendForDouble(nsEvent, DeltaYSelector);
 
     /// <summary>An application-defined event of <paramref name="subtype"/>, autoreleased.</summary>
     public static IntPtr CreateApplicationDefined(short subtype) =>
