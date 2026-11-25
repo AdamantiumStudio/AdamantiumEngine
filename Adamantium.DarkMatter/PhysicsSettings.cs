@@ -1,3 +1,5 @@
+using Adamantium.DarkMatter.CollisionDetection;
+
 namespace Adamantium.DarkMatter;
 
 /// <summary>How a <see cref="PhysicsSimulation"/> steps and solves; read once, when it is made. A copy with some told
@@ -46,4 +48,33 @@ public sealed record PhysicsSettings
     /// <summary>How long, in seconds, all bodies touching each other stay still and unpushed before they fall asleep
     /// together.</summary>
     public float TimeToSleep { get; init; } = 0.5f;
+
+    /// <summary>The most steps one advance takes when the game falls behind; the time past them is dropped, so the world
+    /// slows down instead of stepping ever more to catch up.</summary>
+    public int MaxStepsPerAdvance { get; init; } = 8;
+
+    /// <summary>What makes these settings ones no simulation takes; null when there is nothing.</summary>
+    public string FindProblem()
+    {
+        if (StepRate <= 0)
+            return "The physics takes at least one step a second.";
+        if (Substeps <= 0)
+            return "Each step solves the contacts at least once.";
+        if (MaxContactPointsPerPair <= 0 || MaxContactPointsPerPair > ManifoldBuffer.Capacity)
+            return $"A contact keeps from 1 to {ManifoldBuffer.Capacity} points.";
+        if (MaxStepsPerAdvance <= 0)
+            return "An advance takes at least one step.";
+        if (!float.IsFinite(Gravity.X) || !float.IsFinite(Gravity.Y) || !float.IsFinite(Gravity.Z))
+            return "The gravity is finite.";
+        if (!(MaxLinearSpeed > 0) || !float.IsFinite(MaxLinearSpeed * MaxLinearSpeed))
+            return "The speed limit is above zero and not too large.";
+        if (!IsFiniteNotNegative(SpeculativeDistance) || !IsFiniteNotNegative(ContactHertz)
+            || !IsFiniteNotNegative(ContactDampingRatio) || !IsFiniteNotNegative(MaxPushOutSpeed)
+            || !IsFiniteNotNegative(RestitutionThreshold) || !IsFiniteNotNegative(SleepSpeed))
+            return "Contact and sleep settings are finite and not negative.";
+
+        return TimeToSleep >= 0 ? null : "The time to sleep is not negative.";
+    }
+
+    private static bool IsFiniteNotNegative(float value) => float.IsFinite(value) && value >= 0;
 }

@@ -336,6 +336,50 @@ public partial class PhysicsServiceTests
         });
     }
 
+    // The solver's settings come from the file; one that leaves them out steps as a simulation made with none.
+    [Test]
+    public void TheSolversSettingsInAProjectsFile_AreTheSettingsItGives()
+    {
+        var set = ProjectPhysics.Read(Stream(
+            "<ProjectPhysics Version=\"1\" Gravity=\"0, 1, 0\" StepRate=\"60\" Substeps=\"8\" MaxContactPointsPerPair=\"2\" "
+            + "SpeculativeDistance=\"0.05\" ContactHertz=\"45\" ContactDampingRatio=\"2\" MaxPushOutSpeed=\"5\" "
+            + "RestitutionThreshold=\"0.5\" BodiesSleep=\"false\" SleepSpeed=\"0.1\" TimeToSleep=\"2\" "
+            + "MaxLinearSpeed=\"300\" MaxStepsPerAdvance=\"4\" />")).ToSettings();
+        var left = ProjectPhysics.Read(Stream("<ProjectPhysics Version=\"1\" Gravity=\"0, 1, 0\" />")).ToSettings();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(set, Is.EqualTo(new PhysicsSettings
+            {
+                Gravity = new Vector3F(0, 1, 0), StepRate = 60, Substeps = 8, MaxContactPointsPerPair = 2,
+                SpeculativeDistance = 0.05f, ContactHertz = 45, ContactDampingRatio = 2, MaxPushOutSpeed = 5,
+                RestitutionThreshold = 0.5f, SleepSpeed = 0.1f, TimeToSleep = float.PositiveInfinity,
+                MaxLinearSpeed = 300, MaxStepsPerAdvance = 4
+            }));
+            Assert.That(left, Is.EqualTo(new PhysicsSettings { Gravity = new Vector3F(0, 1, 0) }));
+            Assert.Throws<InvalidDataException>(() => ProjectPhysics.Read(Stream("<ProjectPhysics Substeps=\"0\" />")));
+            Assert.Throws<InvalidDataException>(() =>
+                ProjectPhysics.Read(Stream("<ProjectPhysics MaxContactPointsPerPair=\"99\" />")));
+            Assert.Throws<InvalidDataException>(() => ProjectPhysics.Read(Stream("<ProjectPhysics TimeToSleep=\"INF\" />")));
+            Assert.Throws<InvalidDataException>(() => ProjectPhysics.Read(Stream("<ProjectPhysics MaxStepsPerAdvance=\"0\" />")));
+        });
+    }
+
+    // A project whose bodies do not sleep: a box at rest on the ground stays awake, where it would sleep by default.
+    [Test]
+    public void AProjectWhoseBodiesDoNotSleep_KeepsABoxAtRestAwake()
+    {
+        UseSteppedPhysics();
+        _physics.Project = new ProjectPhysics { BodiesSleep = false };
+        AddGround();
+        AddBox("Box", new WorldPosition(0, -0.6, 0), 0.5);
+        Play();
+
+        Frames(3);
+
+        Assert.That(_physics.LastStep.AwakeBodies, Is.EqualTo(1));
+    }
+
     [Test]
     public void APhysicsMaterialFile_IsReadAsWritten_AndAMaterialNoneCanHaveIsRefused()
     {

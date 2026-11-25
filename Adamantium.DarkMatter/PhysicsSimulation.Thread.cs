@@ -194,7 +194,7 @@ public sealed partial class PhysicsSimulation
     {
         try
         {
-            var clock = new StepClock(Settings.StepRate, MaxStepsPerAdvance);
+            var clock = new StepClock(Settings.StepRate, Settings.MaxStepsPerAdvance);
             var previous = Stopwatch.GetTimestamp();
             while (!_stopping)
             {

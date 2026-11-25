@@ -209,7 +209,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
 
     protected override void OnStart()
     {
-        var settings = _project != null ? _settings with { StepRate = _project.StepRate } : _settings;
+        var settings = _project?.ToSettings() ?? _settings;
         var gravity = _project?.Gravity ?? _gravity;
         _simulation = new PhysicsSimulation(settings) { Gravity = gravity };
         _settingsBeforeGame = _settings;

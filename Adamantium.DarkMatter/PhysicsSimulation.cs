@@ -15,7 +15,6 @@ namespace Adamantium.DarkMatter;
 public sealed partial class PhysicsSimulation : IDisposable
 {
     private const int NoSlot = -1;
-    private const int MaxStepsPerAdvance = 8;
     private const int MaxUnreadResults = 32;
     // The batches of commands going round to its thread, made at once: however far the thread lags, no more are made.
     private const int MaxBatchesHanded = 4;
@@ -38,7 +37,7 @@ public sealed partial class PhysicsSimulation : IDisposable
         _stepper = new SimulationStepper(settings);
         Settings = _stepper.World.Settings;
         _gravity = _stepper.World.Gravity;
-        _clock = new StepClock(Settings.StepRate, MaxStepsPerAdvance);
+        _clock = new StepClock(Settings.StepRate, Settings.MaxStepsPerAdvance);
         Layers = new PhysicsLayers(this);
         for (var batch = 0; batch < MaxBatchesHanded; batch++)
             _spareBatches.Writer.TryWrite(new CommandBatch());
@@ -105,7 +104,7 @@ public sealed partial class PhysicsSimulation : IDisposable
     }
 
     /// <summary>Takes as many steps as <paramref name="elapsedSeconds"/> more of time make due - at most
-    /// <see cref="MaxStepsPerAdvance"/>, the rest dropped - and gives how many it took; what is drawn between them
+    /// <see cref="PhysicsSettings.MaxStepsPerAdvance"/>, the rest dropped - and gives how many it took; what is drawn between them
     /// follows the time left over. Only while it does not step on its own thread.</summary>
     public int Advance(double elapsedSeconds)
     {

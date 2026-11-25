@@ -8,7 +8,7 @@ internal sealed class StepClock
 {
     private double _accumulated;
 
-    public StepClock(int stepRate, int maxStepsPerAdvance = 8)
+    public StepClock(int stepRate, int maxStepsPerAdvance)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(stepRate);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(maxStepsPerAdvance);
