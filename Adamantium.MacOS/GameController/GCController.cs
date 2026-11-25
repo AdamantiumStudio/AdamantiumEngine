@@ -20,6 +20,7 @@ public static unsafe class GCController
     private static readonly IntPtr ValueSelector = ObjCRuntime.RegisterSelector("value");
     private static readonly IntPtr XAxisSelector = ObjCRuntime.RegisterSelector("xAxis");
     private static readonly IntPtr YAxisSelector = ObjCRuntime.RegisterSelector("yAxis");
+    private static readonly IntPtr RespondsSelector = ObjCRuntime.RegisterSelector("respondsToSelector:");
     private static readonly IntPtr HapticsSelector = ObjCRuntime.RegisterSelector("haptics");
     private static readonly IntPtr LocalitiesSelector = ObjCRuntime.RegisterSelector("supportedLocalities");
     private static readonly IntPtr ContainsObjectSelector = ObjCRuntime.RegisterSelector("containsObject:");
@@ -82,8 +83,13 @@ public static unsafe class GCController
                 CreateEngineSelector, locality));
     }
 
-    /// <summary>A part of a gamepad, by the property's selector; zero when the gamepad has none.</summary>
+    /// <summary>A part of a gamepad, by the property's selector; zero when the gamepad has none. The property is one every
+    /// gamepad has (<see cref="HasProperty"/>).</summary>
     public static IntPtr PartOf(IntPtr gamepad, IntPtr selector) => NSObject.Send(gamepad, selector);
+
+    /// <summary>Whether a gamepad of this kind has a property: an Xbox one's, say.</summary>
+    public static bool HasProperty(IntPtr gamepad, IntPtr selector) =>
+        ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, byte>)ObjCRuntime.MessageSend)(gamepad, RespondsSelector, selector) != 0;
 
     /// <summary>Whether a button is down; not, for none.</summary>
     public static bool IsPressed(IntPtr button) => button != IntPtr.Zero && NSObject.SendForBoolean(button, IsPressedSelector);
