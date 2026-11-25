@@ -140,11 +140,10 @@ public class FlacTests
     [Test]
     public void ALoopPastTheEnd_OfAFileThatDoesNotSayItsLength_IsTheWholeSound()
     {
-        var file = FlacFiles.Read("longnotable16");
+        var file = FlacFiles.Read("long16");
         RemoveLength(file);
-        // LOOPSTART=300, and the length that is not said: the end is written over it.
-        var at = file.AsSpan().IndexOf("LOOPSTART=300"u8);
-        "LOOPEND=99999"u8.CopyTo(file.AsSpan(at));
+        // Of 50000 frames: past the 120000 there are.
+        "LOOPSTART=90000"u8.CopyTo(file.AsSpan(file.AsSpan().IndexOf("LOOPSTART=20000"u8)));
 
         Assert.That(SoundFile.Read(file).Loop, Is.EqualTo(new SoundLoop(0, FlacFiles.LongFrames)));
     }
