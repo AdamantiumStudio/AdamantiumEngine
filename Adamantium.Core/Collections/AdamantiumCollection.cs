@@ -15,7 +15,7 @@ namespace Adamantium.Core.Collections
     /// </summary>
     /// <remarks>Implements <see cref="INotifyPropertyChanged"/> and <see cref="INotifyPropertyChanged"/> interfaces</remarks>
     /// <typeparam name="T"></typeparam>
-    public class AdamantiumCollection<T> : IList<T>, IReadOnlyList<T>, ICollection
+    public class AdamantiumCollection<T> : IList<T>, IReadOnlyList<T>, IList
     {
         private T[] items;
         private int currentIndex;
@@ -497,6 +497,41 @@ namespace Adamantium.Core.Collections
                 Array.Copy(items, 0, array, index, currentIndex);
             }
         }
+
+        // As IList, for what holds a list of anything: a control that closes, moves or adds the items bound to it.
+        object IList.this[int index]
+        {
+            get => this[index];
+            set => this[index] = As(value);
+        }
+
+        int IList.Add(object value)
+        {
+            var item = As(value);
+            lock (SyncRoot)
+            {
+                var index = currentIndex;
+                Add(item);
+                return index;
+            }
+        }
+
+        void IList.Insert(int index, object value) => Insert(index, As(value));
+
+        void IList.Remove(object value)
+        {
+            if (IsItem(value)) Remove((T)value);
+        }
+
+        bool IList.Contains(object value) => IsItem(value) && Contains((T)value);
+
+        int IList.IndexOf(object value) => IsItem(value) ? IndexOf((T)value) : -1;
+
+        private static bool IsItem(object value) => value is T || value == null && default(T) == null;
+
+        private static T As(object value) => IsItem(value)
+            ? (T)value
+            : throw new ArgumentException($"{value?.GetType().Name ?? "null"} is not a {typeof(T).Name}.", nameof(value));
 
         public bool IsReadOnly => false;
 

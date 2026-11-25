@@ -355,6 +355,32 @@ public class AdamantiumCollectionTests
         });
     }
 
+    [Test]
+    public void AsAListOfAnything_ItChangesAndTellsAsItself()
+    {
+        var c = Of("A", "B");
+        var list = (System.Collections.IList)c;
+        var told = 0;
+        c.CollectionChanged += (_, _) => told++;
+
+        Assert.That(list.Add("C"), Is.EqualTo(2));
+        list.Insert(0, "first");
+        list.Remove("B");
+        list[0] = "0";
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(c, Is.EqualTo(new[] { "0", "A", "C" }));
+            Assert.That(told, Is.EqualTo(4));
+            Assert.That(list.IndexOf("C"), Is.EqualTo(2));
+            Assert.That(list.Contains(5), Is.False, "of another type, it is not there");
+            Assert.That(list.IndexOf(5), Is.EqualTo(-1));
+            Assert.That(() => list.Remove(5), Throws.Nothing);
+            Assert.That(() => list.Add(5), Throws.ArgumentException);
+            Assert.That(() => ((System.Collections.IList)new TrackingCollection<int>()).Add(null), Throws.ArgumentException);
+        });
+    }
+
     // A view on another thread reads the items under the lock their changes are announced under - through the read-only
     // wrapper too, which is what an entity's Dependencies and the world's roots are.
     [Test]
