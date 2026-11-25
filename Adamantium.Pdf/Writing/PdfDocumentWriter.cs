@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using Adamantium.Fonts;
 using Adamantium.Pdf.Document;
 using Adamantium.Pdf.Navigation;
 using Adamantium.Pdf.Objects;
@@ -22,6 +24,7 @@ public sealed class PdfDocumentWriter
     private readonly List<PdfReference> _pages = [];
     private readonly Dictionary<PdfStream, PdfReference> _streams = new(ReferenceEqualityComparer.Instance);
     private readonly HashSet<PdfStream> _lifting = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<IFont, PdfEmbeddedFont> _fonts = new(ReferenceEqualityComparer.Instance);
     private bool _finished;
 
     /// <summary>A writer of a new document into <paramref name="output"/>, which it does not close.</summary>
@@ -62,8 +65,40 @@ public sealed class PdfDocumentWriter
             return AddStream(stream);
         }
 
-        return Write(PdfIndirection.Lift(value, AddStream));
+        return Write(PdfIndirection.Lift(value, AddStream, this));
     }
+
+    /// <summary><paramref name="font"/> as the document carries it, the same each time it is asked for: its glyphs are
+    /// used as they are drawn and written by <see cref="Finish"/>. Asked for only where
+    /// <see cref="PdfEmbeddedFont.CanEmbed"/>.</summary>
+    public PdfEmbeddedFont Font(IFont font)
+    {
+        ArgumentNullException.ThrowIfNull(font);
+        CheckOpen();
+        if (!PdfEmbeddedFont.CanEmbed(font))
+        {
+            throw new ArgumentException("A document may not carry this font.", nameof(font));
+        }
+
+        if (!_fonts.TryGetValue(font, out var embedded))
+        {
+            embedded = new PdfEmbeddedFont(font, this);
+            _fonts[font] = embedded;
+        }
+
+        return embedded;
+    }
+
+    /// <summary>A reference to an object <see cref="WriteReserved"/> writes later.</summary>
+    internal PdfReference Reserve()
+    {
+        CheckOpen();
+        _offsets.Add(-1);
+        return new PdfReference(_offsets.Count - 1, 0) { Writer = this };
+    }
+
+    internal void WriteReserved(PdfReference reference, PdfObject value) =>
+        WriteAt(reference.Id.Number, PdfIndirection.Lift(value, AddStream, this));
 
     /// <summary>Adds a page of <paramref name="mediaBox"/>, in points, drawn by <paramref name="content"/>.</summary>
     public void AddPage(PdfRectangle mediaBox, PdfContentBuilder content)
@@ -90,6 +125,11 @@ public sealed class PdfDocumentWriter
     public void Finish()
     {
         CheckOpen();
+        foreach (var font in _fonts.Values.Where(font => font.IsDrawnIn))
+        {
+            font.Write(this);
+        }
+
         var kids = new PdfArray();
         foreach (var page in _pages)
         {
@@ -164,7 +204,7 @@ public sealed class PdfDocumentWriter
                                    "and how its bytes are encrypted, are that file's.");
         }
 
-        return PdfIndirection.Once(stream, _streams, _lifting, own => Write(PdfIndirection.Lift(own, AddStream)));
+        return PdfIndirection.Once(stream, _streams, _lifting, own => Write(PdfIndirection.Lift(own, AddStream, this)));
     }
 
     private PdfReference Write(PdfObject value)
