@@ -43,6 +43,10 @@ public static unsafe class AudioQueue
     [DllImport(AudioToolbox, EntryPoint = "AudioQueueStart")]
     public static extern int Start(IntPtr queue, IntPtr time);
 
+    /// <summary>AudioQueueGetCurrentTime: goes on while there is nothing to play. Fails until the queue runs.</summary>
+    [DllImport(AudioToolbox, EntryPoint = "AudioQueueGetCurrentTime")]
+    public static extern int GetTime(IntPtr queue, IntPtr timeline, out AudioTimeStamp time, IntPtr discontinuity);
+
     /// <summary>AudioQueueDispose.</summary>
     [DllImport(AudioToolbox, EntryPoint = "AudioQueueDispose")]
     public static extern int Dispose(IntPtr queue, byte immediately);

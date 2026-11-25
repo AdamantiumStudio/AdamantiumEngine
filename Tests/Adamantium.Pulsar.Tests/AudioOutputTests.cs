@@ -2,8 +2,8 @@ using NUnit.Framework;
 
 namespace Adamantium.Pulsar.Tests;
 
-/// <summary>An output of either kind: the clock's, and the default device's where the machine has one - a CI runner has
-/// none.</summary>
+/// <summary>An output of either kind: the clock's, and the default device's where the machine has one - of the CI runners
+/// the macOS one has.</summary>
 [TestFixture(false)]
 [TestFixture(true)]
 public class AudioOutputTests(bool toDevice)
@@ -180,7 +180,8 @@ public class AudioOutputTests(bool toDevice)
     [Test]
     public void ARendererThatThrows_FailsTheOutput_AndStoppingSaysWhy()
     {
-        _output.Start(new RecordingRenderer { Call = 3, AtCall = () => throw new InvalidOperationException("broken") });
+        // After the calls a device is filled by before it opens.
+        _output.Start(new RecordingRenderer { Call = 10, AtCall = () => throw new InvalidOperationException("broken") });
 
         Assert.That(SpinWait.SpinUntil(() => _output.State == AudioOutputState.Failed, Patience), Is.True);
         Assert.That(() => _output.Stop(), Throws.InvalidOperationException.With.Message.EqualTo("broken"));

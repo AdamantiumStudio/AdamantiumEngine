@@ -9,6 +9,8 @@ namespace Adamantium.Pulsar.Outputs;
 internal sealed unsafe class AudioQueueOutput(AudioFormat format, TimeSpan buffer) : DeviceOutput(format, buffer)
 {
     private static readonly TimeSpan Period = TimeSpan.FromMilliseconds(10);
+    // With two the queue broke off six times a second, measured; with four never.
+    private const int LeastBuffers = 4;
     // A queue whose device is gone says nothing: it only gives no buffer back.
     private static readonly TimeSpan Standstill = TimeSpan.FromSeconds(2);
     // How soon a stop is heard while nothing comes.
@@ -17,6 +19,8 @@ internal sealed unsafe class AudioQueueOutput(AudioFormat format, TimeSpan buffe
     private IntPtr _queue;
     private AudioQueueBuffer*[] _played;
     private int _playedCount;
+    private long _queuedFrames;
+    private bool _silent;
 
     protected override void PlayToDevice()
     {
@@ -67,8 +71,10 @@ internal sealed unsafe class AudioQueueOutput(AudioFormat format, TimeSpan buffe
         var description = AudioStreamDescription.Float(Format.SampleRate, Format.Channels);
         Check(AudioQueue.CreateOutput(description, &OnPlayed, self, AudioQueue.CurrentRunLoop(), mode, 0, out _queue),
             "open a queue");
-        _played = new AudioQueueBuffer*[Math.Max(2, (int)Math.Ceiling(Wanted / Period))];
+        _played = new AudioQueueBuffer*[Math.Max(LeastBuffers, (int)Math.Ceiling(Wanted / Period))];
         _playedCount = 0;
+        _queuedFrames = 0;
+        _silent = false;
         for (var index = 0; index < _played.Length; index++)
         {
             Check(AudioQueue.AllocateBuffer(_queue, (uint)(periodFrames * Format.Channels * sizeof(float)), out var made),
@@ -84,7 +90,10 @@ internal sealed unsafe class AudioQueueOutput(AudioFormat format, TimeSpan buffe
             return;
         }
 
-        var ranDry = _playedCount == _played.Length;
+        // Late, the queue drops what it is given until it catches up with its own time: one silence until then.
+        var silent = _playedCount == _played.Length || IsBehind();
+        var ranDry = silent && !_silent;
+        _silent = silent;
         while (_playedCount != 0)
         {
             var buffer = _played[_playedCount - 1];
@@ -92,10 +101,14 @@ internal sealed unsafe class AudioQueueOutput(AudioFormat format, TimeSpan buffe
             buffer->Size = buffer->Capacity;
             Check(AudioQueue.Enqueue(_queue, buffer, 0, IntPtr.Zero), "queue a buffer");
             _playedCount--;
+            _queuedFrames += buffer->Size / (Format.Channels * sizeof(float));
         }
 
         Filled(ranDry);
     }
+
+    private bool IsBehind() =>
+        AudioQueue.GetTime(_queue, IntPtr.Zero, out var time, IntPtr.Zero) == 0 && time.SampleTime > _queuedFrames;
 
     // Called in RunLoop, on the output's own thread.
     [UnmanagedCallersOnly]
