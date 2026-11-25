@@ -52,6 +52,16 @@ public static unsafe class NSView
         NSObject.Release(area);
     }
 
+    private static readonly IntPtr AddSubviewSelector = ObjCRuntime.RegisterSelector("addSubview:");
+    private static readonly IntPtr SetFrameOriginSelector = ObjCRuntime.RegisterSelector("setFrameOrigin:");
+
+    /// <summary>Puts <paramref name="subview"/>, which the view retains, on it at <paramref name="origin"/>.</summary>
+    public static void AddSubview(IntPtr view, IntPtr subview, CGPoint origin)
+    {
+        ((delegate* unmanaged<IntPtr, IntPtr, CGPoint, void>)ObjCRuntime.MessageSend)(subview, SetFrameOriginSelector, origin);
+        NSObject.Send(view, AddSubviewSelector, subview);
+    }
+
     /// <summary>The window the view is in.</summary>
     public static IntPtr WindowOf(IntPtr view) => NSObject.Send(view, WindowSelector);
 }

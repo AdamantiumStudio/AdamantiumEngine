@@ -20,6 +20,7 @@ public static unsafe class NSSavePanel
     private static readonly IntPtr OpenPanelSelector = ObjCRuntime.RegisterSelector("openPanel");
     private static readonly IntPtr SetMessageSelector = ObjCRuntime.RegisterSelector("setMessage:");
     private static readonly IntPtr SetNameSelector = ObjCRuntime.RegisterSelector("setNameFieldStringValue:");
+    private static readonly IntPtr NameSelector = ObjCRuntime.RegisterSelector("nameFieldStringValue");
     private static readonly IntPtr SetDirectorySelector = ObjCRuntime.RegisterSelector("setDirectoryURL:");
     private static readonly IntPtr SetContentTypesSelector = ObjCRuntime.RegisterSelector("setAllowedContentTypes:");
     private static readonly IntPtr SetAllowsOtherTypesSelector = ObjCRuntime.RegisterSelector("setAllowsOtherFileTypes:");
@@ -27,6 +28,9 @@ public static unsafe class NSSavePanel
     private static readonly IntPtr SetChoosesFoldersSelector = ObjCRuntime.RegisterSelector("setCanChooseDirectories:");
     private static readonly IntPtr SetCreatesFoldersSelector = ObjCRuntime.RegisterSelector("setCanCreateDirectories:");
     private static readonly IntPtr SetIdentifierSelector = ObjCRuntime.RegisterSelector("setIdentifier:");
+    private static readonly IntPtr SetAccessorySelector = ObjCRuntime.RegisterSelector("setAccessoryView:");
+    private static readonly IntPtr SetAccessoryDisclosedSelector = ObjCRuntime.RegisterSelector("setAccessoryViewDisclosed:");
+    private static readonly IntPtr IsKindOfClassSelector = ObjCRuntime.RegisterSelector("isKindOfClass:");
     private static readonly IntPtr RunModalSelector = ObjCRuntime.RegisterSelector("runModal");
     private static readonly IntPtr UrlSelector = ObjCRuntime.RegisterSelector("URL");
     private static readonly IntPtr TypeWithExtensionSelector = ObjCRuntime.RegisterSelector("typeWithFilenameExtension:");
@@ -50,6 +54,9 @@ public static unsafe class NSSavePanel
     /// <summary>Sets the name a file is saved under to begin with.</summary>
     public static void SetName(IntPtr panel, string name) => SetText(panel, SetNameSelector, name);
 
+    /// <summary>The name a file would be saved under now.</summary>
+    public static string NameOf(IntPtr panel) => NSString.ToManaged(NSObject.Send(panel, NameSelector));
+
     /// <summary>Sets the folder the dialog opens in.</summary>
     public static void SetFolder(IntPtr panel, string folder) =>
         NSObject.Send(panel, SetDirectorySelector, NSURL.Create(folder));
@@ -57,8 +64,17 @@ public static unsafe class NSSavePanel
     /// <summary>Sets the name under which the system remembers the dialog's folder and size.</summary>
     public static void SetIdentifier(IntPtr panel, string identifier) => SetText(panel, SetIdentifierSelector, identifier);
 
-    /// <summary>Offers only files of these extensions, without the dot; a name may be saved with another all the same.
-    /// </summary>
+    /// <summary>Shows a view, retained, under the files.</summary>
+    public static void SetAccessory(IntPtr panel, IntPtr view)
+    {
+        NSObject.Send(panel, SetAccessorySelector, view);
+        // A dialog that opens folds it away.
+        if (NSObject.SendForBoolean(panel, IsKindOfClassSelector, OpenClass))
+            NSObject.Send(panel, SetAccessoryDisclosedSelector, true);
+    }
+
+    /// <summary>Offers only files of these extensions, without the dot, or any for none; a name may be saved with another
+    /// all the same.</summary>
     public static void SetExtensions(IntPtr panel, IEnumerable<string> extensions)
     {
         GC.KeepAlive(TypesFramework);
@@ -73,9 +89,6 @@ public static unsafe class NSSavePanel
             if (type != IntPtr.Zero)
                 types.Add(type);
         }
-
-        if (types.Count == 0)
-            return;
 
         NSObject.Send(panel, SetContentTypesSelector, NSArray.Create(CollectionsMarshal.AsSpan(types)));
         NSObject.Send(panel, SetAllowsOtherTypesSelector, true);

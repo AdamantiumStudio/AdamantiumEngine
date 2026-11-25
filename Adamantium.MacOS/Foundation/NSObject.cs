@@ -47,6 +47,10 @@ public static unsafe class NSObject
     public static bool SendForBoolean(IntPtr receiver, IntPtr selector) =>
         ((delegate* unmanaged<IntPtr, IntPtr, byte>)ObjCRuntime.MessageSend)(receiver, selector) != 0;
 
+    /// <summary>A message with one object argument that answers a boolean.</summary>
+    public static bool SendForBoolean(IntPtr receiver, IntPtr selector, IntPtr argument) =>
+        ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, byte>)ObjCRuntime.MessageSend)(receiver, selector, argument) != 0;
+
     /// <summary>A message with no arguments that answers a double (a CGFloat or an NSTimeInterval).</summary>
     public static double SendForDouble(IntPtr receiver, IntPtr selector) =>
         ((delegate* unmanaged<IntPtr, IntPtr, double>)ObjCRuntime.MessageSend)(receiver, selector);
