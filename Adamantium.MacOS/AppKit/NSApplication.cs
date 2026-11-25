@@ -41,12 +41,16 @@ public static unsafe class NSApplication
     /// <summary>[NSApplication sharedApplication], made on first use.</summary>
     public static IntPtr Shared => NSObject.Send(Class, SharedApplicationSelector);
 
-    /// <summary>Makes the application a regular one and finishes launching it; call once, on the main thread.</summary>
-    public static void Launch()
+    /// <summary>NSApplicationActivationPolicyProhibited: nothing in the Dock, no menu bar, never active.</summary>
+    public const nint ProhibitedActivationPolicy = 2;
+
+    /// <summary>Finishes launching the application, a regular one unless told otherwise; call once, on the main thread.
+    /// </summary>
+    public static void Launch(nint activationPolicy = RegularActivationPolicy)
     {
         var application = Shared;
         ((delegate* unmanaged<IntPtr, IntPtr, nint, byte>)ObjCRuntime.MessageSend)(application,
-            SetActivationPolicySelector, RegularActivationPolicy);
+            SetActivationPolicySelector, activationPolicy);
         NSObject.Send(application, FinishLaunchingSelector);
     }
 
