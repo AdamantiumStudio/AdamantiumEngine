@@ -17,18 +17,29 @@ if (command == "mix")
 
 if (command == "play")
 {
+    if (args.Length < 2)
+    {
+        Console.WriteLine("play file.wav");
+        return;
+    }
+
     var sound = WavFile.Read(File.ReadAllBytes(args[1]));
     var engine = new AudioEngine();
     using var output = AudioOutput.CreateDefault(TimeSpan.FromMilliseconds(80));
     output.Start(engine);
     var voice = engine.Play(engine.AddSound(sound));
-    while (engine.IsPlaying(voice))
+    while (engine.IsPlaying(voice) && output.State != AudioOutputState.Failed)
     {
         Thread.Sleep(20);
     }
 
     // What was mixed is yet to be played.
     Thread.Sleep(output.Buffer);
+    if (output.State == AudioOutputState.Failed)
+    {
+        output.Stop();
+    }
+
     Console.WriteLine($"{sound.Format}, {sound.Duration}: {output.State} {output.DeviceProblem} {output.Statistics}");
     return;
 }

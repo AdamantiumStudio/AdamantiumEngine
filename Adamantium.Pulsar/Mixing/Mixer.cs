@@ -26,6 +26,8 @@ internal sealed class Mixer
     // Parents before their children.
     private readonly int[] _busOrder;
     private readonly float[] _read = new float[BlockFrames * Channels];
+    private readonly float[] _mixed = new float[BlockFrames * Channels];
+    private int _mixedTaken = BlockFrames * Channels;
     private readonly SlotReturns _endedVoices;
     private readonly SlotReturns _removedBuses;
     private int _activeCount;
@@ -60,6 +62,9 @@ internal sealed class Mixer
     /// <summary>The frame of its sound a voice got to.</summary>
     public int PositionOf(int voice) => Volatile.Read(ref _positions[voice]);
 
+    /// <summary>For one about to be played: the mixer is done with its slot.</summary>
+    public void SetPosition(int voice, int frame) => Volatile.Write(ref _positions[voice], frame);
+
     public void Apply(in Command command)
     {
         switch (command.Kind)
@@ -68,8 +73,7 @@ internal sealed class Mixer
                 Play(command);
                 break;
             case CommandKind.Stop:
-                _voices[command.Slot].Stopping = true;
-                _voices[command.Slot].Fade.Set(0, Math.Max(1, command.Frames));
+                Stop(ref _voices[command.Slot], Math.Max(1, command.Frames));
                 break;
             case CommandKind.SetVoicePaused:
                 _voices[command.Slot].Paused = command.Flag;
@@ -104,32 +108,49 @@ internal sealed class Mixer
         }
     }
 
+    /// <summary>Whole blocks are mixed, however little is asked for: a gain takes a block to move.</summary>
     public void Render(Span<float> samples)
     {
         while (samples.Length != 0)
         {
-            var block = samples[..Math.Min(samples.Length, BlockFrames * Channels)];
-            RenderBlock(block);
-            samples = samples[block.Length..];
+            if (_mixedTaken == _mixed.Length)
+            {
+                MixBlock();
+                _mixedTaken = 0;
+            }
+
+            var taken = Math.Min(samples.Length, _mixed.Length - _mixedTaken);
+            _mixed.AsSpan(_mixedTaken, taken).CopyTo(samples);
+            _mixedTaken += taken;
+            samples = samples[taken..];
         }
     }
 
-    private void RenderBlock(Span<float> block)
+    private void MixBlock()
     {
-        var frames = block.Length / Channels;
-        ReadBuses(frames);
-        SelectHeard(frames);
+        ReadBuses();
+        SelectHeard();
         for (var index = 0; index < _activeCount; index++)
         {
             var slot = _active[index];
-            MixVoice(ref _voices[slot], frames);
+            MixVoice(ref _voices[slot]);
             Volatile.Write(ref _positions[slot], (int)(_voices[slot].Position >> 32));
         }
 
-        MixBuses(block);
+        MixBuses();
         ForgetEnded();
         ForgetRemoved();
-        Volatile.Write(ref _frame, _frame + frames);
+        Volatile.Write(ref _frame, _frame + BlockFrames);
+    }
+
+    // Stopped again, it ends as soon as either says.
+    private static void Stop(ref Voice voice, long frames)
+    {
+        if (!voice.Stopping || frames < voice.Fade.Left)
+        {
+            voice.Stopping = true;
+            voice.Fade.Set(0, frames);
+        }
     }
 
     private void Play(in Command command)
@@ -147,22 +168,20 @@ internal sealed class Mixer
             Pan = settings.Pan,
             Volume = new Ramp(settings.Volume),
             Fade = new Ramp(0),
-            StartFrame = settings.StartFrame,
-            // One that begins past its end ends at once.
-            Position = Math.Min(sound.Frames, sound.Format.FramesIn(settings.From)) << 32,
+            StartFrame = Math.Max(0, settings.StartFrame),
+            Position = (long)command.From << 32,
         };
         voice.Fade.Set(1, command.Frames);
-        Volatile.Write(ref _positions[command.Slot], (int)(voice.Position >> 32));
         _active[_activeCount++] = command.Slot;
     }
 
     private void AddBus(int slot, int parent)
     {
-        _buses[slot] = new Bus { Parent = parent, Volume = new Ramp(1), Gain = 1, Samples = _buses[slot].Samples };
+        _buses[slot] = new Bus { Parent = parent, Volume = new Ramp(1), Samples = _buses[slot].Samples };
         _busOrder[_busCount++] = slot;
     }
 
-    private void ReadBuses(int frames)
+    private void ReadBuses()
     {
         var anySolo = false;
         for (var index = 0; index < _busCount; index++)
@@ -190,11 +209,11 @@ internal sealed class Mixer
                 bus.Loudness = 0;
             }
 
-            bus.Volume.Advance(frames);
+            bus.Volume.Advance(BlockFrames);
         }
     }
 
-    private void SelectHeard(int frames)
+    private void SelectHeard()
     {
         var count = 0;
         for (var index = 0; index < _activeCount; index++)
@@ -203,7 +222,7 @@ internal sealed class Mixer
             ref var bus = ref _buses[voice.Bus];
             var loudness = voice.Volume.Highest * voice.Fade.Highest * bus.Loudness * (voice.Selected ? KeepHeard : 1);
             voice.Selected = loudness > LeastHeard && bus.IsSolo && !voice.Paused && !bus.IsPaused &&
-                (voice.Started || voice.StartFrame < _frame + frames);
+                (voice.Started || voice.StartFrame < _frame + BlockFrames);
             if (voice.Selected)
             {
                 // A positive float's bits are in its order.
@@ -224,8 +243,9 @@ internal sealed class Mixer
         Volatile.Write(ref _heard, Math.Min(count, _audible));
     }
 
-    private void MixVoice(ref Voice voice, int frames)
+    private void MixVoice(ref Voice voice)
     {
+        var frames = BlockFrames;
         ref var bus = ref _buses[voice.Bus];
         var paused = voice.Paused || bus.IsPaused;
         var offset = 0;
@@ -316,13 +336,19 @@ internal sealed class Mixer
         }
     }
 
-    private void MixBuses(Span<float> block)
+    private void MixBuses()
     {
+        var block = _mixed.AsSpan();
         block.Clear();
         for (var index = _busCount - 1; index >= 0; index--)
         {
             ref var bus = ref _buses[_busOrder[index]];
             var gain = bus.Muted || bus.Removing ? 0 : bus.Volume.Value;
+            if (!bus.HadSamples)
+            {
+                bus.Gain = gain;
+            }
+
             if (bus.HasSamples && (gain != 0 || bus.Gain != 0))
             {
                 var target = block;
@@ -330,12 +356,13 @@ internal sealed class Mixer
                 {
                     ref var parent = ref _buses[bus.Parent];
                     PrepareBus(ref parent);
-                    target = parent.Samples.AsSpan(0, block.Length);
+                    target = parent.Samples;
                 }
 
-                AddBlock(bus.Samples.AsSpan(0, block.Length), target, bus.Gain, gain);
+                AddBlock(bus.Samples, target, bus.Gain, gain);
             }
 
+            bus.HadSamples = bus.HasSamples;
             bus.HasSamples = false;
             bus.Gain = gain;
         }

@@ -44,6 +44,18 @@ public class WavFileTests
         Assert.That(WavFile.Read(Wav(Chunk("fmt ", format), Chunk("data", [0, 0x40]))).AsSpan()[0], Is.EqualTo(0.5f));
     }
 
+    // 24 bits in 32, the upper ones.
+    [Test]
+    public void SamplesInWiderContainers_AreReadByTheContainer()
+    {
+        var format = Format(Pcm, 1, 48000, 24);
+        format[12] = 4;
+
+        var sound = WavFile.Read(Wav(Chunk("fmt ", format), Chunk("data", [0, 0, 0, 0x40, 0, 0, 0, 0xC0])));
+
+        Assert.That(sound.AsSpan().ToArray(), Is.EqualTo(new[] { 0.5f, -0.5f }));
+    }
+
     [Test]
     public void OtherChunks_AreSkipped_OddOnesWithTheirPadding()
     {

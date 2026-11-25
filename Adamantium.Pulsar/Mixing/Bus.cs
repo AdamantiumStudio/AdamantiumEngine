@@ -18,6 +18,9 @@ internal struct Bus
     public float[] Samples;
     public bool HasSamples;
 
+    /// <summary>It had in the block before: its gain is moved evenly. With nothing heard, it may jump.</summary>
+    public bool HadSamples;
+
     /// <summary>With its parents': how loud what goes into it is in the end.</summary>
     public float Loudness;
 

@@ -37,6 +37,8 @@ internal static class SoundReader
             }
         }
 
+        // Where it is told to be is within its loop.
+        Wrap(ref voice);
         return done;
     }
 

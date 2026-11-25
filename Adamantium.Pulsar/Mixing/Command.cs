@@ -20,5 +20,8 @@ internal struct Command
 
     public SoundData Sound;
 
+    /// <summary>The frame of the sound it begins at.</summary>
+    public int From;
+
     public VoiceSettings Settings;
 }

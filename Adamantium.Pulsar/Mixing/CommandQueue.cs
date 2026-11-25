@@ -3,7 +3,8 @@ namespace Adamantium.Pulsar.Mixing;
 /// <summary>Commands from one thread at a time to another, with no lock between and nothing allocated.</summary>
 internal sealed class CommandQueue
 {
-    private const int Capacity = 1024;
+    // More than a game asks for between two blocks; a full one makes the output wait for who empties it.
+    private const int Capacity = 4096;
 
     private readonly Command[] _commands = new Command[Capacity];
     private uint _added;

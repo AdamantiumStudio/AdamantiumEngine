@@ -99,7 +99,8 @@ public class AudioEngineTests
             Assert.That(rendered[frame * 2], Is.EqualTo(Math.Sin(Math.Tau * 440 * pitch * frame / Rate)).Within(0.001), $"frame {frame}");
         }
 
-        Assert.That(_engine.PositionOf(voice), Is.EqualTo(4800 * pitch).Within(1));
+        // 19 blocks were mixed.
+        Assert.That(_engine.PositionOf(voice), Is.EqualTo(4864 * pitch).Within(1));
     }
 
     [Test]
@@ -114,7 +115,8 @@ public class AudioEngineTests
         var sound = _engine.AddSound(new SoundData(new AudioFormat(22050, 1), samples));
         var voice = _engine.Play(sound, new VoiceSettings { Pan = -1 });
 
-        var rendered = Render(47990);
+        // The last whole block before its end.
+        var rendered = Render(47872);
 
         Assert.That(_engine.IsPlaying(voice), Is.True);
         for (var frame = 10; frame < 4800; frame++)
@@ -122,7 +124,7 @@ public class AudioEngineTests
             Assert.That(rendered[frame * 2], Is.EqualTo(Math.Sin(Math.Tau * 440 * frame / Rate)).Within(0.005), $"frame {frame}");
         }
 
-        Render(20);
+        Render(256);
         Assert.That(_engine.IsPlaying(voice), Is.False);
     }
 
@@ -213,7 +215,8 @@ public class AudioEngineTests
         Render(1000);
 
         _engine.Stop(voice, TimeSpan.FromSeconds(0.1));
-        var rendered = Render(4700);
+        // 1024 frames were mixed, the fade began there: 18 blocks of its 4800 frames.
+        var rendered = Render(24 + 18 * 256);
         Assert.That(rendered[2400 * 2], Is.EqualTo(0.5f).Within(0.01f));
         Assert.That(_engine.IsPlaying(voice), Is.True);
         AssertSmooth(rendered, 0.001f);
@@ -267,7 +270,7 @@ public class AudioEngineTests
         var voice = _engine.Play(Add(Constant(Rate)), new VoiceSettings { Pan = -1 });
         _engine.SetVolume(voice, 0, TimeSpan.FromSeconds(0.1));
 
-        Assert.That(Render(4800)[2400 * 2], Is.EqualTo(0.5f).Within(0.01f));
+        Assert.That(Render(19 * 256)[2400 * 2], Is.EqualTo(0.5f).Within(0.01f));
         Assert.That(Render(100), Is.All.Zero);
         Assert.That(_engine.IsPlaying(voice), Is.True, "unheard, it plays on");
     }
@@ -532,6 +535,98 @@ public class AudioEngineTests
         Assert.That(GC.GetAllocatedBytesForCurrentThread() - before, Is.Zero);
     }
 
+    [TestCase(false)]
+    [TestCase(true)]
+    public void ABusTurnedDownBeforeItIsHeard_BeginsThatQuiet(bool master)
+    {
+        var bus = master ? BusId.Master : _engine.AddBus(BusId.Master);
+        _engine.SetVolume(bus, 0.05f);
+        _engine.Play(Add(Constant(Rate)), new VoiceSettings { Bus = bus, Pan = -1 });
+
+        Assert.That(Render(512)[0], Is.EqualTo(0.05f).Within(Exact));
+    }
+
+    [Test]
+    public void AVoiceJustPlayed_IsAtItsStart_NotWhereTheOneBeforeItWas()
+    {
+        _engine.Play(Add(Constant(2000)));
+        Render(3000);
+
+        var voice = _engine.Play(Add(Constant(Rate)), new VoiceSettings { From = TimeSpan.FromSeconds(0.5) });
+
+        Assert.That(_engine.PositionOf(voice), Is.EqualTo(Rate / 2));
+    }
+
+    // However little the output asks for at a time.
+    [TestCase(1)]
+    [TestCase(20)]
+    [TestCase(257)]
+    public void HowMuchIsAskedForAtATime_ChangesNothing(int frames)
+    {
+        var whole = Record(4800);
+        _engine = new AudioEngine();
+
+        Assert.That(Record(frames), Is.EqualTo(whole));
+
+        float[] Record(int atATime)
+        {
+            var voice = _engine.Play(Add(Constant(Rate)), new VoiceSettings { Pan = -1 });
+            var all = new List<float>(RenderBy(1024, atATime));
+            _engine.SetVolume(voice, 0.5f);
+            all.AddRange(RenderBy(1024, atATime));
+            _engine.Stop(voice);
+            all.AddRange(RenderBy(1024, atATime));
+            return [.. all];
+        }
+    }
+
+    [Test]
+    public void AStartFrameLongGone_IsNow()
+    {
+        Render(512);
+        _engine.Play(Add(Constant(Rate)), new VoiceSettings { StartFrame = long.MinValue, Pan = -1 });
+
+        Assert.That(Render(1)[0], Is.EqualTo(1).Within(Exact));
+    }
+
+    [Test]
+    public void StoppedOverAndOver_ItEndsAsSoonAsTheFirstStopSaid()
+    {
+        var voice = _engine.Play(Add(Constant(Rate)));
+        Render(256);
+        for (var block = 0; block < 40; block++)
+        {
+            _engine.Stop(voice, TimeSpan.FromSeconds(0.1));
+            Render(256);
+        }
+
+        Assert.That(_engine.IsPlaying(voice), Is.False);
+    }
+
+    [Test]
+    public void AStopAtOnce_IsNotDrawnOutByALongerOne()
+    {
+        var voice = _engine.Play(Add(Constant(Rate)));
+        Render(256);
+        _engine.Stop(voice);
+        _engine.Stop(voice, TimeSpan.FromSeconds(0.5));
+        Render(512);
+
+        Assert.That(_engine.IsPlaying(voice), Is.False);
+    }
+
+    [TestCase(1f)]
+    [TestCase(100f)]
+    public void APositionInALoop_IsWithinIt(float pitch)
+    {
+        var voice = _engine.Play(Add(Constant(2560)), new VoiceSettings { Loops = true, Pitch = pitch });
+        for (var block = 0; block < 100; block++)
+        {
+            Render(256);
+            Assert.That(_engine.PositionOf(voice), Is.LessThan(2560), $"block {block}");
+        }
+    }
+
     [Test]
     public void WhatCanNotBe_IsRefused()
     {
@@ -593,6 +688,17 @@ public class AudioEngineTests
     }
 
     private SoundId Add(float[] samples) => _engine.AddSound(new SoundData(new AudioFormat(Rate, 1), samples));
+
+    private float[] RenderBy(int frames, int atATime)
+    {
+        var all = new List<float>();
+        for (var left = frames; left > 0; left -= atATime)
+        {
+            all.AddRange(Render(Math.Min(left, atATime)));
+        }
+
+        return [.. all];
+    }
 
     private float[] Render(int frames)
     {

@@ -42,7 +42,7 @@ public sealed class AudioEngine : IAudioRenderer
         _buses.TryTake(out _);
     }
 
-    /// <summary>The frames rendered so far: the time <see cref="VoiceSettings.StartFrame"/> is in.</summary>
+    /// <summary>The frames mixed so far, a block at a time: the time <see cref="VoiceSettings.StartFrame"/> is in.</summary>
     public long Frame => _mixer.Frame;
 
     /// <summary>How many voices were heard in the last block.</summary>
@@ -109,9 +109,12 @@ public sealed class AudioEngine : IAudioRenderer
                 return default;
             }
 
+            // One that begins past its end ends at once.
+            var from = (int)Math.Min(data.Frames, data.Format.FramesIn(settings.From));
+            _mixer.SetPosition(slot, from);
             Post(new Command
             {
-                Kind = CommandKind.Play, Slot = slot, Bus = bus, Sound = data, Settings = settings, Frames = fade,
+                Kind = CommandKind.Play, Slot = slot, Bus = bus, Sound = data, Settings = settings, Frames = fade, From = from,
             });
             return new VoiceId(slot, _voices.GenerationOf(slot));
         }
@@ -354,8 +357,14 @@ public sealed class AudioEngine : IAudioRenderer
         {
             if (Interlocked.Exchange(ref _mixing, 1) == 0)
             {
-                ApplyCommands();
-                Volatile.Write(ref _mixing, 0);
+                try
+                {
+                    ApplyCommands();
+                }
+                finally
+                {
+                    Volatile.Write(ref _mixing, 0);
+                }
             }
             else
             {

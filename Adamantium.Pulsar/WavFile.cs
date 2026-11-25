@@ -80,12 +80,15 @@ public static class WavFile
             throw new InvalidDataException($"The WAV file has a rate of {rate} Hz.");
         }
 
-        if (!(tag == Pcm && bits is 8 or 16 or 24 or 32) && !(tag == Float && bits is 32 or 64))
+        // A sample may be in a wider container, its upper bits.
+        var bytes = BinaryPrimitives.ReadUInt16LittleEndian(format[12..]) / channels;
+        var isWhole = tag == Pcm && bytes is >= 1 and <= 4 && bits >= 1 && bits <= bytes * 8;
+        var isFloat = tag == Float && bytes is 4 or 8 && bits == bytes * 8;
+        if (!isWhole && !isFloat)
         {
-            throw new InvalidDataException($"The WAV file has samples of an unknown kind ({tag}, {bits} bits).");
+            throw new InvalidDataException($"The WAV file has samples of an unknown kind ({tag}, {bits} bits in {bytes} bytes).");
         }
 
-        var bytes = bits / 8;
         var frames = data.Length / (bytes * channels);
         if (frames == 0)
         {
@@ -95,7 +98,7 @@ public static class WavFile
         var samples = new float[frames * channels];
         for (var index = 0; index < samples.Length; index++)
         {
-            samples[index] = SampleOf(data.Slice(index * bytes, bytes), tag == Float);
+            samples[index] = SampleOf(data.Slice(index * bytes, bytes), isFloat);
         }
 
         return new SoundData(new AudioFormat((int)rate, channels), samples, LoopOf(sampler, frames));

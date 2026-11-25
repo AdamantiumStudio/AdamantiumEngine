@@ -3,20 +3,21 @@ namespace Adamantium.Pulsar.Mixing;
 /// <summary>A value on its way to another.</summary>
 internal struct Ramp(float value)
 {
-    private long _left;
+    /// <summary>The frames until it is there.</summary>
+    public long Left { get; private set; }
 
     public float Value { get; private set; } = value;
 
     public float Target { get; private set; } = value;
 
-    public readonly bool IsMoving => _left != 0;
+    public readonly bool IsMoving => Left != 0;
 
     public readonly float Highest => Math.Max(Value, Target);
 
     public void Set(float target, long frames)
     {
         Target = target;
-        _left = frames;
+        Left = frames;
         if (frames == 0)
         {
             Value = target;
@@ -25,14 +26,14 @@ internal struct Ramp(float value)
 
     public void Advance(int frames)
     {
-        if (_left <= frames)
+        if (Left <= frames)
         {
-            _left = 0;
+            Left = 0;
             Value = Target;
             return;
         }
 
-        Value += (Target - Value) * frames / _left;
-        _left -= frames;
+        Value += (Target - Value) * frames / Left;
+        Left -= frames;
     }
 }
