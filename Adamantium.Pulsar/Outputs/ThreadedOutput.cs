@@ -13,6 +13,7 @@ internal abstract class ThreadedOutput(AudioFormat format) : IAudioOutput
     private ExceptionDispatchInfo _failure;
     private int _state;
     private int _threadId;
+    private bool _hasOpened;
     private bool _disposed;
     private long _bufferFrames;
     private long _framesRendered;
@@ -49,13 +50,15 @@ internal abstract class ThreadedOutput(AudioFormat format) : IAudioOutput
 
             Renderer = renderer;
             _failure = null;
+            _hasOpened = false;
             _framesRendered = _gaps = _longestBetweenFills = _longestRender = _lastFill = 0;
             _stopping.Reset();
             _opened.Reset();
             _thread = new Thread(Run) { Name = "Pulsar output", IsBackground = true, Priority = ThreadPriority.Highest };
             _thread.Start();
             _opened.Wait();
-            if (State != AudioOutputState.Running && _failure != null)
+            // What failed after it opened, Stop tells.
+            if (!_hasOpened)
             {
                 End();
             }
@@ -105,6 +108,7 @@ internal abstract class ThreadedOutput(AudioFormat format) : IAudioOutput
     {
         Volatile.Write(ref _bufferFrames, bufferFrames);
         Volatile.Write(ref _state, (int)AudioOutputState.Running);
+        _hasOpened = true;
         _opened.Set();
     }
 

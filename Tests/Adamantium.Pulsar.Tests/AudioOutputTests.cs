@@ -181,6 +181,23 @@ public class AudioOutputTests(bool toDevice)
         Assert.That(() => _output.Start(new RecordingRenderer()), Throws.Nothing, "it can be started again");
     }
 
+    // However soon it fails: the output was open, so starting it succeeded, and stopping it says why.
+    [Test]
+    public void ARendererThatThrowsAtOnce_FailsTheOutput_NotItsStart()
+    {
+        if (toDevice)
+        {
+            Assert.Ignore("a device is given its first sound before it opens");
+        }
+
+        for (var round = 0; round < 300; round++)
+        {
+            _output.Start(new RecordingRenderer { Call = 1, AtCall = () => throw new InvalidOperationException("broken") });
+
+            Assert.That(() => _output.Stop(), Throws.InvalidOperationException.With.Message.EqualTo("broken"));
+        }
+    }
+
     [Test]
     public void Playing_ItsThreadAllocatesNothing()
     {
