@@ -820,11 +820,11 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         // Recorded before creation, so a native fault still leaves the shader's name behind.
         ShaderPrecompiler.NoteShaderInFlight(names[0]);
 
-        var result = LogicalDevice.CreateShadersEXT((uint)createInfos.Length, createInfos, null, out var shaders);
+        var result = LogicalDevice.CreateShaders(createInfos, out var shaders);
         if (result != Result.Success)
         {
             DestroyShaders(shaders);
-            ResultHelper.CheckResult(result, nameof(LogicalDevice.CreateShadersEXT));
+            ResultHelper.CheckResult(result, nameof(LogicalDevice.CreateShaders));
         }
 
         for (var i = 0; i < shaders.Length; i++)

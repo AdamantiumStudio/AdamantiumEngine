@@ -17,7 +17,7 @@
 - Vertex buffers are bound with their stride (`vkCmdBindVertexBuffers2`), not only through the vertex input: where
   shader objects come from Khronos' layer over KosmicKrisp, every instance drew with the first one's data.
 - `IGraphicsDevice.SetVertexBuffers` takes `params ReadOnlySpan<IBuffer>` instead of an array and allocates nothing.
-- Takes Adamantium.Vulkan 1.4.0, Slang 1.2.0, Spirv 2.1.0, Loader 1.2.0 and ShaderObjectLayer 1.0.3.
+- Takes Adamantium.Vulkan 1.4.1, Slang 1.2.0, Spirv 2.1.0, Loader 1.2.0 and ShaderObjectLayer 1.0.3.
 
 ### Removed
 
