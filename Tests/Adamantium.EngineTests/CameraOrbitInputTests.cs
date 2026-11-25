@@ -227,6 +227,31 @@ public class CameraOrbitInputTests
         Assert.That((camera.Owner.Transform.Position - face).Length(), Is.EqualTo(29).Within(0.1));
     }
 
+    // The camera flown between two pans, Alt still down and the pointer where it was: the second goes about what has come
+    // under it.
+    [Test]
+    public void APanAfterTheCameraWasMoved_TakesAPointOfItsOwn()
+    {
+        output.Pointer = new Vector2F(400, 300);
+        output.Key(Keys.LeftAlt, InputType.Down);
+        Frame();
+        output.Gesture(new Vector2F(20, 0), 1, 0);
+        Frame();
+        camera.Owner.Transform.Position = new WorldPosition(0, 0, -10);
+        camera.Rotation = QuaternionF.Identity;
+        Frame();
+        var target = camera.WorldPosition + camera.Forward * 30.0;
+        var cube = new Entity(null, "Cube");
+        cube.Transform.Position = target;
+        cube.AddComponent(new MeshData { Mesh = Shapes.Cube.GenerateGeometry(GeometryType.Solid, 2.0, 2.0, 2.0) });
+        universe.EntityWorld.EntityManager.AddEntity(cube);
+        Frame();
+        output.Gesture(new Vector2F(60, 0), 1, 0);
+        Frame();
+
+        Assert.That((camera.Owner.Transform.Position - target).Length(), Is.EqualTo(30).Within(0.5), "about the cube");
+    }
+
     // Alt kept down between two drags: the second goes about what the pointer is on then.
     [Test]
     public void ASecondDragWithAltStillDown_TakesAPointOfItsOwn()

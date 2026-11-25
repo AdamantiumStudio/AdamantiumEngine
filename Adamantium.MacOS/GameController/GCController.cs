@@ -20,6 +20,10 @@ public static unsafe class GCController
     private static readonly IntPtr ValueSelector = ObjCRuntime.RegisterSelector("value");
     private static readonly IntPtr XAxisSelector = ObjCRuntime.RegisterSelector("xAxis");
     private static readonly IntPtr YAxisSelector = ObjCRuntime.RegisterSelector("yAxis");
+    private static readonly IntPtr HapticsSelector = ObjCRuntime.RegisterSelector("haptics");
+    private static readonly IntPtr LocalitiesSelector = ObjCRuntime.RegisterSelector("supportedLocalities");
+    private static readonly IntPtr ContainsObjectSelector = ObjCRuntime.RegisterSelector("containsObject:");
+    private static readonly IntPtr CreateEngineSelector = ObjCRuntime.RegisterSelector("createEngineWithLocality:");
 
     /// <summary>The controllers connected, an NSArray.</summary>
     public static IntPtr Controllers
@@ -41,6 +45,43 @@ public static unsafe class GCController
     public static string CategoryOf(IntPtr controller) =>
         NSString.ToManaged(NSObject.Send(controller, ProductCategorySelector));
 
+    /// <summary>The place of the left handle's motor.</summary>
+    public static IntPtr LeftHandle { get; } = Constant("GCHapticsLocalityLeftHandle");
+
+    /// <summary>The place of the right handle's motor.</summary>
+    public static IntPtr RightHandle { get; } = Constant("GCHapticsLocalityRightHandle");
+
+    /// <summary>The place of the motor behind the left trigger.</summary>
+    public static IntPtr LeftTrigger { get; } = Constant("GCHapticsLocalityLeftTrigger");
+
+    /// <summary>The place of the motor behind the right trigger.</summary>
+    public static IntPtr RightTrigger { get; } = Constant("GCHapticsLocalityRightTrigger");
+
+    /// <summary>The place of whatever motors a gamepad has.</summary>
+    public static IntPtr DefaultLocality { get; } = Constant("GCHapticsLocalityDefault");
+
+    /// <summary>How long a pattern that goes on until stopped is.</summary>
+    public static double InfiniteDuration { get; } = *(float*)NativeLibrary.GetExport(Framework, "GCHapticDurationInfinite");
+
+    /// <summary>Whether the controller has a motor at a place.</summary>
+    public static bool HasMotorAt(IntPtr controller, IntPtr locality)
+    {
+        var haptics = NSObject.Send(controller, HapticsSelector);
+        return haptics != IntPtr.Zero &&
+            ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, byte>)ObjCRuntime.MessageSend)(
+                NSObject.Send(haptics, LocalitiesSelector), ContainsObjectSelector, locality) != 0;
+    }
+
+    /// <summary>A CHHapticEngine of the motor at a place, owned by the caller; zero when there is none.</summary>
+    public static IntPtr CreateEngine(IntPtr controller, IntPtr locality)
+    {
+        var haptics = NSObject.Send(controller, HapticsSelector);
+        return haptics == IntPtr.Zero
+            ? IntPtr.Zero
+            : NSObject.Retain(((delegate* unmanaged<IntPtr, IntPtr, IntPtr, IntPtr>)ObjCRuntime.MessageSend)(haptics,
+                CreateEngineSelector, locality));
+    }
+
     /// <summary>A part of a gamepad, by the property's selector; zero when the gamepad has none.</summary>
     public static IntPtr PartOf(IntPtr gamepad, IntPtr selector) => NSObject.Send(gamepad, selector);
 
@@ -57,4 +98,6 @@ public static unsafe class GCController
 
     /// <summary>The axis up of a stick.</summary>
     public static IntPtr YAxisOf(IntPtr stick) => NSObject.Send(stick, YAxisSelector);
+
+    private static IntPtr Constant(string name) => Marshal.ReadIntPtr(NativeLibrary.GetExport(Framework, name));
 }
