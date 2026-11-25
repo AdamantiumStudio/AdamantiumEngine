@@ -733,7 +733,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var device = GraphicsDevice;
         var descriptors = ((GraphicsDevice)device).DescriptorManager;
         var blend = device.ColorBlendEquation;
-        var vertexType = device.VertexType;
+        var vertexTypes = device.VertexTypes;
         var topology = device.PrimitiveTopology;
         var polygonMode = device.PolygonMode;
         var cullMode = device.CullMode;
@@ -756,7 +756,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         finally
         {
             device.ColorBlendEquation = blend;
-            device.VertexType = vertexType;
+            device.SetVertexTypes(vertexTypes);
             device.PrimitiveTopology = topology;
             device.PolygonMode = polygonMode;
             device.CullMode = cullMode;

@@ -102,7 +102,12 @@ public partial class GraphicsDevice
 
     private void HashDrawState()
     {
-        Hash((ulong)(VertexType?.GetHashCode() ?? 0));
+        Hash((ulong)VertexTypes.Length);
+        foreach (var type in VertexTypes)
+        {
+            Hash((ulong)type.GetHashCode());
+        }
+
         Hash(((ulong)PrimitiveTopology << 32) | (uint)MSAALevel);
         Hash(((ulong)(uint)PolygonMode << 32) | (uint)CullMode);
         Hash(((ulong)(uint)FrontFace << 32) | (uint)DepthCompareFunction);

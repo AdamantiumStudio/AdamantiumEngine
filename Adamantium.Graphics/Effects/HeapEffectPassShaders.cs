@@ -17,11 +17,14 @@ internal sealed class HeapEffectPassShaders : EffectPassShaders
 
     private protected override void CreateShaders()
     {
+        var createInfos = new ShaderCreateInfoEXT[stages.Length];
+        var layouts = new ulong[stages.Length];
         for (var i = 0; i < stages.Length; i++)
         {
-            var createInfo = MappedCreateInfo(i, out var layout);
-            CreateShader(i, createInfo, layout);
+            createInfos[i] = MappedCreateInfo(i, out layouts[i]);
         }
+
+        CreateShadersFrom(createInfos, layouts);
     }
 
     private ShaderCreateInfoEXT MappedCreateInfo(int stage, out ulong layout)

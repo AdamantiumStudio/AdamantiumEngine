@@ -64,6 +64,7 @@ public sealed class GraphicsSettings
         else if (IsApple)
         {
             settings.InstanceExtensions.Add(Constants.VK_EXT_METAL_SURFACE_EXTENSION_NAME);
+            settings.InstanceExtensions.Add(Constants.VK_LUNARG_DIRECT_DRIVER_LOADING_EXTENSION_NAME);
         }
 
         settings.OptionalInstanceExtensions.AddRange(

@@ -66,7 +66,7 @@
   <PropertyGroup>
     <AdamantiumVulkanDir>$(MSBuildThisFileDirectory)..\AdamantiumVulkan\</AdamantiumVulkanDir>
     <UseVulkanSource Condition="'$(UseVulkanSource)' == ''">$([System.IO.Directory]::Exists('$(AdamantiumVulkanDir)'))</UseVulkanSource>
-    <AdamantiumVulkanVersion>1.3.2</AdamantiumVulkanVersion>
+    <AdamantiumVulkanVersion>1.4.1</AdamantiumVulkanVersion>
   </PropertyGroup>
 
   <!-- QuantumBinding - the generator and the Utils the bindings call - the same way: its source when beside, else

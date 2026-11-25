@@ -54,6 +54,55 @@ internal static class SfntBuilder
         return output.ToArray();
     }
 
+    /// <summary>A font collection (ttcf) of the given faces, each with tables of its own - none shared, as in Apple's
+    /// system collections.</summary>
+    public static byte[] Collection(params IReadOnlyDictionary<string, byte[]>[] faces)
+    {
+        var header = new byte[12 + faces.Length * 4];
+        Encoding.ASCII.GetBytes("ttcf", header);
+        BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(4), 0x00010000);
+        BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(8), (uint)faces.Length);
+
+        var directories = faces.Select(face => new byte[12 + face.Count * 16]).ToArray();
+        var offset = header.Length + directories.Sum(directory => directory.Length);
+        var directoryOffset = header.Length;
+        for (var f = 0; f < faces.Length; f++)
+        {
+            BinaryPrimitives.WriteUInt32BigEndian(header.AsSpan(12 + f * 4), (uint)directoryOffset);
+            directoryOffset += directories[f].Length;
+
+            var tags = faces[f].Keys.OrderBy(t => t, StringComparer.Ordinal).ToArray();
+            BinaryPrimitives.WriteUInt32BigEndian(directories[f], 0x00010000);
+            BinaryPrimitives.WriteUInt16BigEndian(directories[f].AsSpan(4), (ushort)tags.Length);
+            for (var i = 0; i < tags.Length; i++)
+            {
+                var record = directories[f].AsSpan(12 + i * 16);
+                Encoding.ASCII.GetBytes(tags[i], record);
+                BinaryPrimitives.WriteUInt32BigEndian(record[8..], (uint)offset);
+                BinaryPrimitives.WriteUInt32BigEndian(record[12..], (uint)faces[f][tags[i]].Length);
+                offset += (faces[f][tags[i]].Length + 3) & ~3;
+            }
+        }
+
+        var output = new MemoryStream();
+        output.Write(header);
+        foreach (var directory in directories)
+        {
+            output.Write(directory);
+        }
+
+        foreach (var face in faces)
+        {
+            foreach (var tag in face.Keys.OrderBy(t => t, StringComparer.Ordinal))
+            {
+                output.Write(face[tag]);
+                output.Write(new byte[((face[tag].Length + 3) & ~3) - face[tag].Length]);
+            }
+        }
+
+        return output.ToArray();
+    }
+
     /// <summary>A TrueType font of the given glyf entries: head with long loca offsets, maxp 0.5 and loca.</summary>
     public static byte[] TrueType(IReadOnlyList<byte[]> glyphs)
     {

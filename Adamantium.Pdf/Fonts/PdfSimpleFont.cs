@@ -214,11 +214,11 @@ public class PdfSimpleFont : PdfFont
     {
         var glyph = GlyphOf(new PdfCharacter(code, 1));
         var font = _substitute ?? Typeface?.CurrentFont;
-        if (glyph == 0 || font == null || font.UnitsPerEm == 0 || !Typeface.GetGlyphByIndex(glyph, out var drawn))
+        if (glyph == 0 || font == null || font.UnitsPerEm == 0 || !Typeface.GetGlyphByIndex(glyph, out _))
         {
             return fallback;
         }
 
-        return drawn.AdvanceWidth * 1000.0 / font.UnitsPerEm;
+        return font.GetAdvanceWidth(glyph) * 1000.0 / font.UnitsPerEm;
     }
 }

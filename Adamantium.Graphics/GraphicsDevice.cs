@@ -41,7 +41,6 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
     private uint frame;
         
-    [Bindable] private Type vertexType;
     [Bindable] private PrimitiveTopology primitiveTopology;
     [Bindable] private IEffectPass currentEffectPass;
 
@@ -89,7 +88,12 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     private static bool IsStripTopology(PrimitiveTopology topology)
         => topology is PrimitiveTopology.LineStrip or PrimitiveTopology.TriangleStrip or PrimitiveTopology.TriangleFan
             or PrimitiveTopology.LineStripWithAdjacency or PrimitiveTopology.TriangleStripWithAdjacency;
-    private Type _cVertexType;
+    private readonly List<VertexLayout> _vertexLayouts = [];
+    private VertexLayout _vertexLayout;
+    private VertexLayout _cVertexLayout;
+    private Adamantium.Vulkan.Core.Buffer[] _vertexBuffers = new Adamantium.Vulkan.Core.Buffer[4];
+    private int _vertexBufferCount;
+    private VertexLayout _vertexBuffersLayout;
     private bool _cRasterizerDiscard;
     private PrimitiveTopology _cTopology;
     private bool _isTessellating;
@@ -767,47 +771,77 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     private static readonly object ShaderCreateLock = new();
 
     public ShaderEXT CreateShader(ShaderCreateInfoEXT shaderCreateInfo, string name = null) =>
-        CreateShader(shaderCreateInfo, name, 0);
+        CreateShaders([shaderCreateInfo], [name], [0])[0];
 
-    /// <summary>As <see cref="CreateShader(ShaderCreateInfoEXT, string)"/>; the binary cache takes only a binary made for
-    /// the same <paramref name="layout"/>.</summary>
-    internal ShaderEXT CreateShader(ShaderCreateInfoEXT shaderCreateInfo, string name, ulong layout)
+    /// <summary>Creates shaders in one call - how linked ones must be made. The binary cache takes only binaries made for
+    /// the same <paramref name="layouts"/>, and gives a group either all of its shaders or none.</summary>
+    internal ShaderEXT[] CreateShaders(ShaderCreateInfoEXT[] createInfos, string[] names, ulong[] layouts)
     {
         lock (ShaderCreateLock)
         {
-            return CreateShaderCore(shaderCreateInfo, name, layout);
+            return CreateShadersFromCache(createInfos, names, layouts) ?? CompileShaders(createInfos, names, layouts);
         }
     }
 
-    private ShaderEXT CreateShaderCore(ShaderCreateInfoEXT shaderCreateInfo, string name, ulong layout)
+    private ShaderEXT[] CreateShadersFromCache(ShaderCreateInfoEXT[] createInfos, string[] names, ulong[] layouts)
     {
-        // Create from the cached driver binary when there is one; otherwise compile from SPIR-V and persist the binary as
-        // `name` (effect.technique.pass.stage).
-        if (ShaderBinaryCache.TryLoad(this, shaderCreateInfo, name, layout, out var binary))
+        var binaries = new ShaderCreateInfoEXT[createInfos.Length];
+        for (var i = 0; i < createInfos.Length; i++)
         {
-            var result = LogicalDevice.CreateShaderFromBinary(ShaderBinaryCache.AsBinary(shaderCreateInfo, binary), out var cached);
-            if (result == Result.Success) return cached;
-            // else: incompatible binary (driver/device change) -> fall through and recompile from SPIR-V (re-caches below).
+            if (!ShaderBinaryCache.TryLoad(this, createInfos[i], names[i], layouts[i], out var binary))
+                return null;
+
+            binaries[i] = ShaderBinaryCache.AsBinary(createInfos[i], binary);
         }
 
+        if (LogicalDevice.CreateShadersFromBinary(binaries, out var shaders) == Result.Success)
+            return shaders;
+
+        DestroyShaders(shaders);
+        return null;
+    }
+
+    private ShaderEXT[] CompileShaders(ShaderCreateInfoEXT[] createInfos, string[] names, ulong[] layouts)
+    {
         // Creation below can fault natively, which no catch intercepts, so a shader recorded as having taken the process
         // down is refused here. Cache hits and the compile pass stay unguarded.
-        if (!ShaderPrecompiler.IsCompilePass && ShaderCompileStats.ForDevice(this).ShouldSkipShader(name))
+        var refused = Array.Find(names, name =>
+            !ShaderPrecompiler.IsCompilePass && ShaderCompileStats.ForDevice(this).ShouldSkipShader(name));
+        if (refused != null)
         {
             // Refusing is not giving up - a child can try it while this process keeps drawing.
-            ShaderPrecompiler.TryCompileInBackground(this, name);
+            ShaderPrecompiler.TryCompileInBackground(this, refused);
 
             throw new InvalidOperationException(
-                $"Shader '{name}' is not compiled: building it took the process down before. " +
+                $"Shader '{refused}' is not compiled: building it took the process down before. " +
                 "See compile-stats.xml beside the shader cache.");
         }
 
         // Recorded before creation, so a native fault still leaves the shader's name behind.
-        ShaderPrecompiler.NoteShaderInFlight(name);
+        ShaderPrecompiler.NoteShaderInFlight(names[0]);
 
-        LogicalDevice.CreateShadersEXT(1, shaderCreateInfo, null, out var shaderObject);
-        ShaderBinaryCache.Save(this, shaderCreateInfo, name, layout, shaderObject[0]);
-        return shaderObject[0];
+        var result = LogicalDevice.CreateShaders(createInfos, out var shaders);
+        if (result != Result.Success)
+        {
+            DestroyShaders(shaders);
+            ResultHelper.CheckResult(result, nameof(LogicalDevice.CreateShaders));
+        }
+
+        for (var i = 0; i < shaders.Length; i++)
+        {
+            ShaderBinaryCache.Save(this, createInfos[i], names[i], layouts[i], shaders[i]);
+        }
+
+        return shaders;
+    }
+
+    private void DestroyShaders(ShaderEXT[] shaders)
+    {
+        foreach (var shader in shaders)
+        {
+            if (shader != null)
+                DestroyShader(shader);
+        }
     }
 
     public void DestroyShader(ShaderEXT shaderObject)
@@ -1269,6 +1303,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
         // Fresh command buffer => dynamic state is undefined, so the state cache must re-emit everything next draw.
         _stateInitialized = false;
+        _vertexBufferCount = 0;
         _depthBiasKnown = false;
         _isTessellationKnown = false;
         _boundShaderPass = null;
@@ -1806,6 +1841,41 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         }
     }
 
+    public Type VertexType
+    {
+        get => _vertexLayout == null ? null : _vertexLayout.Types[0];
+        set
+        {
+            if (value == null)
+                SetVertexTypes();
+            else
+                SetVertexTypes(value);
+        }
+    }
+
+    public ReadOnlySpan<Type> VertexTypes => _vertexLayout == null ? default : _vertexLayout.Types;
+
+    public void SetVertexTypes(params ReadOnlySpan<Type> vertexTypes)
+    {
+        if (VertexTypes.SequenceEqual(vertexTypes)) return;
+
+        _vertexLayout = vertexTypes.IsEmpty ? null : LayoutOf(vertexTypes);
+        RaisePropertyChanged(nameof(VertexType));
+    }
+
+    private VertexLayout LayoutOf(ReadOnlySpan<Type> vertexTypes)
+    {
+        foreach (var known in _vertexLayouts)
+        {
+            if (known.Types.SequenceEqual(vertexTypes))
+                return known;
+        }
+
+        var layout = new VertexLayout(vertexTypes);
+        _vertexLayouts.Add(layout);
+        return layout;
+    }
+
     public void SetVertexBuffer(IBuffer vertexBuffer)
     {
         if (_hashing)
@@ -1815,13 +1885,12 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             if (_swallowing) return;
         }
 
-        ulong offset = 0;
-        CurrentCommandBuffer.BindVertexBuffers(0U, 1U, vertexBuffer.GetBuffer(), offset);
+        BindVertexBuffer(CurrentCommandBuffer, vertexBuffer);
     }
 
-    public void SetVertexBuffers(params IBuffer[] vertexBuffers)
+    public void SetVertexBuffers(params ReadOnlySpan<IBuffer> vertexBuffers)
     {
-        if (vertexBuffers == null || vertexBuffers.Length == 0) return;
+        if (vertexBuffers.IsEmpty) return;
 
         if (_hashing)
         {
@@ -1830,9 +1899,35 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             if (_swallowing) return;
         }
 
-        var offsets = new VkDeviceSize[vertexBuffers.Length];
-        var buffers = vertexBuffers.Select(x=>x.GetBuffer()).ToArray();
-        CurrentCommandBuffer.BindVertexBuffers(0, (uint)buffers.Length, buffers, offsets);
+        if (_vertexBuffers.Length < vertexBuffers.Length)
+            Array.Resize(ref _vertexBuffers, vertexBuffers.Length);
+        for (var i = 0; i < vertexBuffers.Length; i++)
+            _vertexBuffers[i] = vertexBuffers[i].GetBuffer();
+        _vertexBufferCount = vertexBuffers.Length;
+        BindVertexBuffers(CurrentCommandBuffer);
+    }
+
+    private void BindVertexBuffer(CommandBuffer commandBuffer, IBuffer vertexBuffer)
+    {
+        _vertexBuffers[0] = vertexBuffer.GetBuffer();
+        _vertexBufferCount = 1;
+        BindVertexBuffers(commandBuffer);
+    }
+
+    private void BindVertexBuffers(CommandBuffer commandBuffer)
+    {
+        _vertexBuffersLayout = _vertexLayout;
+
+        Span<VkDeviceSize> offsets = stackalloc VkDeviceSize[_vertexBufferCount];
+        Span<VkDeviceSize> strides = stackalloc VkDeviceSize[_vertexBufferCount];
+        offsets.Clear();
+        strides.Clear();
+        var bindings = _vertexLayout?.Bindings ?? [];
+        for (var i = 0; i < Math.Min(bindings.Length, strides.Length); i++)
+            strides[i] = bindings[i].Stride;
+
+        commandBuffer.BindVertexBuffers2(0, (uint)_vertexBufferCount, _vertexBuffers.AsSpan(0, _vertexBufferCount), offsets,
+            ReadOnlySpan<VkDeviceSize>.Empty, strides);
     }
 
     public void SetIndexBuffer(IBuffer indexBuffer)
@@ -1869,23 +1964,24 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
         // Emit each remaining dynamic state only when it changed since the previous draw. The cache is
         // invalidated at BeginDraw, so the first draw of a command buffer still emits everything.
-        if (!_stateInitialized || _cVertexType != VertexType)
+        if (!_stateInitialized || _cVertexLayout != _vertexLayout)
         {
-            if (VertexType == null)
+            if (_vertexLayout == null)
             {
                 // No vertex input: a draw whose vertices come only from SV_VertexID and whose per-instance data is read
                 // from a storage buffer by SV_InstanceID (the instanced SDF batch). Bind an EMPTY vertex-input state so
-                // the pipeline expects no vertex buffer (else GetBindingDescription2(null) throws + aborts the frame).
+                // the pipeline expects no vertex buffer.
                 commandBuffer.SetVertexInputEXT(0, default(VertexInputBindingDescription2EXT), 0, System.Array.Empty<VertexInputAttributeDescription2EXT>());
             }
             else
             {
-                var bindingDescription = VertexType.GetBindingDescription2();
-                var attributes = VertexType.GetVertexAttributeDescription2();
-                commandBuffer.SetVertexInputEXT(1, bindingDescription, (uint)attributes.Length, attributes);
+                commandBuffer.SetVertexInputEXT((uint)_vertexLayout.Bindings.Length, _vertexLayout.Bindings,
+                    (uint)_vertexLayout.Inputs.Length, _vertexLayout.Inputs);
             }
-            _cVertexType = VertexType;
+            _cVertexLayout = _vertexLayout;
         }
+        if (_vertexBufferCount > 0 && _vertexBuffersLayout != _vertexLayout)
+            BindVertexBuffers(commandBuffer);
         if (!_stateInitialized || _cRasterizerDiscard != RasterizerDiscardEnabled)
         { commandBuffer.SetRasterizerDiscardEnable(RasterizerDiscardEnabled); _cRasterizerDiscard = RasterizerDiscardEnabled; }
         if (!_stateInitialized || _cTopology != PrimitiveTopology)
@@ -2061,6 +2157,30 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         commandBuffer.Draw((uint)vertexCount, instanceCount, firstVertex, firstInstance);
     }
 
+    public void DrawIndexed(uint indexCount, uint instanceCount = 1, uint firstIndex = 0, int vertexOffset = 0,
+        uint firstInstance = 0)
+    {
+        CheckDrawKind(isMeshTaskDraw: false);
+        if (_hashing)
+        {
+            HashDrawState();
+            Hash(0xD7);
+            Hash(((ulong)indexCount << 32) | instanceCount);
+            Hash(((ulong)firstIndex << 32) | (uint)vertexOffset);
+            Hash(firstInstance);
+            if (_swallowing)
+            {
+                _stateInitialized = true;
+                return;
+            }
+        }
+
+        var commandBuffer = CurrentCommandBuffer;
+        SetDrawingState(commandBuffer);
+
+        commandBuffer.DrawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+    }
+
     public void DrawMeshTasks(uint groupCountX, uint groupCountY = 1, uint groupCountZ = 1)
     {
         if (CurrentEffectPass == null)
@@ -2145,12 +2265,11 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             }
         }
 
-        ulong offset = 0;
         var commandBuffer = CurrentCommandBuffer;
 
         SetDrawingState(commandBuffer);
 
-        commandBuffer.BindVertexBuffers(0, 1, vertexBuffer.GetBuffer(), offset);
+        BindVertexBuffer(commandBuffer, vertexBuffer);
 
         commandBuffer.BindIndexBuffer(indexBuffer.GetBuffer(), 0, IndexType.Uint32);
 
@@ -2176,12 +2295,11 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             }
         }
 
-        ulong offset = 0;
         var commandBuffer = CurrentCommandBuffer;
 
         // Bind the vertex buffer before SetDrawingState, which emits the dynamic vertex input (the SetVertexBuffer()+Draw()
         // order).
-        commandBuffer.BindVertexBuffers(0, 1, vertexBuffer.GetBuffer(), offset);
+        BindVertexBuffer(commandBuffer, vertexBuffer);
 
         SetDrawingState(commandBuffer);
 
@@ -2224,7 +2342,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
         var commandBuffer = CurrentCommandBuffer;
         SetDrawingState(commandBuffer);
-        commandBuffer.BindVertexBuffers(0, 1, vertexBuffer.GetBuffer(), 0UL);
+        BindVertexBuffer(commandBuffer, vertexBuffer);
         commandBuffer.DrawIndirect(indirectBuffer.GetBuffer(), 0, drawCount, stride);
     }
 

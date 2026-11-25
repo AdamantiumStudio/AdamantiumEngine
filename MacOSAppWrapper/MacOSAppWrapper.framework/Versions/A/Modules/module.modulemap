@@ -1,6 +1,0 @@
-framework module MacOSAppWrapper {
-  umbrella header "MacOSAppWrapper.h"
-
-  export *
-  module * { export * }
-}

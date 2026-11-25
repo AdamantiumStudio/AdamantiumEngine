@@ -12,6 +12,7 @@ namespace Adamantium.LocalizationTests;
 /// <summary>Language files become string tables: one class per table, built from the files of every language together,
 /// following the application's language while it runs.</summary>
 [TestFixture]
+[SetUICulture("en-US")]
 public class LanguageTableGeneratorTests
 {
     // A value whose members are named as the attributes beside Select: Text and Count.

@@ -45,6 +45,10 @@ public interface IDrawableDevice
     
     void DrawIndexed(IBuffer vertexBuffer, IBuffer indexBuffer, uint instanceCount = 1, uint indexCount = 0);
 
+    /// <summary>Draws what <see cref="SetVertexBuffers"/> and <see cref="SetIndexBuffer"/> bound.</summary>
+    void DrawIndexed(uint indexCount, uint instanceCount = 1, uint firstIndex = 0, int vertexOffset = 0,
+        uint firstInstance = 0);
+
     /// <summary>Draws with the applied mesh pass: launches this many workgroups of its task shader, or of its mesh
     /// shader when it has no task shader.</summary>
     /// <exception cref="ArgumentOutOfRangeException">More workgroups than the device's limits for that stage.</exception>
@@ -200,7 +204,7 @@ public interface IDynamicStateDevice
 
     void SetIndexBuffer(IBuffer indexBuffer);
 
-    void SetVertexBuffers(params IBuffer[] vertexBuffers);
+    void SetVertexBuffers(params ReadOnlySpan<IBuffer> vertexBuffers);
     
     Queue GraphicsQueue { get; }
 
@@ -360,7 +364,16 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
 
     PrimitiveTopology PrimitiveTopology { get; set; }
     
+    /// <summary>The structure of the vertices drawn, the first buffer's when there are several; null for none.</summary>
     Type VertexType { get; set; }
+
+    /// <summary>The structure of each vertex buffer, as <see cref="SetVertexTypes"/> was given them.</summary>
+    ReadOnlySpan<Type> VertexTypes { get; }
+
+    /// <summary>A vertex structure for each buffer of <see cref="SetVertexBuffers"/>, in their order - a mesh's vertices and,
+    /// marked <see cref="Vertices.PerInstanceDataAttribute"/>, what differs between its instances. The shader's inputs are
+    /// the fields of the first, then of the next.</summary>
+    void SetVertexTypes(params ReadOnlySpan<Type> vertexTypes);
 
     IDepthStencilBuffer CreateDepthBuffer(uint width, 
         uint height, 

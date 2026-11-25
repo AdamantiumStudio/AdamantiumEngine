@@ -22,7 +22,7 @@
     <PropertyGroup>
         <IncludeBuildOutput>false</IncludeBuildOutput>
         <DevelopmentDependency>true</DevelopmentDependency>
-        <AdamantiumSlangVersion>1.1.2</AdamantiumSlangVersion>
+        <AdamantiumSlangVersion>1.2.0</AdamantiumSlangVersion>
         <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);PackAnalyzerAssemblies</TargetsForTfmSpecificContentInPackage>
         <!-- dotnet pack no-build: the references are resolved from what is already built instead of being built again. -->
         <BuildProjectReferences Condition="'$(NoBuild)' == 'true'">false</BuildProjectReferences>
@@ -53,7 +53,7 @@
 	<ItemGroup>
          <!--Generator dependencies-->
 		
-		<PackageReference Include="Adamantium.Vulkan.Spirv" Version="2.0.2" GeneratePathProperty="true" PrivateAssets="all" />
+		<PackageReference Include="Adamantium.Vulkan.Spirv" Version="2.1.0" GeneratePathProperty="true" PrivateAssets="all" />
 		<PackageReference Include="Adamantium.Vulkan.Slang" Version="$(AdamantiumSlangVersion)" GeneratePathProperty="true" PrivateAssets="compile;runtime;native;analyzers;build;buildtransitive" />
         <PackageReference Include="MessagePack" Version="3.1.12" GeneratePathProperty="true" PrivateAssets="all" />
         <PackageReference Include="MessagePack.Annotations" Version="3.1.12" GeneratePathProperty="true" PrivateAssets="all" />
@@ -71,6 +71,8 @@
         <EmbeddedResource Include="$(PKGAdamantium_Vulkan_Slang)\runtimes\win-x64\native\slang-c-shared.dll" LogicalName="$(RootNamespace).slang-c-shared.dll" Visible="false" />
         <EmbeddedResource Include="$(PKGAdamantium_Vulkan_Spirv)\runtimes\linux-x64\native\libspirv-cross-c-shared.so" LogicalName="$(RootNamespace).libspirv-cross-c-shared.so" Visible="false" />
         <EmbeddedResource Include="$(PKGAdamantium_Vulkan_Slang)\runtimes\linux-x64\native\libslang-c-shared.so" LogicalName="$(RootNamespace).libslang-c-shared.so" Visible="false" />
+        <EmbeddedResource Include="$(PKGAdamantium_Vulkan_Spirv)\runtimes\osx-arm64\native\libspirv-cross-c-shared.dylib" LogicalName="$(RootNamespace).libspirv-cross-c-shared.dylib" Visible="false" />
+        <EmbeddedResource Include="$(PKGAdamantium_Vulkan_Slang)\runtimes\osx-arm64\native\libslang-c-shared.dylib" LogicalName="$(RootNamespace).libslang-c-shared.dylib" Visible="false" />
     </ItemGroup>
 
     <ItemGroup Condition="'$(UseQuantumBindingSource)' == 'true'">

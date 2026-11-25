@@ -82,10 +82,7 @@ public static class ShaderBinaryCache
         if (!Enabled) return;
         try
         {
-            nuint size = 0;
-            if (device.LogicalDevice.GetShaderBinaryDataEXT(shader, ref size, default) != Result.Success || size == 0) return;
-            var bytes = new byte[(int)size];
-            if (device.LogicalDevice.GetShaderBinaryDataEXT(shader, ref size, bytes) != Result.Success) return;
+            if (device.LogicalDevice.GetShaderBinaryData(shader, out var bytes) != Result.Success || bytes.Length == 0) return;
 
             var file = FileFor(device, info, name, layout);
             Directory.CreateDirectory(Path.GetDirectoryName(file));

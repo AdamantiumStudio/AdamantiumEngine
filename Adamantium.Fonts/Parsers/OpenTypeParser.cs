@@ -51,7 +51,6 @@ namespace Adamantium.Fonts.Parsers
                 "hmtx",
                 "maxp",
                 "name",
-                "OS/2",
                 "post"
             });
 
