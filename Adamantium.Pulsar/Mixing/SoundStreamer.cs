@@ -79,7 +79,7 @@ internal sealed class SoundStreamer : IDisposable
                 if (stream.IsReleased)
                 {
                     _streams.RemoveAt(index);
-                    stream.Close();
+                    Finish(stream);
                     KeepSpare(stream);
                 }
                 else
@@ -97,7 +97,7 @@ internal sealed class SoundStreamer : IDisposable
 
         foreach (var stream in _streams)
         {
-            stream.Finish();
+            Finish(stream);
         }
     }
 
@@ -126,11 +126,28 @@ internal sealed class SoundStreamer : IDisposable
         catch (Exception e)
         {
             // Whatever a file or its storage does, the others play on.
-            Trace.TraceWarning("A streamed sound was cut off: {0}", e.Message);
-            Volatile.Write(ref _problem, e.Message);
-            stream.Finish();
+            Tell(e);
+            Finish(stream);
             return false;
         }
+    }
+
+    private void Finish(SoundStream stream)
+    {
+        try
+        {
+            stream.Finish();
+        }
+        catch (Exception e)
+        {
+            Tell(e);
+        }
+    }
+
+    private void Tell(Exception e)
+    {
+        Trace.TraceWarning("A streamed sound was cut off: {0}", e.Message);
+        Volatile.Write(ref _problem, e.Message);
     }
 
     private float[] TakeSpare(int channels) =>

@@ -11,6 +11,8 @@ internal sealed class CountingStorage(byte[] file) : ISoundStorage
 
     public volatile bool IsGone;
 
+    public volatile bool FailsToClose;
+
     public void Block() => _open.Reset();
 
     public void Unblock() => _open.Set();
@@ -46,6 +48,10 @@ internal sealed class CountingStorage(byte[] file) : ISoundStorage
             }
 
             base.Dispose(disposing);
+            if (storage.FailsToClose)
+            {
+                throw new IOException("not closed");
+            }
         }
     }
 }

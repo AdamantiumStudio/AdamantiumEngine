@@ -21,6 +21,9 @@ internal struct Voice
     /// <summary>Whether it is among those heard.</summary>
     public bool Selected;
 
+    /// <summary>What it begins by is there: one answer for a block, or it would begin unheard.</summary>
+    public bool IsReady;
+
     public float Pitch;
     public float Pan;
     public Ramp Volume;
@@ -39,7 +42,4 @@ internal struct Voice
     public float Right;
 
     public readonly AudioFormat Format => Stream?.Format ?? Sound.Format;
-
-    /// <summary>Whether what it begins by is there.</summary>
-    public readonly bool IsReady => Stream == null || Stream.IsReady;
 }

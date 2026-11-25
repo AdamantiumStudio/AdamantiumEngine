@@ -123,6 +123,9 @@ public class SoundImporterTests
 
     private sealed class Storage(string path) : ISoundStorage
     {
-        public Stream Open() => AssetFile.OpenSection(path, AssetFileSection.Body);
+        public Stream Open() =>
+            AssetFile.TryFindSection(path, AssetFileSection.Body, out var offset, out var length)
+                ? new SoundFileStorage(path, offset, length).Open()
+                : throw new InvalidDataException("no body");
     }
 }

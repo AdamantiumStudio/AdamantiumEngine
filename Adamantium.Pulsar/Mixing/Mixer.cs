@@ -231,6 +231,7 @@ internal sealed class Mixer
             ref var voice = ref _voices[_active[index]];
             ref var bus = ref _buses[voice.Bus];
             var loudness = voice.Volume.Highest * voice.Fade.Highest * bus.Loudness * (voice.Selected ? KeepHeard : 1);
+            voice.IsReady = voice.Stream == null || voice.Stream.IsReady;
             voice.Selected = loudness > LeastHeard && bus.IsSolo && !voice.Paused && !bus.IsPaused &&
                 (voice.Started || (voice.StartFrame < _frame + BlockFrames && voice.IsReady));
             if (voice.Selected)
@@ -262,7 +263,7 @@ internal sealed class Mixer
                 return;
             }
 
-            if (paused || voice.StartFrame >= _frame + frames || (!voice.Selected && !voice.IsReady))
+            if (paused || voice.StartFrame >= _frame + frames || !voice.IsReady)
             {
                 return;
             }

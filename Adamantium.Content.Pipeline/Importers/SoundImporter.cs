@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.IO;
 using Adamantium.Pulsar;
@@ -32,20 +31,28 @@ public sealed class SoundImporter : IContentImporter
     {
         var streaming = ImportSettingReader.ReadChoice(sourcePath, context, StreamingSetting, WhenLong, Always, Never);
         var file = File.ReadAllBytes(sourcePath);
-        var sound = SoundFile.Read(file);
-        var isStreamed = streaming == Always || (streaming == WhenLong && sound.Duration > BakedSound.LongestInMemory);
-        if (isStreamed && !CanStream(file))
+        using var decoder = SoundFile.Open(new MemoryStream(file, writable: false));
+        var duration = decoder.Format.DurationOf(CountFrames(decoder));
+        var isStreamed = streaming == Always || (streaming == WhenLong && duration > BakedSound.LongestInMemory);
+        if (isStreamed && decoder.Frames < 0)
         {
-            context.Log($"{sourcePath} : warning ACB012: the file does not say how long it is; it is kept in memory");
+            context.Log($"{sourcePath} : warning ACB014: the file does not say how long it is; it is kept in memory");
             isStreamed = false;
         }
 
         return new ImportedSound(file, isStreamed);
     }
 
-    private static bool CanStream(byte[] file)
+    // All of it is decoded, as nothing else tells whether it can be.
+    private static long CountFrames(ISoundDecoder decoder)
     {
-        using var decoder = SoundFile.Open(new MemoryStream(file, writable: false));
-        return decoder.Frames > 0;
+        var samples = new float[4096 * decoder.Format.Channels];
+        var frames = 0L;
+        while (decoder.Read(samples) is var read and not 0)
+        {
+            frames += read;
+        }
+
+        return frames != 0 ? frames : throw new InvalidDataException("The sound file has no samples.");
     }
 }

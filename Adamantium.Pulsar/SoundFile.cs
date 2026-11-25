@@ -34,6 +34,11 @@ public static class SoundFile
 
             throw new InvalidDataException("It is no WAV or FLAC file.");
         }
+        catch (EndOfStreamException e)
+        {
+            stream.Dispose();
+            throw new InvalidDataException("The sound file is cut short.", e);
+        }
         catch
         {
             stream.Dispose();
@@ -53,29 +58,56 @@ public static class SoundFile
     /// <exception cref="InvalidDataException">It is no sound file, or one that can not be read.</exception>
     public static SoundData Read(Stream stream)
     {
-        using var decoder = Open(stream);
+        ArgumentNullException.ThrowIfNull(stream);
+        using var decoder = Open(stream.CanSeek ? stream : CopyOf(stream));
         var channels = decoder.Format.Channels;
+        var most = Math.Min(Sound.MostFrames, Array.MaxLength / channels);
+        if (decoder.Frames > most)
+        {
+            throw TooLong();
+        }
+
         // As long as it says it is, if that is what comes: a damaged one may say anything.
-        var samples = new float[Math.Clamp(decoder.Frames, 1, FirstRead) * channels];
+        var frames = (int)Math.Min(decoder.Frames < 0 ? FirstRead : decoder.Frames, FirstRead);
+        var samples = new float[frames * channels];
         var read = 0;
         while (true)
         {
-            var got = decoder.Read(samples.AsSpan(read)) * channels;
-            read += got;
-            if (read < samples.Length)
+            read += decoder.Read(samples.AsSpan(read * channels));
+            if (read < frames || read == decoder.Frames)
             {
                 break;
             }
 
-            var wanted = decoder.Frames > 0 && decoder.Frames * channels > read
-                ? Math.Min(decoder.Frames * channels, samples.Length * 2L)
-                : samples.Length * 2L;
-            Array.Resize(ref samples, (int)Math.Min(wanted, Array.MaxLength - 1));
+            if (frames == most)
+            {
+                throw TooLong();
+            }
+
+            frames = (int)Math.Min(frames * 2L, decoder.Frames < 0 ? most : decoder.Frames);
+            Array.Resize(ref samples, frames * channels);
         }
 
-        Array.Resize(ref samples, read);
-        return read == 0
-            ? throw new InvalidDataException("The sound file has no samples.")
-            : new SoundData(decoder.Format, samples, decoder.Loop);
+        if (read == 0)
+        {
+            throw new InvalidDataException("The sound file has no samples.");
+        }
+
+        Array.Resize(ref samples, read * channels);
+        // One of unknown length may say a loop past its end.
+        return new SoundData(decoder.Format, samples, decoder.Loop is { } loop && loop.End <= read ? loop : null);
     }
+
+    private static MemoryStream CopyOf(Stream stream)
+    {
+        using (stream)
+        {
+            var copy = new MemoryStream();
+            stream.CopyTo(copy);
+            copy.Position = 0;
+            return copy;
+        }
+    }
+
+    private static InvalidDataException TooLong() => new("The sound file is too long to be held in memory.");
 }

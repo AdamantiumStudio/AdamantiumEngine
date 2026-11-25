@@ -103,14 +103,10 @@ internal sealed class SoundStream(StreamedSound sound, int from, bool loops)
     /// <summary>No more frames come: the voice ends with those there are.</summary>
     public void Finish()
     {
-        Close();
-        Volatile.Write(ref _hasAll, true);
-    }
-
-    public void Close()
-    {
-        _decoder?.Dispose();
+        var decoder = _decoder;
         _decoder = null;
+        Volatile.Write(ref _hasAll, true);
+        decoder?.Dispose();
     }
 
     private void Begin()

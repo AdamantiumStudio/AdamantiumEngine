@@ -4,7 +4,7 @@
 - `StreamedSound`: a sound read and decoded while it plays, on a thread of the engine's. `AudioEngine` is disposable.
 - Content builds import WAV and FLAC files into asset files (.aemf); a sound longer than ten seconds is streamed, unless
   the `Streaming` setting says otherwise. A game loads one as a `Sound`.
-- `AssetFile.OpenSection`: a section of an asset file, read in parts.
+- `AssetFile.TryFindSection`: where a section of an asset file is, to be read in parts.
 
 ### Changed
 

@@ -5,7 +5,7 @@ namespace Adamantium.Pulsar;
 public abstract class Sound
 {
     // A position has 32 bits for the fraction of a frame.
-    private const int MostFrames = 1 << 30;
+    internal const int MostFrames = 1 << 30;
 
     private protected Sound(AudioFormat format, long frames, SoundLoop? loop)
     {

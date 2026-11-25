@@ -155,7 +155,7 @@ internal sealed class BitReader(Stream stream)
             _bit -= (long)_mark << 3;
             _mark = 0;
         }
-        else if (_length == _buffer.Length)
+        else if (_buffer.Length - _length < bytes)
         {
             if (_buffer.Length == MostKept)
             {

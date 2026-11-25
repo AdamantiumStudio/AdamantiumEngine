@@ -1,3 +1,5 @@
+using System.IO.Compression;
+using Adamantium.Pulsar.Decoding;
 using NUnit.Framework;
 
 namespace Adamantium.Pulsar.Tests;
@@ -112,6 +114,81 @@ public class FlacTests
                 }
             }
         }
+    }
+
+    // Its last bytes are in the buffer, with room for fewer than are looked for at once.
+    [TestCase(65529)]
+    [TestCase(65535)]
+    [TestCase(65536)]
+    [TestCase(65540)]
+    public void AFrameThatFillsTheBuffer_IsReadToItsEnd(int length)
+    {
+        var bytes = new byte[length];
+        bytes[^1] = 1;
+        var reader = new BitReader(new MemoryStream(bytes));
+        reader.Mark();
+        for (var index = 0; index < length - 1; index++)
+        {
+            Assert.That(reader.Read(8), Is.Zero);
+        }
+
+        Assert.That(reader.Read(8), Is.EqualTo(1));
+        Assert.That(reader.Marked.Length, Is.EqualTo(length));
+        Assert.That(() => reader.Read(1), Throws.InstanceOf<InvalidDataException>());
+    }
+
+    [Test]
+    public void ALoopPastTheEnd_OfAFileThatDoesNotSayItsLength_IsTheWholeSound()
+    {
+        var file = FlacFiles.Read("longnotable16");
+        RemoveLength(file);
+        // LOOPSTART=300, and the length that is not said: the end is written over it.
+        var at = file.AsSpan().IndexOf("LOOPSTART=300"u8);
+        "LOOPEND=99999"u8.CopyTo(file.AsSpan(at));
+
+        Assert.That(SoundFile.Read(file).Loop, Is.EqualTo(new SoundLoop(0, FlacFiles.LongFrames)));
+    }
+
+    [Test]
+    public void AFileThatSaysItIsTooLong_IsRefused()
+    {
+        var file = FlacFiles.Read("mono8");
+        file[8 + 13] |= 0x0F;
+
+        Assert.That(() => SoundFile.Read(file), Throws.InstanceOf<InvalidDataException>());
+        Assert.That(() => StreamedSound.Open(new SoundMemoryStorage(file)), Throws.InstanceOf<InvalidDataException>());
+    }
+
+    [Test]
+    public void AFileOfKnownLength_IsReadWithNoMoreMemoryThanItNeeds()
+    {
+        var file = FlacFiles.Read("long16");
+        SoundFile.Read(file);
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        SoundFile.Read(file);
+
+        // A first part, the whole, and what the decoder works with.
+        Assert.That(GC.GetAllocatedBytesForCurrentThread() - before, Is.LessThan(FlacFiles.LongFrames * 4 * 2.2));
+    }
+
+    [Test]
+    public void AStreamThatDoesNotSeek_IsReadToo()
+    {
+        using var packed = new MemoryStream();
+        using (var gzip = new GZipStream(packed, CompressionMode.Compress, leaveOpen: true))
+        {
+            gzip.Write(FlacFiles.Read("mono8"));
+        }
+
+        packed.Position = 0;
+        Assert.That(SoundFile.Read(new GZipStream(packed, CompressionMode.Decompress)).Frames, Is.EqualTo(3000));
+    }
+
+    // The number of samples is the last 36 bits of those before the MD5.
+    internal static void RemoveLength(byte[] file)
+    {
+        file[8 + 13] &= 0xF0;
+        Array.Clear(file, 8 + 14, 4);
     }
 
     [Test]

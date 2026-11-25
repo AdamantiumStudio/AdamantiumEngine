@@ -122,38 +122,33 @@ public sealed class AssetFile
         return file;
     }
 
-    /// <summary>The <paramref name="section"/> of the file at <paramref name="path"/> to be read in parts, unlike
-    /// <see cref="Read(string, AssetFileSection)"/>; null when the file has none. The file may be written anew meanwhile.
-    /// Throws <see cref="AssetFormatException"/> for a file this engine does not read.</summary>
-    public static Stream OpenSection(string path, AssetFileSection section)
+    /// <summary>Where the <paramref name="section"/> of the file at <paramref name="path"/> is, to be read in parts, unlike
+    /// <see cref="Read(string, AssetFileSection)"/>; false when the file has none. Throws
+    /// <see cref="AssetFormatException"/> for a file this engine does not read.</summary>
+    public static bool TryFindSection(string path, AssetFileSection section, out long offset, out long length)
     {
-        var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var stream = File.OpenRead(path);
+        using var reader = new BinaryReader(stream, Encoding.UTF8, true);
         try
         {
-            using var reader = new BinaryReader(stream, Encoding.UTF8, true);
             var entries = ReadHeader(reader, stream.Length, out _);
             foreach (var entry in entries)
             {
                 if (entry.Section == section)
                 {
                     CheckWithin(entry.Offset, entry.Length, entries.Count, stream.Length);
-                    return new AssetSectionStream(stream, entry.Offset, entry.Length);
+                    (offset, length) = (entry.Offset, entry.Length);
+                    return true;
                 }
             }
-
-            stream.Dispose();
-            return null;
         }
         catch (AssetFormatException exception)
         {
-            stream.Dispose();
             throw new AssetFormatException($"{path}: {exception.Message}", exception);
         }
-        catch
-        {
-            stream.Dispose();
-            throw;
-        }
+
+        (offset, length) = (0, 0);
+        return false;
     }
 
     private static void CheckWithin(long offset, long length, int sectionCount, long size)

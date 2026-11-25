@@ -208,11 +208,65 @@ public class StreamedSoundTests
     }
 
     [Test]
+    public void AFileReplacedWhileItPlays_IsReplaced_AndCutsTheOldOneOff()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"pulsar-{Guid.NewGuid():N}.flac");
+        File.WriteAllBytes(path, FlacFiles.Read("long16"));
+        File.WriteAllBytes(path + ".new", FlacFiles.Read("longnotable16"));
+        try
+        {
+            var sound = _engine.AddSound(StreamedSound.Open(new SoundFileStorage(path)));
+            var voice = _engine.Play(sound);
+            WaitUntilHeard();
+            Assert.That(SpinWait.SpinUntil(() => _engine.IsReadAhead, Patience), Is.True);
+
+            File.Move(path + ".new", path, overwrite: true);
+
+            Assert.That(
+                SpinWait.SpinUntil(() =>
+                {
+                    Render(_engine);
+                    return !_engine.IsPlaying(voice);
+                }, Patience),
+                Is.True);
+            Assert.That(_engine.StreamProblem, Does.Contain("written anew"));
+            _engine.Play(sound);
+            WaitUntilHeard();
+        }
+        finally
+        {
+            _engine.Dispose();
+            File.Delete(path);
+            File.Delete(path + ".new");
+        }
+    }
+
+    [Test]
+    public void AStorageThatFailsToClose_EndsNothingElse()
+    {
+        var storage = new CountingStorage(FlacFiles.Read("long16"));
+        var sound = _engine.AddSound(StreamedSound.Open(storage));
+        storage.FailsToClose = true;
+        var voice = _engine.Play(sound);
+        WaitUntilHeard();
+        _engine.Stop(voice);
+        Assert.That(
+            SpinWait.SpinUntil(() =>
+            {
+                Render(_engine);
+                return _engine.StreamProblem == "not closed";
+            }, Patience),
+            Is.True);
+
+        _engine.Play(_engine.AddSound(Streamed("long16")));
+        WaitUntilHeard();
+    }
+
+    [Test]
     public void ASoundThatDoesNotSayItsLength_IsNotStreamed()
     {
         var file = FlacFiles.Read("mono8");
-        Array.Clear(file, 8 + 14, 4);
-        file[8 + 13] &= 0xF0;
+        FlacTests.RemoveLength(file);
 
         Assert.That(() => StreamedSound.Open(new SoundMemoryStorage(file)), Throws.InstanceOf<InvalidDataException>());
         Assert.That(SoundFile.Read(file).Frames, Is.EqualTo(3000), "but is read whole");

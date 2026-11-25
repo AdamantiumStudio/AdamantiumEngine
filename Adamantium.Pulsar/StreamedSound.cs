@@ -18,8 +18,11 @@ public sealed class StreamedSound : Sound
     {
         ArgumentNullException.ThrowIfNull(storage);
         using var decoder = SoundFile.Open(storage.Open());
-        return decoder.Frames > 0
-            ? new StreamedSound(storage, decoder)
-            : throw new InvalidDataException("The sound file does not say how long it is: it can not be streamed.");
+        return decoder.Frames switch
+        {
+            <= 0 => throw new InvalidDataException("The sound file does not say how long it is: it can not be streamed."),
+            > MostFrames => throw new InvalidDataException($"The sound file is of more than {MostFrames} frames."),
+            _ => new StreamedSound(storage, decoder),
+        };
     }
 }
