@@ -10,6 +10,7 @@ public static unsafe class KeyboardLayout
     private const string CoreFoundation = "/System/Library/Frameworks/CoreFoundation.framework/CoreFoundation";
     private const ushort KeyActionDown = 0;
     private const uint NoDeadKeys = 1;
+    private const uint CommandKey = 1;
 
     private static readonly IntPtr LayoutDataProperty = Marshal.ReadIntPtr(
         NativeLibrary.GetExport(NativeLibrary.Load(Carbon), "kTISPropertyUnicodeKeyLayoutData"));
@@ -29,9 +30,9 @@ public static unsafe class KeyboardLayout
             CFRelease(layout);
     }
 
-    /// <summary>The character <paramref name="layout"/> has on the key of hardware code <paramref name="keyCode"/> with no
-    /// modifier held; 0 for none.</summary>
-    public static char CharacterOf(IntPtr layout, ushort keyCode)
+    /// <summary>The character <paramref name="layout"/> has on the key of hardware code <paramref name="keyCode"/>, with
+    /// Command held or with nothing - a layout may have others for shortcuts; 0 for none.</summary>
+    public static char CharacterOf(IntPtr layout, ushort keyCode, bool withCommand = false)
     {
         var data = layout == IntPtr.Zero ? IntPtr.Zero : TISGetInputSourceProperty(layout, LayoutDataProperty);
         if (data == IntPtr.Zero)
@@ -41,7 +42,8 @@ public static unsafe class KeyboardLayout
         nuint length = 0;
         const int capacity = 4;
         var typed = stackalloc char[capacity];
-        var status = UCKeyTranslate(CFDataGetBytePtr(data), keyCode, KeyActionDown, 0, LMGetKbdType(), NoDeadKeys,
+        var status = UCKeyTranslate(CFDataGetBytePtr(data), keyCode, KeyActionDown,
+            withCommand ? CommandKey : 0, LMGetKbdType(), NoDeadKeys,
             &deadKeys, capacity, &length, typed);
         return status == 0 && length == 1 ? typed[0] : '\0';
     }

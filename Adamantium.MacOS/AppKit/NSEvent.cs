@@ -30,6 +30,7 @@ public static unsafe class NSEvent
     private static readonly IntPtr MomentumPhaseSelector = ObjCRuntime.RegisterSelector("momentumPhase");
     private static readonly IntPtr MagnificationSelector = ObjCRuntime.RegisterSelector("magnification");
     private static readonly IntPtr RotationSelector = ObjCRuntime.RegisterSelector("rotation");
+    private static readonly IntPtr MouseLocationSelector = ObjCRuntime.RegisterSelector("mouseLocation");
     private static readonly IntPtr DeltaXSelector = ObjCRuntime.RegisterSelector("deltaX");
     private static readonly IntPtr DeltaYSelector = ObjCRuntime.RegisterSelector("deltaY");
     private static readonly IntPtr OtherEventSelector = ObjCRuntime.RegisterSelector(
@@ -95,6 +96,10 @@ public static unsafe class NSEvent
     /// <summary>How far the fingers of a rotate event turned since the last one, in degrees counterclockwise.</summary>
     public static float RotationOf(IntPtr nsEvent) =>
         ((delegate* unmanaged<IntPtr, IntPtr, float>)ObjCRuntime.MessageSend)(nsEvent, RotationSelector);
+
+    /// <summary>Where the cursor is now, in AppKit's points of the desktop.</summary>
+    public static CGPoint MouseLocation =>
+        ((delegate* unmanaged<IntPtr, IntPtr, CGPoint>)ObjCRuntime.MessageSend)(Class, MouseLocationSelector);
 
     /// <summary>How far the mouse itself moved across, in points.</summary>
     public static double DeltaXOf(IntPtr nsEvent) => NSObject.SendForDouble(nsEvent, DeltaXSelector);

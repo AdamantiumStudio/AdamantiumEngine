@@ -43,6 +43,11 @@ public static unsafe class CoreGraphicsInterop
     [DllImport(CoreGraphics, EntryPoint = "CGDisplaySerialNumber")]
     public static extern uint DisplaySerial(uint display);
 
+    /// <summary>CGWarpMouseCursorPosition: the cursor put at a point from the top left corner of the main display, with no
+    /// event of it.</summary>
+    [DllImport(CoreGraphics, EntryPoint = "CGWarpMouseCursorPosition")]
+    public static extern int WarpCursor(CGPoint position);
+
     /// <summary>CGAssociateMouseAndMouseCursorPosition: whether the cursor goes with the mouse; off, the mouse still says
     /// how far it moves.</summary>
     [DllImport(CoreGraphics, EntryPoint = "CGAssociateMouseAndMouseCursorPosition")]
