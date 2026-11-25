@@ -110,16 +110,18 @@ public class AudioOutputTests(bool toDevice)
     public void ARendererLateOnce_IsOneGap()
     {
         OnlyOnADevice();
+        // More than a CI runner is late by on its own.
+        using var output = AudioOutput.CreateDefault(TimeSpan.FromMilliseconds(160));
         for (var round = 0; round < 5; round++)
         {
-            var renderer = new RecordingRenderer { Call = 30, AtCall = () => Thread.Sleep(300) };
-            _output.Start(renderer);
-            Assert.That(SpinWait.SpinUntil(() => _output.Statistics.Gaps > 0, Patience), Is.True);
+            var renderer = new RecordingRenderer { Call = 60, AtCall = () => Thread.Sleep(500) };
+            output.Start(renderer);
+            Assert.That(SpinWait.SpinUntil(() => output.Statistics.Gaps > 0, Patience), Is.True);
             var before = renderer.Frames;
-            SpinWait.SpinUntil(() => renderer.Frames > before + _output.Format.SampleRate / 5, Patience);
+            SpinWait.SpinUntil(() => renderer.Frames > before + output.Format.SampleRate / 2, Patience);
 
-            Assert.That(_output.Statistics.Gaps, Is.EqualTo(1), $"round {round}");
-            _output.Stop();
+            Assert.That(output.Statistics.Gaps, Is.EqualTo(1), $"round {round}");
+            output.Stop();
         }
     }
 
