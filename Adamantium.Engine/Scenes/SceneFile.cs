@@ -121,7 +121,7 @@ public sealed class SceneFile
     {
         ArgumentException.ThrowIfNullOrEmpty(from);
         ArgumentException.ThrowIfNullOrEmpty(to);
-        foreach (var placement in Placements())
+        foreach (var placement in Entries())
         {
             if (placement.Body is { } body && body.Layer == from)
                 body.Layer = to;
@@ -134,7 +134,7 @@ public sealed class SceneFile
     /// <summary>Whether an entry's body or collider is on the physics layer <paramref name="layer"/>.</summary>
     public bool NamesLayer(string layer)
     {
-        foreach (var placement in Placements())
+        foreach (var placement in Entries())
         {
             if (placement.Body?.Layer == layer || placement.Collider?.Traits?.Layer == layer)
                 return true;
@@ -143,7 +143,8 @@ public sealed class SceneFile
         return false;
     }
 
-    private IEnumerable<ScenePlacement> Placements()
+    /// <summary>The entries of every section, section by section.</summary>
+    internal IEnumerable<ScenePlacement> Entries()
     {
         foreach (var model in Models)
             yield return model;
