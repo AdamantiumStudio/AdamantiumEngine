@@ -21,20 +21,13 @@ public class AudioOutputTests(bool toDevice)
             return;
         }
 
-        if (!OperatingSystem.IsWindows())
-        {
-            Assert.Ignore("no device output here yet");
-        }
-
         _output = AudioOutput.CreateDefault(TimeSpan.FromMilliseconds(40));
-        try
+        _output.Start(new RecordingRenderer());
+        var problem = _output.DeviceProblem;
+        _output.Stop();
+        if (problem != null)
         {
-            _output.Start(new RecordingRenderer());
-            _output.Stop();
-        }
-        catch (AudioException e)
-        {
-            Assert.Ignore(e.Message);
+            Assert.Ignore(problem);
         }
     }
 

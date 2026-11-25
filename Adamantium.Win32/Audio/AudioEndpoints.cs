@@ -20,11 +20,8 @@ public static unsafe partial class AudioEndpoints
     public static int ActivateDefaultOutput(out AudioClient client)
     {
         client = default;
-        void* enumerator = null;
         void* device = null;
-        var classId = EnumeratorClass;
-        var interfaceId = EnumeratorInterface;
-        var result = CoCreateInstance(&classId, IntPtr.Zero, AllContexts, &interfaceId, &enumerator);
+        var result = CreateEnumerator(out var enumerator);
         if (result < 0)
         {
             return result;
@@ -47,7 +44,17 @@ public static unsafe partial class AudioEndpoints
         return result;
     }
 
-    private static void** TableOf(void* instance) => *(void***)instance;
+    internal static int CreateEnumerator(out void* enumerator)
+    {
+        var classId = EnumeratorClass;
+        var interfaceId = EnumeratorInterface;
+        void* created = null;
+        var result = CoCreateInstance(&classId, IntPtr.Zero, AllContexts, &interfaceId, &created);
+        enumerator = created;
+        return result;
+    }
+
+    internal static void** TableOf(void* instance) => *(void***)instance;
 
     [LibraryImport("ole32.dll")]
     private static partial int CoCreateInstance(Guid* classId, IntPtr outer, uint context, Guid* interfaceId, void** instance);

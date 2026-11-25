@@ -5,10 +5,10 @@ namespace Adamantium.Pulsar.Outputs;
 
 /// <summary>The default output device of Windows, in shared mode, filled each time the device says it has played some.
 /// Windows converts to the device's own format.</summary>
-internal sealed class WasapiOutput(AudioFormat format, TimeSpan buffer) : ThreadedOutput(format)
+internal sealed class WasapiOutput(AudioFormat format, TimeSpan buffer) : DeviceOutput(format, buffer)
 {
     private const int WaitFailed = -1;
-    private const int DeviceWantsMore = 1;
+    private const int DeviceWantsMore = 2;
     // In seconds. The device reads 10 ms at a time as a rule: less than half of that is no silence.
     private const double LeastSilence = 0.005;
     private const double ClockJitter = 0.001;
@@ -22,23 +22,26 @@ internal sealed class WasapiOutput(AudioFormat format, TimeSpan buffer) : Thread
     private bool _silent;
     private ulong _silentAt;
 
-    protected override void Play()
+    protected override void PlayToDevice()
     {
         var com = AudioThread.EnterCom();
         var proAudio = AudioThread.EnterProAudio();
-        using var wantsMore = new AutoResetEvent(false);
         try
         {
+            using var wantsMore = new AutoResetEvent(false);
+            using var changed = new AutoResetEvent(false);
+            using var watch = new DefaultOutputWatch(changed);
+            Check(watch.Result, "hear of another default device");
             Open(wantsMore);
             Fill();
             Check(_client.Start(), "start the stream");
-            Opened(_bufferFrames);
-            PlayUntilStopped(wantsMore);
+            PlaysToDevice(_bufferFrames);
+            PlayUntilStoppedOr(changed, wantsMore);
             _client.Stop();
         }
         finally
         {
-            Close();
+            CloseDevice();
             AudioThread.LeaveProAudio(proAudio);
             if (com >= 0)
             {
@@ -47,12 +50,22 @@ internal sealed class WasapiOutput(AudioFormat format, TimeSpan buffer) : Thread
         }
     }
 
+    protected override void CloseDevice()
+    {
+        _clock.Release();
+        _render.Release();
+        _client.Release();
+        _clock = default;
+        _render = default;
+        _client = default;
+    }
+
     private void Open(AutoResetEvent wantsMore)
     {
         Check(AudioEndpoints.ActivateDefaultOutput(out _client), "open the default output device");
         var waveFormat = WaveFormatExtensible.Float(Format.SampleRate, Format.Channels);
         Check(_client.Initialize(AudioClientFlags.EventCallback | AudioClientFlags.NoPersist |
-            AudioClientFlags.ConvertFormat | AudioClientFlags.ConvertQuality, buffer.Ticks, waveFormat), "open a stream");
+            AudioClientFlags.ConvertFormat | AudioClientFlags.ConvertQuality, Wanted.Ticks, waveFormat), "open a stream");
         Check(_client.SetEventHandle(wantsMore.SafeWaitHandle.DangerousGetHandle()), "hear the device");
         Check(_client.GetBufferSize(out _bufferFrames), "read the buffer's size");
         Check(_client.GetRenderClient(out _render), "write to the stream");
@@ -63,27 +76,18 @@ internal sealed class WasapiOutput(AudioFormat format, TimeSpan buffer) : Thread
         _silence = 0;
     }
 
-    private void Close()
+    private void PlayUntilStoppedOr(AutoResetEvent changed, AutoResetEvent wantsMore)
     {
-        _clock.Release();
-        _render.Release();
-        _client.Release();
-        _clock = default;
-        _render = default;
-        _client = default;
-    }
-
-    private void PlayUntilStopped(AutoResetEvent wantsMore)
-    {
-        var more = wantsMore.SafeWaitHandle.DangerousGetHandle();
         var stopping = Stopping.SafeWaitHandle.DangerousGetHandle();
+        var other = changed.SafeWaitHandle.DangerousGetHandle();
+        var more = wantsMore.SafeWaitHandle.DangerousGetHandle();
         while (true)
         {
-            // The first of two that came is told: a device that always wants more must not hide the stop.
-            var came = AudioThread.WaitForEither(stopping, more);
+            // The first of those that came is told: a device that always wants more must not hide the others.
+            var came = AudioThread.WaitForAny(stopping, other, more);
             if (came == WaitFailed)
             {
-                throw new AudioException($"The audio device can not be waited for (error {Marshal.GetLastPInvokeError()}).");
+                throw new DeviceException($"The audio device can not be waited for (error {Marshal.GetLastPInvokeError()}).");
             }
 
             if (came != DeviceWantsMore)
@@ -166,7 +170,7 @@ internal sealed class WasapiOutput(AudioFormat format, TimeSpan buffer) : Thread
     {
         if (result < 0)
         {
-            throw new AudioException(result switch
+            throw new DeviceException(result switch
             {
                 AudioClient.DeviceInvalidated => "The audio device is gone.",
                 AudioEndpoints.NotFound => "There is no audio output device.",

@@ -13,6 +13,7 @@ internal abstract class ThreadedOutput(AudioFormat format) : IAudioOutput
     private ExceptionDispatchInfo _failure;
     private int _state;
     private int _threadId;
+    private string _deviceProblem;
     private bool _hasOpened;
     private bool _disposed;
     private long _bufferFrames;
@@ -25,6 +26,12 @@ internal abstract class ThreadedOutput(AudioFormat format) : IAudioOutput
     public AudioFormat Format { get; } = format;
 
     public AudioOutputState State => (AudioOutputState)Volatile.Read(ref _state);
+
+    public string DeviceProblem
+    {
+        get => Volatile.Read(ref _deviceProblem);
+        protected set => Volatile.Write(ref _deviceProblem, value);
+    }
 
     public TimeSpan Buffer => Format.DurationOf(Volatile.Read(ref _bufferFrames));
 
@@ -51,6 +58,7 @@ internal abstract class ThreadedOutput(AudioFormat format) : IAudioOutput
             Renderer = renderer;
             _failure = null;
             _hasOpened = false;
+            _deviceProblem = null;
             _framesRendered = _gaps = _longestBetweenFills = _longestRender = _lastFill = 0;
             _stopping.Reset();
             _opened.Reset();
@@ -104,10 +112,18 @@ internal abstract class ThreadedOutput(AudioFormat format) : IAudioOutput
     /// </summary>
     protected abstract void Play();
 
-    protected void Opened(long bufferFrames)
+    /// <summary>For an output that waits on something else: <see cref="Stopping"/> is set. Called on the stopping thread.
+    /// </summary>
+    protected virtual void StopRequested()
+    {
+    }
+
+    protected void Opened(long bufferFrames, AudioOutputState state)
     {
         Volatile.Write(ref _bufferFrames, bufferFrames);
-        Volatile.Write(ref _state, (int)AudioOutputState.Running);
+        // What passed without a device is no time between two fills of one.
+        _lastFill = 0;
+        Volatile.Write(ref _state, (int)state);
         _hasOpened = true;
         _opened.Set();
     }
@@ -183,6 +199,7 @@ internal abstract class ThreadedOutput(AudioFormat format) : IAudioOutput
         }
 
         _stopping.Set();
+        StopRequested();
         _thread.Join();
         _thread = null;
         Renderer = null;

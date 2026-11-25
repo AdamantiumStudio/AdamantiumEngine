@@ -29,12 +29,12 @@ public static unsafe partial class AudioThread
         }
     }
 
-    /// <summary>Waits for either event; the index of the one that came, or -1 on a failure, which
+    /// <summary>Waits for any of three events; the index of the first that came, or -1 on a failure, which
     /// <see cref="Marshal.GetLastPInvokeError"/> tells.</summary>
-    public static int WaitForEither(IntPtr first, IntPtr second)
+    public static int WaitForAny(IntPtr first, IntPtr second, IntPtr third)
     {
-        var handles = stackalloc IntPtr[2] { first, second };
-        return (int)WaitForMultipleObjects(2, handles, 0, Infinite);
+        var handles = stackalloc IntPtr[3] { first, second, third };
+        return (int)WaitForMultipleObjects(3, handles, 0, Infinite);
     }
 
     [LibraryImport("ole32.dll")]
