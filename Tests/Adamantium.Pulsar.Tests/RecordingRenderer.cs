@@ -14,6 +14,11 @@ internal sealed class RecordingRenderer : IAudioRenderer
     /// <summary>Done at the call it counts down to.</summary>
     public Action AtCall { get; init; }
 
+    /// <summary>Or done once, at the call that makes it this many frames: how many a call asks for is the device's.</summary>
+    public long AfterFrames { get; init; } = long.MaxValue;
+
+    private bool _isAfter;
+
     public int Call { get; init; } = int.MaxValue;
 
     private int _calls;
@@ -29,8 +34,9 @@ internal sealed class RecordingRenderer : IAudioRenderer
 
         samples.Clear();
         Volatile.Write(ref _frames, _frames + samples.Length / format.Channels);
-        if (_calls == Call)
+        if (_calls == Call || (!_isAfter && _frames >= AfterFrames))
         {
+            _isAfter = true;
             AtCall();
         }
 
