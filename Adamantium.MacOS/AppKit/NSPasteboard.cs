@@ -17,6 +17,7 @@ public static unsafe class NSPasteboard
     private static readonly IntPtr ItemsSelector = ObjCRuntime.RegisterSelector("pasteboardItems");
     private static readonly IntPtr DataForTypeSelector = ObjCRuntime.RegisterSelector("dataForType:");
     private static readonly IntPtr SetDataSelector = ObjCRuntime.RegisterSelector("setData:forType:");
+    private static readonly IntPtr SetProviderSelector = ObjCRuntime.RegisterSelector("setDataProvider:forTypes:");
     private static readonly IntPtr AvailableTypeSelector = ObjCRuntime.RegisterSelector("availableTypeFromArray:");
 
     /// <summary>The clipboard; the system's, not retained.</summary>
@@ -42,6 +43,20 @@ public static unsafe class NSPasteboard
         ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, IntPtr, byte>)ObjCRuntime.MessageSend)(item, SetDataSelector,
             NSData.Create(bytes), nsType);
         NSObject.Release(nsType);
+    }
+
+    /// <summary>Has an item ask <paramref name="provider"/> (NSPasteboardItemDataProvider), retained until the item is done
+    /// with, for its data of some types when they are wanted.</summary>
+    public static void SetProvider(IntPtr item, IntPtr provider, ReadOnlySpan<string> types)
+    {
+        var nsTypes = new IntPtr[types.Length];
+        for (var i = 0; i < types.Length; i++)
+            nsTypes[i] = NSString.Create(types[i]);
+
+        ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, IntPtr, byte>)ObjCRuntime.MessageSend)(item, SetProviderSelector,
+            provider, NSArray.Create(nsTypes));
+        foreach (var type in nsTypes)
+            NSObject.Release(type);
     }
 
     /// <summary>Puts <paramref name="items"/> on the pasteboard in place of what was there; false when it did not take
