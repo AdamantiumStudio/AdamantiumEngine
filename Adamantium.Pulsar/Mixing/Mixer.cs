@@ -20,6 +20,7 @@ internal sealed class Mixer
     private readonly Bus[] _buses;
     private readonly int[] _active;
     private readonly HighestRanked _loudest;
+    private readonly SoundStreamer _streamer;
     private readonly int[] _positions;
     // Parents before their children.
     private readonly int[] _busOrder;
@@ -32,9 +33,11 @@ internal sealed class Mixer
     private int _busCount;
     private int _heard;
     private long _frame;
+    private int _streamGaps;
 
-    public Mixer(AudioEngineSettings settings, SlotReturns endedVoices, SlotReturns removedBuses)
+    public Mixer(AudioEngineSettings settings, SoundStreamer streamer, SlotReturns endedVoices, SlotReturns removedBuses)
     {
+        _streamer = streamer;
         _voices = new Voice[settings.Voices];
         _active = new int[settings.Voices];
         _loudest = new HighestRanked(Math.Min(settings.AudibleVoices, settings.Voices));
@@ -54,6 +57,8 @@ internal sealed class Mixer
     public long Frame => Volatile.Read(ref _frame);
 
     public int Heard => Volatile.Read(ref _heard);
+
+    public int StreamGaps => Volatile.Read(ref _streamGaps);
 
     /// <summary>The frame of its sound a voice got to.</summary>
     public int PositionOf(int voice) => Volatile.Read(ref _positions[voice]);
@@ -126,11 +131,19 @@ internal sealed class Mixer
     {
         ReadBuses();
         SelectHeard();
+        var streamsWantMore = false;
         for (var index = 0; index < _activeCount; index++)
         {
             var slot = _active[index];
-            MixVoice(ref _voices[slot]);
-            Volatile.Write(ref _positions[slot], (int)(_voices[slot].Position >> 32));
+            ref var voice = ref _voices[slot];
+            MixVoice(ref voice);
+            Volatile.Write(ref _positions[slot], voice.Stream?.SoundFrame ?? (int)(voice.Position >> 32));
+            streamsWantMore |= voice.Stream is { WantsMore: true };
+        }
+
+        if (streamsWantMore)
+        {
+            _streamer.Wake();
         }
 
         MixBuses();
@@ -152,11 +165,11 @@ internal sealed class Mixer
     private void Play(in Command command)
     {
         var settings = command.Settings;
-        var sound = command.Sound;
         ref var voice = ref _voices[command.Slot];
         voice = new Voice
         {
-            Sound = sound,
+            Sound = command.Sound,
+            Stream = command.Stream,
             Bus = command.Bus,
             Priority = settings.Priority,
             Loops = settings.Loops,
@@ -165,7 +178,8 @@ internal sealed class Mixer
             Volume = new Ramp(settings.Volume),
             Fade = new Ramp(0),
             StartFrame = Math.Max(0, settings.StartFrame),
-            Position = (long)command.From << 32,
+            // A stream begins there itself.
+            Position = command.Stream == null ? (long)command.From << 32 : 0,
         };
         voice.Fade.Set(1, command.Frames);
         _active[_activeCount++] = command.Slot;
@@ -218,7 +232,7 @@ internal sealed class Mixer
             ref var bus = ref _buses[voice.Bus];
             var loudness = voice.Volume.Highest * voice.Fade.Highest * bus.Loudness * (voice.Selected ? KeepHeard : 1);
             voice.Selected = loudness > LeastHeard && bus.IsSolo && !voice.Paused && !bus.IsPaused &&
-                (voice.Started || voice.StartFrame < _frame + BlockFrames);
+                (voice.Started || (voice.StartFrame < _frame + BlockFrames && voice.IsReady));
             if (voice.Selected)
             {
                 // A positive float's bits are in its order.
@@ -248,7 +262,7 @@ internal sealed class Mixer
                 return;
             }
 
-            if (paused || voice.StartFrame >= _frame + frames)
+            if (paused || voice.StartFrame >= _frame + frames || (!voice.Selected && !voice.IsReady))
             {
                 return;
             }
@@ -274,13 +288,26 @@ internal sealed class Mixer
         var step = SoundReader.StepOf(voice, _sampleRate);
         if (left == 0 && right == 0 && voice.Left == 0 && voice.Right == 0)
         {
-            voice.Ended = !SoundReader.Skip(ref voice, step, frames);
+            voice.Ended = !(voice.Stream == null
+                ? SoundReader.Skip(ref voice, step, frames)
+                : StreamReader.Skip(ref voice, step, frames));
         }
         else
         {
-            var channels = voice.Sound.Format.Channels;
+            var channels = voice.Format.Channels;
             var read = _read.AsSpan(0, frames * channels);
-            var got = SoundReader.Read(ref voice, step, read);
+            int got;
+            if (voice.Stream == null)
+            {
+                got = SoundReader.Read(ref voice, step, read);
+            }
+            else
+            {
+                got = StreamReader.Read(ref voice, step, read, out var starved);
+                _streamGaps += starved && !voice.Starved ? 1 : 0;
+                voice.Starved = starved;
+            }
+
             PrepareBus(ref bus);
             AddRamped(read, bus.Samples.AsSpan(offset * Channels, got * Channels), channels, left, right,
                 (voice.Left - left) / frames, (voice.Right - right) / frames);
@@ -293,7 +320,7 @@ internal sealed class Mixer
     private static void SetGains(ref Voice voice)
     {
         var gain = voice.Selected ? voice.Volume.Value * voice.Fade.Value : 0;
-        if (voice.Sound.Format.Channels == 1)
+        if (voice.Format.Channels == 1)
         {
             var angle = (voice.Pan + 1) * (MathF.PI / 4);
             voice.Left = gain * MathF.Cos(angle);
@@ -388,6 +415,12 @@ internal sealed class Mixer
             var slot = _active[index];
             if (_voices[slot].Ended || _buses[_voices[slot].Bus].Removing)
             {
+                if (_voices[slot].Stream is { } stream)
+                {
+                    stream.Release();
+                    _streamer.Wake();
+                }
+
                 _voices[slot] = default;
                 _active[index] = _active[--_activeCount];
                 _endedVoices.Add(slot);

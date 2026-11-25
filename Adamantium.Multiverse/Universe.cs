@@ -9,6 +9,7 @@ using Adamantium.Core.DependencyInjection;
 using Adamantium.DarkMatter;
 using Adamantium.Engine.Compiler.Models;
 using Adamantium.ECS;
+using Adamantium.ECS.Audio;
 using Adamantium.ECS.Components;
 using Adamantium.ECS.Physics;
 using Adamantium.Multiverse.Events;
@@ -19,6 +20,7 @@ using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Imaging;
 using Adamantium.Mathematics;
+using Adamantium.Pulsar;
 using Adamantium.Win32;
 using Serilog;
 
@@ -305,6 +307,7 @@ public class Universe : IUniverse
         assets.Readers.Add(typeof(SceneData), new SceneDataAssetReader());
         assets.Readers.Add(typeof(Texture), new TextureAssetReader());
         assets.Readers.Add(typeof(PhysicsMaterial), new PhysicsMaterialAssetReader());
+        assets.Readers.Add(typeof(Sound), new SoundAssetReader());
         return assets;
     }
 

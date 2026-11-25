@@ -4,7 +4,7 @@ using NUnit.Framework;
 namespace Adamantium.Pulsar.Tests;
 
 [TestFixture]
-public class WavFileTests
+public class SoundFileTests
 {
     private const int Pcm = 1;
     private const int Float = 3;
@@ -15,7 +15,7 @@ public class WavFileTests
     [TestCase(32, new byte[] { 0, 0, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0x40 }, new[] { -1f, 0f, 0.5f })]
     public void WholeSamples_AreRead(int bits, byte[] data, float[] expected)
     {
-        var sound = WavFile.Read(Wav(Chunk("fmt ", Format(Pcm, 1, 44100, bits)), Chunk("data", data)));
+        var sound = SoundFile.Read(Wav(Chunk("fmt ", Format(Pcm, 1, 44100, bits)), Chunk("data", data)));
 
         Assert.That(sound.AsSpan().ToArray(), Is.EqualTo(expected));
         Assert.That(sound.Format, Is.EqualTo(new AudioFormat(44100, 1)));
@@ -30,7 +30,7 @@ public class WavFileTests
             ? samples.SelectMany(sample => BitConverter.GetBytes((double)sample)).ToArray()
             : samples.SelectMany(BitConverter.GetBytes).ToArray();
 
-        var sound = WavFile.Read(Wav(Chunk("fmt ", Format(Float, 2, 48000, wide ? 64 : 32)), Chunk("data", data)));
+        var sound = SoundFile.Read(Wav(Chunk("fmt ", Format(Float, 2, 48000, wide ? 64 : 32)), Chunk("data", data)));
 
         Assert.That(sound.AsSpan().ToArray(), Is.EqualTo(new[] { 0.25f, -0.5f, 0f, 1f }));
         Assert.That(sound.Frames, Is.EqualTo(2));
@@ -41,7 +41,7 @@ public class WavFileTests
     {
         byte[] format = [.. Format(0xFFFE, 1, 48000, 16), 22, 0, 16, 0, 0, 0, 0, 0, Pcm, 0, .. new byte[14]];
 
-        Assert.That(WavFile.Read(Wav(Chunk("fmt ", format), Chunk("data", [0, 0x40]))).AsSpan()[0], Is.EqualTo(0.5f));
+        Assert.That(SoundFile.Read(Wav(Chunk("fmt ", format), Chunk("data", [0, 0x40]))).AsSpan()[0], Is.EqualTo(0.5f));
     }
 
     // 24 bits in 32, the upper ones.
@@ -51,7 +51,7 @@ public class WavFileTests
         var format = Format(Pcm, 1, 48000, 24);
         format[12] = 4;
 
-        var sound = WavFile.Read(Wav(Chunk("fmt ", format), Chunk("data", [0, 0, 0, 0x40, 0, 0, 0, 0xC0])));
+        var sound = SoundFile.Read(Wav(Chunk("fmt ", format), Chunk("data", [0, 0, 0, 0x40, 0, 0, 0, 0xC0])));
 
         Assert.That(sound.AsSpan().ToArray(), Is.EqualTo(new[] { 0.5f, -0.5f }));
     }
@@ -61,13 +61,13 @@ public class WavFileTests
     {
         var file = Wav(Chunk("LIST", [1, 2, 3]), Chunk("fmt ", Format(Pcm, 1, 48000, 16)), Chunk("fact", [1]), Chunk("data", [0, 0x40]));
 
-        Assert.That(WavFile.Read(file).AsSpan()[0], Is.EqualTo(0.5f));
+        Assert.That(SoundFile.Read(file).AsSpan()[0], Is.EqualTo(0.5f));
     }
 
     [Test]
     public void ItsLoop_IsRead_TheLastFramePlayedIncluded()
     {
-        var sound = WavFile.Read(Wav(Chunk("fmt ", Format(Pcm, 1, 48000, 8)), Chunk("data", new byte[100]), Chunk("smpl", Loop(10, 49))));
+        var sound = SoundFile.Read(Wav(Chunk("fmt ", Format(Pcm, 1, 48000, 8)), Chunk("data", new byte[100]), Chunk("smpl", Loop(10, 49))));
 
         Assert.That(sound.Loop, Is.EqualTo(new SoundLoop(10, 50)));
     }
@@ -77,7 +77,7 @@ public class WavFileTests
     [TestCase(uint.MaxValue, uint.MaxValue)]
     public void ALoopOutsideIt_IsTheWholeSound(uint start, uint end)
     {
-        var sound = WavFile.Read(Wav(Chunk("fmt ", Format(Pcm, 1, 48000, 8)), Chunk("data", new byte[100]), Chunk("smpl", Loop(start, end))));
+        var sound = SoundFile.Read(Wav(Chunk("fmt ", Format(Pcm, 1, 48000, 8)), Chunk("data", new byte[100]), Chunk("smpl", Loop(start, end))));
 
         Assert.That(sound.Loop, Is.EqualTo(new SoundLoop(0, 100)));
     }
@@ -88,7 +88,7 @@ public class WavFileTests
     {
         byte[] data = [.. Encoding.ASCII.GetBytes("data"), .. BitConverter.GetBytes(size), 0, 0x40, 0];
 
-        Assert.That(WavFile.Read(Wav(Chunk("fmt ", Format(Pcm, 1, 48000, 16)), data)).Frames, Is.EqualTo(1));
+        Assert.That(SoundFile.Read(Wav(Chunk("fmt ", Format(Pcm, 1, 48000, 16)), data)).Frames, Is.EqualTo(1));
     }
 
     [Test]
@@ -112,7 +112,7 @@ public class WavFileTests
 
         foreach (var file in files)
         {
-            Assert.That(() => WavFile.Read(new MemoryStream(file)), Throws.InstanceOf<InvalidDataException>());
+            Assert.That(() => SoundFile.Read(new MemoryStream(file)), Throws.InstanceOf<InvalidDataException>());
         }
     }
 
@@ -140,7 +140,7 @@ public class WavFileTests
         {
             try
             {
-                WavFile.Read(bytes.AsSpan());
+                SoundFile.Read(bytes);
             }
             catch (InvalidDataException)
             {

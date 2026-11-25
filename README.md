@@ -22,7 +22,7 @@ drawn by one renderer in one process.
 | `Adamantium.Engine.Compiler` | Imports 3D models: Collada, Wavefront OBJ, 3DS |
 | `Adamantium.ECS` | Entities and components: cameras, colliders, animation, meshes |
 | `Adamantium.DarkMatter` | The physics engine: rigid bodies, contacts with friction, sleeping, ray and overlap queries; stands on its own, without entities |
-| `Adamantium.Pulsar` | The audio engine, begun: voices mixed through buses, WAV files, output to the default device of Windows, Linux and macOS, or by the clock without one; stands on its own, without entities |
+| `Adamantium.Pulsar` | The audio engine, begun: voices mixed through buses, WAV and FLAC files, whole or streamed, output to the default device of Windows, Linux and macOS, or by the clock without one; stands on its own, without entities |
 | `Adamantium.Multiverse` | Universes, the outputs they render to, windowing platforms, input |
 | `Adamantium.Engine` | Forward+ rendering, scene managers, cameras, selection, editing tools |
 | `Adamantium.ProceduralGeometry` | Rectangles, ellipses, arcs, polygons, lines, cubes, spheres, cylinders, cones, capsules, grids |

@@ -3,7 +3,10 @@ namespace Adamantium.Pulsar.Mixing;
 /// <summary>A sound being played.</summary>
 internal struct Voice
 {
+    /// <summary>What it plays, or null for a <see cref="Stream"/>.</summary>
     public SoundData Sound;
+
+    public SoundStream Stream;
     public int Bus;
     public int Priority;
     public bool Loops;
@@ -11,6 +14,9 @@ internal struct Voice
     public bool Stopping;
     public bool Started;
     public bool Ended;
+
+    /// <summary>Its stream was not read far enough.</summary>
+    public bool Starved;
 
     /// <summary>Whether it is among those heard.</summary>
     public bool Selected;
@@ -31,4 +37,9 @@ internal struct Voice
     public float Left;
 
     public float Right;
+
+    public readonly AudioFormat Format => Stream?.Format ?? Sound.Format;
+
+    /// <summary>Whether what it begins by is there.</summary>
+    public readonly bool IsReady => Stream == null || Stream.IsReady;
 }

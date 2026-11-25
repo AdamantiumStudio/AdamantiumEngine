@@ -52,16 +52,16 @@ public sealed class ModelImporter : IContentImporter
     public object Import(string sourcePath, ContentBuildContext context)
     {
         var scale = ReadScale(sourcePath, context);
-        var animations = ReadChoice(sourcePath, context, AnimationsSetting, "true", "false") == "true";
+        var animations = ImportSettingReader.ReadChoice(sourcePath, context, AnimationsSetting, "true", "false") == "true";
         var config = new ConversionConfig(true)
         {
-            SourceUpAxis = ReadChoice(sourcePath, context, UpAxisSetting, FromFile, "Y", "Z") switch
+            SourceUpAxis = ImportSettingReader.ReadChoice(sourcePath, context, UpAxisSetting, FromFile, "Y", "Z") switch
             {
                 "Y" => UpAxis.Y_UP_RH,
                 "Z" => UpAxis.Z_UP,
                 _ => null
             },
-            RecalculateNormals = ReadChoice(sourcePath, context, NormalsSetting, FromFile, AlwaysComputed) == AlwaysComputed,
+            RecalculateNormals = ImportSettingReader.ReadChoice(sourcePath, context, NormalsSetting, FromFile, AlwaysComputed) == AlwaysComputed,
             AnimationEnabled = animations
         };
 
@@ -112,26 +112,6 @@ public sealed class ModelImporter : IContentImporter
 
         context.Log($"{sourcePath} : warning ACB011: the {ScaleSetting} '{text}' is not a number above zero; 1 is taken");
         return 1f;
-    }
-
-    private static string ReadChoice(string sourcePath, ContentBuildContext context, string name, params string[] allowed)
-    {
-        if (!context.Parameters.TryGetValue(name, out var text) || string.IsNullOrWhiteSpace(text))
-        {
-            return allowed[0];
-        }
-
-        foreach (var value in allowed)
-        {
-            if (string.Equals(value, text.Trim(), System.StringComparison.OrdinalIgnoreCase))
-            {
-                return value;
-            }
-        }
-
-        context.Log($"{sourcePath} : warning ACB011: the {name} '{text}' is none of {string.Join(", ", allowed)}; " +
-                    $"{allowed[0]} is taken");
-        return allowed[0];
     }
 
     /// <summary>Textures sit next to the source model, while the cooked artifact goes to another folder. The image

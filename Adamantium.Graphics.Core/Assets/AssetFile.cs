@@ -73,34 +73,7 @@ public sealed class AssetFile
         var start = stream.Position;
         var size = stream.Length - start;
         using var reader = new BinaryReader(stream, Encoding.UTF8, true);
-
-        if (size < GetHeaderSize(0) || !reader.ReadBytes(Signature.Length).AsSpan().SequenceEqual(Signature))
-        {
-            throw new AssetFormatException("not an asset file of this engine; import its source again");
-        }
-
-        var version = reader.ReadUInt16();
-        if (version is < OldestReadableVersion or > FormatVersion)
-        {
-            var readable = OldestReadableVersion == FormatVersion
-                ? $"{FormatVersion}"
-                : $"{OldestReadableVersion} to {FormatVersion}";
-            throw new AssetFormatException(
-                $"written in format version {version}, this engine reads {readable}; import its source again", version);
-        }
-
-        var count = reader.ReadUInt16();
-        if (size < GetHeaderSize(count))
-        {
-            throw CreateCutShortException();
-        }
-
-        List<(AssetFileSection Section, long Offset, long Length)> entries = [];
-        for (var i = 0; i < count; i++)
-        {
-            entries.Add(((AssetFileSection)reader.ReadInt32(), reader.ReadInt64(), reader.ReadInt64()));
-        }
-
+        var entries = ReadHeader(reader, size, out var version);
         var file = new AssetFile { Version = version };
         var read = AssetFileSection.None;
         foreach (var (section, offset, length) in entries)
@@ -120,11 +93,7 @@ public sealed class AssetFile
                 throw new AssetFormatException($"the section {section} is given twice; import its source again");
             }
 
-            if (offset < GetHeaderSize(count) || length < 0 || length > int.MaxValue || offset > size - length)
-            {
-                throw CreateCutShortException();
-            }
-
+            CheckWithin(offset, length, entries.Count, size);
             stream.Position = start + offset;
             var data = reader.ReadBytes((int)length);
             if (data.Length != length)
@@ -151,6 +120,81 @@ public sealed class AssetFile
         }
 
         return file;
+    }
+
+    /// <summary>The <paramref name="section"/> of the file at <paramref name="path"/> to be read in parts, unlike
+    /// <see cref="Read(string, AssetFileSection)"/>; null when the file has none. The file may be written anew meanwhile.
+    /// Throws <see cref="AssetFormatException"/> for a file this engine does not read.</summary>
+    public static Stream OpenSection(string path, AssetFileSection section)
+    {
+        var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        try
+        {
+            using var reader = new BinaryReader(stream, Encoding.UTF8, true);
+            var entries = ReadHeader(reader, stream.Length, out _);
+            foreach (var entry in entries)
+            {
+                if (entry.Section == section)
+                {
+                    CheckWithin(entry.Offset, entry.Length, entries.Count, stream.Length);
+                    return new AssetSectionStream(stream, entry.Offset, entry.Length);
+                }
+            }
+
+            stream.Dispose();
+            return null;
+        }
+        catch (AssetFormatException exception)
+        {
+            stream.Dispose();
+            throw new AssetFormatException($"{path}: {exception.Message}", exception);
+        }
+        catch
+        {
+            stream.Dispose();
+            throw;
+        }
+    }
+
+    private static void CheckWithin(long offset, long length, int sectionCount, long size)
+    {
+        if (offset < GetHeaderSize(sectionCount) || length < 0 || length > int.MaxValue || offset > size - length)
+        {
+            throw CreateCutShortException();
+        }
+    }
+
+    private static List<(AssetFileSection Section, long Offset, long Length)> ReadHeader(BinaryReader reader, long size,
+        out ushort version)
+    {
+        if (size < GetHeaderSize(0) || !reader.ReadBytes(Signature.Length).AsSpan().SequenceEqual(Signature))
+        {
+            throw new AssetFormatException("not an asset file of this engine; import its source again");
+        }
+
+        version = reader.ReadUInt16();
+        if (version is < OldestReadableVersion or > FormatVersion)
+        {
+            var readable = OldestReadableVersion == FormatVersion
+                ? $"{FormatVersion}"
+                : $"{OldestReadableVersion} to {FormatVersion}";
+            throw new AssetFormatException(
+                $"written in format version {version}, this engine reads {readable}; import its source again", version);
+        }
+
+        var count = reader.ReadUInt16();
+        if (size < GetHeaderSize(count))
+        {
+            throw CreateCutShortException();
+        }
+
+        List<(AssetFileSection Section, long Offset, long Length)> entries = [];
+        for (var i = 0; i < count; i++)
+        {
+            entries.Add(((AssetFileSection)reader.ReadInt32(), reader.ReadInt64(), reader.ReadInt64()));
+        }
+
+        return entries;
     }
 
     /// <summary>Writes the file at the stream's position; a section that is null is left out.</summary>

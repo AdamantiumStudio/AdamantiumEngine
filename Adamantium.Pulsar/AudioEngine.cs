@@ -4,7 +4,7 @@ namespace Adamantium.Pulsar;
 
 /// <summary>Plays sounds: voices, mixed through a tree of buses. It is heard once an <see cref="IAudioOutput"/> is started
 /// with it. What is asked of it, from any thread, is done from the next block it renders on.</summary>
-public sealed class AudioEngine : IAudioRenderer
+public sealed class AudioEngine : IAudioRenderer, IDisposable
 {
     private readonly Lock _lock = new();
     private readonly CommandQueue _commands = new();
@@ -14,11 +14,13 @@ public sealed class AudioEngine : IAudioRenderer
     private readonly SlotReturns _endedVoices;
     private readonly SlotReturns _removedBuses;
     private readonly int[] _busParents;
-    private readonly List<SoundData> _sounds = [];
+    private readonly SoundStreamer _streamer = new();
+    private readonly List<Sound> _sounds = [];
     private readonly List<int> _soundGenerations = [];
     private readonly Stack<int> _freeSounds = [];
     // 1 while the commands are applied or a block is rendered.
     private int _mixing;
+    private bool _disposed;
 
     public AudioEngine()
         : this(new AudioEngineSettings())
@@ -37,7 +39,7 @@ public sealed class AudioEngine : IAudioRenderer
         Array.Fill(_busParents, -1);
         _endedVoices = new SlotReturns(settings.Voices);
         _removedBuses = new SlotReturns(settings.Buses);
-        _mixer = new Mixer(settings, _endedVoices, _removedBuses);
+        _mixer = new Mixer(settings, _streamer, _endedVoices, _removedBuses);
         // The master, slot 0.
         _buses.TryTake(out _);
     }
@@ -61,7 +63,13 @@ public sealed class AudioEngine : IAudioRenderer
         }
     }
 
-    public SoundId AddSound(SoundData sound)
+    /// <summary>How many times a streamed voice fell silent: its sound was not read soon enough.</summary>
+    public int StreamGaps => _mixer.StreamGaps;
+
+    /// <summary>Why a streamed sound was last cut off; null for none yet.</summary>
+    public string StreamProblem => _streamer.Problem;
+
+    public SoundId AddSound(Sound sound)
     {
         ArgumentNullException.ThrowIfNull(sound);
         lock (_lock)
@@ -103,6 +111,7 @@ public sealed class AudioEngine : IAudioRenderer
         {
             var data = SoundOf(sound);
             var bus = SlotOf(settings.Bus);
+            ObjectDisposedException.ThrowIf(_disposed, this);
             TakeReturns();
             if (!_voices.TryTake(out var slot))
             {
@@ -111,10 +120,23 @@ public sealed class AudioEngine : IAudioRenderer
 
             // One that begins past its end ends at once.
             var from = (int)Math.Min(data.Frames, data.Format.FramesIn(settings.From));
+            var stream = data is StreamedSound streamed ? new SoundStream(streamed, from, settings.Loops) : null;
+            if (stream != null)
+            {
+                _streamer.Add(stream);
+            }
+
             _mixer.SetPosition(slot, from);
             Post(new Command
             {
-                Kind = CommandKind.Play, Slot = slot, Bus = bus, Sound = data, Settings = settings, Frames = fade, From = from,
+                Kind = CommandKind.Play,
+                Slot = slot,
+                Bus = bus,
+                Sound = data as SoundData,
+                Stream = stream,
+                Settings = settings,
+                Frames = fade,
+                From = from,
             });
             return new VoiceId(slot, _voices.GenerationOf(slot));
         }
@@ -167,6 +189,9 @@ public sealed class AudioEngine : IAudioRenderer
             return _voices.Holds(voice.Slot, voice.Generation) ? _mixer.PositionOf(voice.Slot) : -1;
         }
     }
+
+    /// <summary>For tests, which render faster than it is heard: no streamed voice wants more now.</summary>
+    internal bool IsReadAhead => _streamer.IsIdle;
 
     /// <exception cref="InvalidOperationException">There are <see cref="AudioEngineSettings.Buses"/> already.</exception>
     public BusId AddBus(BusId parent)
@@ -253,6 +278,17 @@ public sealed class AudioEngine : IAudioRenderer
         }
     }
 
+    /// <summary>Stops reading streamed sounds. An output that still plays it plays out what there is.</summary>
+    public void Dispose()
+    {
+        lock (_lock)
+        {
+            _disposed = true;
+        }
+
+        _streamer.Dispose();
+    }
+
     private static long FramesIn(TimeSpan duration)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(duration, TimeSpan.Zero);
@@ -283,7 +319,7 @@ public sealed class AudioEngine : IAudioRenderer
         }
     }
 
-    private SoundData SoundOf(SoundId sound)
+    private Sound SoundOf(SoundId sound)
     {
         if ((uint)sound.Slot < (uint)_sounds.Count && _soundGenerations[sound.Slot] == sound.Generation &&
             _sounds[sound.Slot] is { } data)

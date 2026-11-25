@@ -38,9 +38,10 @@ public sealed class AssetFileInfo
 
         FilePath = Path.GetFullPath(filePath);
         var fileName = Path.GetFileName(FilePath);
-        var extension = Path.GetExtension(FilePath);
-        Kind = GetKind(extension);
-        Name = Kind == AssetKind.Model ? fileName[..^AssetFile.FileExtension.Length] : fileName;
+        IsAssetFile = string.Equals(Path.GetExtension(FilePath), AssetFile.FileExtension,
+            OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase);
+        Name = IsAssetFile ? fileName[..^AssetFile.FileExtension.Length] : fileName;
+        Kind = GetKind(Path.GetExtension(Name));
         source = new Lazy<AssetSource>(ReadSource);
     }
 
@@ -51,9 +52,13 @@ public sealed class AssetFileInfo
     /// <summary>The full path of the asset's file.</summary>
     public string FilePath { get; }
 
+    /// <summary>Whether it is an asset file (.aemf), imported, rather than a file as it is.</summary>
+    public bool IsAssetFile { get; }
+
+    /// <summary>What it is; an asset file is what the source it is made from is: a sound, or else a model.</summary>
     public AssetKind Kind { get; }
 
-    /// <summary>Where a model was imported from; null for any other kind or an asset file that does not say.</summary>
+    /// <summary>Where an asset file was imported from; null for any other file, or one that does not say.</summary>
     public AssetSource Source => source.Value;
 
     /// <summary>The asset's picture, decoded anew on each call and kept by no one here: a model's from its asset file, an
@@ -82,12 +87,11 @@ public sealed class AssetFileInfo
         }
     }
 
-    private static AssetKind GetKind(string extension)
+    private AssetKind GetKind(string extension)
     {
-        if (string.Equals(extension, AssetFile.FileExtension,
-                OperatingSystem.IsLinux() ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase))
+        if (IsAssetFile)
         {
-            return AssetKind.Model;
+            return SoundExtensions.Contains(extension) ? AssetKind.Sound : AssetKind.Model;
         }
 
         if (ImageTypes.ContainsKey(extension))
@@ -124,7 +128,7 @@ public sealed class AssetFileInfo
 
     private AssetSource ReadSource()
     {
-        if (Kind != AssetKind.Model)
+        if (!IsAssetFile)
         {
             return null;
         }
