@@ -115,6 +115,50 @@ public sealed class SceneFile
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool ShouldSerializeFormerGameComponents() => false;
 
+    /// <summary>Puts every entry's body and collider on the physics layer <paramref name="from"/> on
+    /// <paramref name="to"/>: the layer renamed.</summary>
+    public void RenameLayer(string from, string to)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(from);
+        ArgumentException.ThrowIfNullOrEmpty(to);
+        foreach (var placement in Placements())
+        {
+            if (placement.Body is { } body && body.Layer == from)
+                body.Layer = to;
+
+            if (placement.Collider?.Traits is { } traits && traits.Layer == from)
+                traits.Layer = to;
+        }
+    }
+
+    /// <summary>Whether an entry's body or collider is on the physics layer <paramref name="layer"/>.</summary>
+    public bool NamesLayer(string layer)
+    {
+        foreach (var placement in Placements())
+        {
+            if (placement.Body?.Layer == layer || placement.Collider?.Traits?.Layer == layer)
+                return true;
+        }
+
+        return false;
+    }
+
+    private IEnumerable<ScenePlacement> Placements()
+    {
+        foreach (var model in Models)
+            yield return model;
+        foreach (var light in Lights)
+            yield return light;
+        foreach (var camera in Cameras)
+            yield return camera;
+        foreach (var spawnPoint in SpawnPoints)
+            yield return spawnPoint;
+        foreach (var marker in Markers)
+            yield return marker;
+        foreach (var shape in Shapes)
+            yield return shape;
+    }
+
     /// <summary>Reads the scene file at <paramref name="path"/>.</summary>
     /// <exception cref="InvalidDataException">The file is not a scene file, or one of a later version.</exception>
     public static SceneFile Read(string path)

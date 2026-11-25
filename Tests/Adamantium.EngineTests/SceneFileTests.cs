@@ -170,6 +170,28 @@ public class SceneFileTests
         });
     }
 
+    // A layer renamed: every entry's body and collider on it is on the new one, the others as they were.
+    [Test]
+    public void ALayerRenamed_IsRenamedInEveryBodyAndColliderOnIt()
+    {
+        var scene = Sample();
+        scene.Shapes[0].Body = new SceneBody { Layer = "Ghosts" };
+        scene.Shapes[0].Collider = new SceneCollider { Kind = ColliderKind.Box, Traits = new ColliderTraits { Layer = "Ghosts" } };
+        scene.Markers[0].Body = new SceneBody { Layer = "Debris" };
+
+        var namedBefore = scene.NamesLayer("Ghosts");
+        scene.RenameLayer("Ghosts", "Spirits");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(namedBefore, Is.True);
+            Assert.That(scene.NamesLayer("Ghosts"), Is.False);
+            Assert.That(scene.Shapes[0].Body.Layer, Is.EqualTo("Spirits"));
+            Assert.That(scene.Shapes[0].Collider.Traits.Layer, Is.EqualTo("Spirits"));
+            Assert.That(scene.Markers[0].Body.Layer, Is.EqualTo("Debris"));
+        });
+    }
+
     // An entry's joints are written each as an element of attributes, each only when it is not a new joint's own.
     [Test]
     public void Joints_AreReadBack_WritingOnlyWhatIsNotByDefault()

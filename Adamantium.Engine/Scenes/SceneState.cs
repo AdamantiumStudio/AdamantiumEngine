@@ -66,6 +66,10 @@ internal sealed class SceneState
 
     public bool Contains(Entity entity) => _states.ContainsKey(entity);
 
+    public void RenameLayer(string from, string to) => _file.RenameLayer(from, to);
+
+    public bool NamesLayer(string layer) => _file.NamesLayer(layer);
+
     public void PutOn(IReadOnlyCollection<Entity> changed, IReadOnlyCollection<Entity> comingBack,
         IReadOnlyCollection<Entity> going, IReadOnlySet<Entity> keep)
     {
