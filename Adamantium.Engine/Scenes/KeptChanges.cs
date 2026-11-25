@@ -1,5 +1,8 @@
+using System;
 using System.Collections.Generic;
+using System.Linq;
 using Adamantium.ECS;
+using Adamantium.ECS.Components;
 
 namespace Adamantium.Engine.Scenes;
 
@@ -36,4 +39,47 @@ public sealed class KeptChanges
 
     /// <summary>Puts the scene as it stood at last: what joined comes back, what was taken out goes again.</summary>
     public void PutAfter() => _after.PutOn(_changed, _added, _removed, null);
+
+    /// <summary>Puts the bodies and colliders on the physics layer <paramref name="from"/> on <paramref name="to"/>,
+    /// at both moments and in the entities it keeps out of the scene: the layer renamed while the change is kept, put on
+    /// the scene again it names the new one.</summary>
+    public void RenameLayer(string from, string to)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(from);
+        ArgumentException.ThrowIfNullOrEmpty(to);
+        _before.RenameLayer(from, to);
+        _after.RenameLayer(from, to);
+        foreach (var component in PhysicsOf(_added).Concat(PhysicsOf(_removed)))
+        {
+            if (component is RigidBody body && body.Layer == from)
+                body.Layer = to;
+            else if (component is Collider collider && collider.Layer == from)
+                collider.Layer = to;
+        }
+    }
+
+    /// <summary>Whether a body or collider it keeps, at either moment or out of the scene, is on the physics layer
+    /// <paramref name="layer"/>.</summary>
+    public bool NamesLayer(string layer) =>
+        _before.NamesLayer(layer) || _after.NamesLayer(layer)
+        || PhysicsOf(_added).Concat(PhysicsOf(_removed)).Any(component =>
+            component is RigidBody body && body.Layer == layer || component is Collider collider && collider.Layer == layer);
+
+    // The bodies and colliders of the entities and of all they hold.
+    private static IEnumerable<IComponent> PhysicsOf(Entity[] entities)
+    {
+        var stack = new Stack<Entity>(entities);
+        while (stack.Count > 0)
+        {
+            var entity = stack.Pop();
+            foreach (var component in entity.Components)
+            {
+                if (component is RigidBody or Collider)
+                    yield return component;
+            }
+
+            foreach (var part in entity.Dependencies)
+                stack.Push(part);
+        }
+    }
 }
