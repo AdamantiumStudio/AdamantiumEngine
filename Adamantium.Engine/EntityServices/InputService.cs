@@ -33,6 +33,7 @@ public class InputService : EntityService
     private readonly InputAction roll;
     private readonly InputAction look;
     private readonly InputAction orbit;
+    private readonly InputAction orbitPan;
     private readonly InputAction zoom;
     private readonly InputAction twist;
     private readonly InputAction slowerTurn;
@@ -57,6 +58,8 @@ public class InputService : EntityService
     private bool orbiting;
     private Camera orbitCamera;
     private WorldPosition orbitPivot;
+    private Vector2F orbitedFrom;
+    private bool orbitingByPan;
     private const double SteeringQuietSeconds = 0.3;
     private Camera _steered;
     private EditedState _steeredBefore;
@@ -88,6 +91,10 @@ public class InputService : EntityService
         orbit = CameraActions.Add("Orbit", InputActionType.Vector,
             InputBinding.Stick(InputControl.Mouse(MouseAxis.DeltaX), InputControl.Mouse(MouseAxis.DeltaY),
                 modifiers: [InputControl.Mouse(MouseButton.Right), Key(Keys.Alt)]));
+        // And the fingers' pan with Alt held, for a trackpad, which has no right button to drag with.
+        orbitPan = CameraActions.Add("OrbitPan", InputActionType.Vector,
+            InputBinding.Stick(InputControl.Gesture(GestureAxis.PanX), InputControl.Gesture(GestureAxis.PanY),
+                modifiers: Key(Keys.Alt)));
         zoom = CameraActions.Add("Zoom", InputActionType.Axis,
             InputBinding.Control(InputControl.Mouse(MouseAxis.Wheel)),
             InputBinding.Control(InputControl.Gesture(GestureAxis.Pinch), PinchNotchesPerDoubling));
@@ -244,7 +251,7 @@ public class InputService : EntityService
     {
         if (observatory.PointerOutput is { Camera: { } pointerCamera } && observatory.Controls(pointerCamera)
             && IsSceneCamera(pointerCamera)
-            && (look.IsDown || orbit.IsDown || zoom.Value != 0 || twist.Value != 0
+            && (look.IsDown || orbit.IsDown || orbitPan.IsDown || zoom.Value != 0 || twist.Value != 0
                 || observatory.PointerInput is { CanLocatePointer: true } input && input.IsMouseButtonDown(MouseButton.Middle)))
         {
             return pointerCamera;
@@ -385,20 +392,31 @@ public class InputService : EntityService
     // Alt with the right button turns a free camera about a point: what was under the pointer when the chord went down,
     // before the drag moved, or the middle of the view where nothing was - out in space, say. The point stays until the
     // chord is let go. A camera that cannot orbit - on a host, following - turns about itself, as the look would.
+    // A pan of fingers with Alt does the same about what is under the pointer, which it does not move: the point stays
+    // until Alt is let go or the pointer is moved, as one pan ending and the next beginning is not told here.
     private void Orbit(Camera camera)
     {
-        if (!orbit.IsHeld || observatory.PointerInput is not { CanLocatePointer: true } input)
+        var byPan = !orbit.IsHeld && orbitPan.IsHeld;
+        if (!orbit.IsHeld && !byPan || observatory.PointerInput is not { CanLocatePointer: true } input)
         {
             orbiting = false;
             return;
         }
 
-        var pitch = orbit.Vector.Y * camera.MouseSensitivity * LookPerPixel;
-        var yaw = -orbit.Vector.X * camera.MouseSensitivity * LookPerPixel;
+        var action = byPan ? orbitPan : orbit;
+        if (byPan && !action.IsDown)
+        {
+            // Alt outlasts the drag's button: the drag is over, and the next one takes a point of its own.
+            orbiting &= orbitingByPan;
+            return;
+        }
+
+        var pitch = action.Vector.Y * camera.MouseSensitivity * LookPerPixel;
+        var yaw = -action.Vector.X * camera.MouseSensitivity * LookPerPixel;
         if (!camera.CanOrbit)
         {
             orbiting = false;
-            if (orbit.IsDown)
+            if (action.IsDown)
             {
                 camera.RotateRelativeXY(pitch, yaw);
             }
@@ -406,14 +424,17 @@ public class InputService : EntityService
             return;
         }
 
-        if (!orbiting || camera != orbitCamera)
+        var at = input.RelativePosition;
+        if (!orbiting || camera != orbitCamera || byPan != orbitingByPan || byPan && at != orbitedFrom)
         {
-            orbitPivot = PointUnder(camera, input.RelativePosition);
+            orbitPivot = PointUnder(camera, at);
             orbitCamera = camera;
+            orbitedFrom = at;
+            orbitingByPan = byPan;
             orbiting = true;
         }
 
-        if (orbit.IsDown)
+        if (action.IsDown)
         {
             camera.Orbit(orbitPivot, pitch, yaw, observatory.PointerOutput?.OrbitStyle ?? CameraOrbitStyle.Turntable);
         }

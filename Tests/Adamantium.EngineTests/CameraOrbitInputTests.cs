@@ -176,6 +176,111 @@ public class CameraOrbitInputTests
         });
     }
 
+    // A trackpad has no right button to drag with: two fingers with Alt do it, about what is under the pointer.
+    [Test]
+    public void FingersPanningWithAlt_OrbitWhatIsUnderThePointer()
+    {
+        var face = CubeUnderThePointer();
+        var before = InView(face);
+
+        Pan(alt: true);
+
+        var after = InView(face);
+        Assert.Multiple(() =>
+        {
+            Assert.That((camera.Owner.Transform.Position - new WorldPosition(0, 0, -10)).Length(), Is.GreaterThan(0.1),
+                "the camera went round");
+            Assert.That((camera.Owner.Transform.Position - face).Length(), Is.EqualTo(29).Within(0.1), "as far from the cube");
+            Assert.That(after.X, Is.EqualTo(before.X).Within(0.01));
+            Assert.That(after.Y, Is.EqualTo(before.Y).Within(0.01));
+        });
+    }
+
+    [Test]
+    public void FingersPanningAlone_TurnTheCameraAboutItself()
+    {
+        var rotation = camera.Rotation;
+
+        Pan(alt: false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(camera.Owner.Transform.Position, Is.EqualTo(new WorldPosition(0, 0, -10)), "it stays where it is");
+            Assert.That(camera.Rotation, Is.Not.EqualTo(rotation), "and turns");
+        });
+    }
+
+    // Alt is held before the pointer comes over what is orbited: the point is taken as the fingers move.
+    [Test]
+    public void ThePivotOfAPan_IsWhereThePointerIsAsItMoves_NotWhereItWasWhenAltWentDown()
+    {
+        var face = CubeUnderThePointer();
+        output.Pointer = new Vector2F(10, 10);
+        output.Key(Keys.LeftAlt, InputType.Down);
+        Frame();
+        Frame();
+        output.Pointer = new Vector2F(400, 300);
+        Frame();
+        output.Gesture(new Vector2F(60, 0), 1, 0);
+        Frame();
+
+        Assert.That((camera.Owner.Transform.Position - face).Length(), Is.EqualTo(29).Within(0.1));
+    }
+
+    // Alt kept down between two drags: the second goes about what the pointer is on then.
+    [Test]
+    public void ASecondDragWithAltStillDown_TakesAPointOfItsOwn()
+    {
+        output.Pointer = new Vector2F(10, 10);
+        output.Key(Keys.LeftAlt, InputType.Down);
+        output.Button(MouseButton.Right, InputType.Down);
+        Frame();
+        output.Button(MouseButton.Right, InputType.Up);
+        Frame();
+        var face = CubeUnderThePointer();
+        output.Pointer = new Vector2F(400, 300);
+        Frame();
+        output.Button(MouseButton.Right, InputType.Down);
+        Frame();
+        output.Move(60, 0);
+        Frame();
+
+        Assert.That((camera.Owner.Transform.Position - face).Length(), Is.EqualTo(29).Within(0.1));
+    }
+
+    private WorldPosition CubeUnderThePointer()
+    {
+        var cube = new Entity(null, "Cube");
+        cube.Transform.Position = new WorldPosition(0, 0, 20);
+        cube.AddComponent(new MeshData { Mesh = Shapes.Cube.GenerateGeometry(GeometryType.Solid, 2.0, 2.0, 2.0) });
+        universe.EntityWorld.EntityManager.AddEntity(cube);
+        Frame();
+        return new WorldPosition(0, 0, 19);
+    }
+
+    private void Pan(bool alt)
+    {
+        output.Pointer = new Vector2F(400, 300);
+        Frame();
+        if (alt)
+        {
+            output.Key(Keys.LeftAlt, InputType.Down);
+        }
+
+        for (int i = 0; i < 5; i++)
+        {
+            output.Gesture(new Vector2F(20, 8), 1, 0);
+            Frame();
+        }
+
+        if (alt)
+        {
+            output.Key(Keys.LeftAlt, InputType.Up);
+        }
+
+        Frame();
+    }
+
     private void Drag(bool alt)
     {
         output.Pointer = new Vector2F(400, 300);
