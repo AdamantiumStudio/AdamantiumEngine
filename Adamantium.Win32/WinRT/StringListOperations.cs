@@ -9,7 +9,8 @@ namespace Adamantium.Win32.WinRT;
 public static class StringListOperations
 {
     /// <summary>The strings <paramref name="operation"/> gives, once it ends; none when it is canceled - through
-    /// <paramref name="cancellation"/> too - or fails. The operation is closed and let go of either way.</summary>
+    /// <paramref name="cancellation"/> too. One that fails throws a <see cref="COMException"/> with Windows' error code.
+    /// The operation is closed and let go of either way.</summary>
     public static async Task<IReadOnlyList<string>> ReadAsync(IStringListOperation operation,
         CancellationToken cancellation)
     {

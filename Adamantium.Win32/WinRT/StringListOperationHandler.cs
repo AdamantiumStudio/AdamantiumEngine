@@ -6,11 +6,13 @@ using System.Threading.Tasks;
 namespace Adamantium.Win32.WinRT;
 
 /// <summary>Hears an <see cref="IStringListOperation"/> end and finishes <see cref="Task"/> with its strings - none when it
-/// was canceled or failed.</summary>
+/// was canceled; a <see cref="COMException"/> with Windows' error code when it failed.</summary>
 [ComVisible(true)]
 [ClassInterface(ClassInterfaceType.None)]
 public sealed class StringListOperationHandler : IStringListOperationHandler
 {
+    private const int UnknownFailure = unchecked((int)0x80004005);
+
     private readonly TaskCompletionSource<IReadOnlyList<string>> _done =
         new(TaskCreationOptions.RunContinuationsAsynchronously);
 
@@ -19,15 +21,19 @@ public sealed class StringListOperationHandler : IStringListOperationHandler
 
     public int Invoke(IStringListOperation operation, AsyncStatus status)
     {
-        if (status != AsyncStatus.Completed)
-        {
-            _done.TrySetResult([]);
-            return 0;
-        }
-
         try
         {
-            _done.TrySetResult(ReadResults(operation));
+            switch (status)
+            {
+                case AsyncStatus.Completed:
+                    _done.TrySetResult(ReadResults(operation));
+                    break;
+                case AsyncStatus.Canceled:
+                    _done.TrySetResult([]);
+                    break;
+                default:
+                    throw Failure(ReadErrorCode(operation));
+            }
         }
         catch (Exception exception)
         {
@@ -37,28 +43,27 @@ public sealed class StringListOperationHandler : IStringListOperationHandler
         return 0;
     }
 
+    private static int ReadErrorCode(IStringListOperation operation) =>
+        operation is IAsyncInfo info && info.GetErrorCode(out var code) == 0 && code != 0 ? code : UnknownFailure;
+
+    private static COMException Failure(int code) =>
+        new($"A Windows Runtime operation failed with 0x{code:X8}.", code);
+
     private static IReadOnlyList<string> ReadResults(IStringListOperation operation)
     {
-        if (operation.GetResults(out var results) != 0 || results == null)
+        ThrowOnFailure(operation.GetResults(out var results));
+        if (results == null)
         {
             return [];
         }
 
         try
         {
-            if (results.GetSize(out var size) != 0)
-            {
-                return [];
-            }
-
+            ThrowOnFailure(results.GetSize(out var size));
             var strings = new string[size];
             for (uint index = 0; index < size; index++)
             {
-                if (results.GetAt(index, out var item) != 0)
-                {
-                    return [];
-                }
-
+                ThrowOnFailure(results.GetAt(index, out var item));
                 try
                 {
                     strings[index] = WinRTInterop.ReadString(item);
@@ -74,6 +79,14 @@ public sealed class StringListOperationHandler : IStringListOperationHandler
         finally
         {
             Marshal.ReleaseComObject(results);
+        }
+    }
+
+    private static void ThrowOnFailure(int code)
+    {
+        if (code < 0)
+        {
+            throw Failure(code);
         }
     }
 }
