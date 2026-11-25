@@ -82,7 +82,8 @@ public sealed class StringListOperationHandler : IStringListOperationHandler
         }
     }
 
-    private static void ThrowOnFailure(int code)
+    // A COMException whatever the code: Marshal's own turns some into other exceptions.
+    internal static void ThrowOnFailure(int code)
     {
         if (code < 0)
         {

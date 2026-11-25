@@ -18,7 +18,7 @@ public static class StringListOperations
         var info = operation as IAsyncInfo;
         try
         {
-            Marshal.ThrowExceptionForHR(operation.SetCompleted(handler));
+            StringListOperationHandler.ThrowOnFailure(operation.SetCompleted(handler));
             await using (cancellation.Register(() => info?.Cancel()))
             {
                 return await handler.Task.ConfigureAwait(false);
@@ -27,7 +27,8 @@ public static class StringListOperations
         finally
         {
             info?.Close();
-            Marshal.ReleaseComObject(operation);
+            // Finally: handed to the handler too, the same wrapper is counted twice.
+            Marshal.FinalReleaseComObject(operation);
         }
     }
 }
