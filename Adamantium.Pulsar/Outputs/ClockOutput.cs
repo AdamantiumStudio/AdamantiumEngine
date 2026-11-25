@@ -2,47 +2,28 @@ using System.Diagnostics;
 
 namespace Adamantium.Pulsar.Outputs;
 
-/// <summary>No device: asks for as much sound as the clock says was played, half the buffer at a time, and drops it.
-/// </summary>
+/// <summary>No device: asks for as much sound as the clock says was played, and drops it.</summary>
 internal sealed class ClockOutput(AudioFormat format, TimeSpan buffer) : ThreadedOutput(format)
 {
     protected override void Play()
     {
-        var bufferFrames = Math.Max(2, Format.FramesIn(buffer));
-        var periodFrames = bufferFrames / 2;
-        var samples = new float[periodFrames * Format.Channels];
+        var schedule = new ClockSchedule(Format, buffer);
+        var samples = new float[schedule.PeriodFrames * Format.Channels];
         var started = Stopwatch.GetTimestamp();
-        long written = 0;
-        Opened(bufferFrames);
+        Opened(schedule.BufferFrames);
         do
         {
-            var played = Format.FramesIn(Stopwatch.GetElapsedTime(started));
-            var ranDry = written < played;
-            if (ranDry)
-            {
-                // A device left without sound plays silence meanwhile.
-                written = played;
-            }
-
-            var before = written;
-            while (written - played + periodFrames <= bufferFrames)
+            var periods = schedule.PeriodsAt(Stopwatch.GetElapsedTime(started), out var ranDry);
+            for (var period = 0; period < periods; period++)
             {
                 Render(samples);
-                written += periodFrames;
             }
 
-            if (written != before)
+            if (periods != 0)
             {
                 Filled(ranDry);
             }
         }
-        while (!Stopping.WaitOne(TimeUntil(written - bufferFrames + periodFrames, started)));
-    }
-
-    // A wait counts whole milliseconds and drops the rest: one more, or the thread would spin through it.
-    private TimeSpan TimeUntil(long frames, long started)
-    {
-        var left = Format.DurationOf(frames) - Stopwatch.GetElapsedTime(started);
-        return left > TimeSpan.Zero ? left + TimeSpan.FromMilliseconds(1) : TimeSpan.FromMilliseconds(1);
+        while (!Stopping.WaitOne(schedule.WaitAt(Stopwatch.GetElapsedTime(started))));
     }
 }

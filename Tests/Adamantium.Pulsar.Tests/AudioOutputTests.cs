@@ -41,9 +41,19 @@ public class AudioOutputTests(bool toDevice)
     [TearDown]
     public void DisposeOutput() => _output?.Dispose();
 
+    // Told by a device's own clock; without one it is ClockScheduleTests' to say, whose time a busy runner does not stop.
+    private void OnlyOnADevice()
+    {
+        if (!toDevice)
+        {
+            Assert.Ignore("ClockScheduleTests has it");
+        }
+    }
+
     [Test]
     public void AsksForSoundAsFastAsItPlays()
     {
+        OnlyOnADevice();
         var renderer = new RecordingRenderer();
         _output.Start(renderer);
         var buffer = _output.Format.FramesIn(_output.Buffer);
@@ -95,6 +105,7 @@ public class AudioOutputTests(bool toDevice)
     [Test]
     public void ARendererLateByMoreThanTheBuffer_IsAGap()
     {
+        OnlyOnADevice();
         _output.Start(new RecordingRenderer { Call = 30, AtCall = () => Thread.Sleep(300) });
 
         Assert.That(SpinWait.SpinUntil(() => _output.Statistics.Gaps > 0, Patience), Is.True);
@@ -104,6 +115,7 @@ public class AudioOutputTests(bool toDevice)
     [Test]
     public void ARendererLateOnce_IsOneGap()
     {
+        OnlyOnADevice();
         for (var round = 0; round < 5; round++)
         {
             var renderer = new RecordingRenderer { Call = 30, AtCall = () => Thread.Sleep(300) };
