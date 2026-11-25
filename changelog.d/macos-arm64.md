@@ -6,6 +6,8 @@
   effects generator compiles shaders on the Mac.
 - `Adamantium.MacOS` calls AppKit from C# through the Objective-C runtime: the application and its events, windows,
   views, screens, cursors, images and `CAMetalLayer`.
+- `IGraphicsDevice.SetVertexTypes`: a vertex structure for each buffer of `SetVertexBuffers`, such as a mesh's vertices
+  and its instances' data; a `DrawIndexed` without buffers draws those bound.
 
 ### Changed
 

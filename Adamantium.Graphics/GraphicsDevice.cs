@@ -41,7 +41,6 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
     private uint frame;
         
-    [Bindable] private Type vertexType;
     [Bindable] private PrimitiveTopology primitiveTopology;
     [Bindable] private IEffectPass currentEffectPass;
 
@@ -89,10 +88,12 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
     private static bool IsStripTopology(PrimitiveTopology topology)
         => topology is PrimitiveTopology.LineStrip or PrimitiveTopology.TriangleStrip or PrimitiveTopology.TriangleFan
             or PrimitiveTopology.LineStripWithAdjacency or PrimitiveTopology.TriangleStripWithAdjacency;
-    private Type _cVertexType;
+    private readonly List<VertexLayout> _vertexLayouts = [];
+    private VertexLayout _vertexLayout;
+    private VertexLayout _cVertexLayout;
     private Adamantium.Vulkan.Core.Buffer[] _vertexBuffers = new Adamantium.Vulkan.Core.Buffer[4];
     private int _vertexBufferCount;
-    private Type _vertexBuffersType;
+    private VertexLayout _vertexBuffersLayout;
     private bool _cRasterizerDiscard;
     private PrimitiveTopology _cTopology;
     private bool _isTessellating;
@@ -1840,6 +1841,41 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         }
     }
 
+    public Type VertexType
+    {
+        get => _vertexLayout == null ? null : _vertexLayout.Types[0];
+        set
+        {
+            if (value == null)
+                SetVertexTypes();
+            else
+                SetVertexTypes(value);
+        }
+    }
+
+    public ReadOnlySpan<Type> VertexTypes => _vertexLayout == null ? default : _vertexLayout.Types;
+
+    public void SetVertexTypes(params ReadOnlySpan<Type> vertexTypes)
+    {
+        if (VertexTypes.SequenceEqual(vertexTypes)) return;
+
+        _vertexLayout = vertexTypes.IsEmpty ? null : LayoutOf(vertexTypes);
+        RaisePropertyChanged(nameof(VertexType));
+    }
+
+    private VertexLayout LayoutOf(ReadOnlySpan<Type> vertexTypes)
+    {
+        foreach (var known in _vertexLayouts)
+        {
+            if (known.Types.SequenceEqual(vertexTypes))
+                return known;
+        }
+
+        var layout = new VertexLayout(vertexTypes);
+        _vertexLayouts.Add(layout);
+        return layout;
+    }
+
     public void SetVertexBuffer(IBuffer vertexBuffer)
     {
         if (_hashing)
@@ -1880,14 +1916,15 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
     private void BindVertexBuffers(CommandBuffer commandBuffer)
     {
-        _vertexBuffersType = VertexType;
+        _vertexBuffersLayout = _vertexLayout;
 
         Span<VkDeviceSize> offsets = stackalloc VkDeviceSize[_vertexBufferCount];
         Span<VkDeviceSize> strides = stackalloc VkDeviceSize[_vertexBufferCount];
         offsets.Clear();
         strides.Clear();
-        if (VertexType != null)
-            strides[0] = VertexType.GetBindingDescription2().Stride;
+        var bindings = _vertexLayout?.Bindings ?? [];
+        for (var i = 0; i < Math.Min(bindings.Length, strides.Length); i++)
+            strides[i] = bindings[i].Stride;
 
         commandBuffer.BindVertexBuffers2(0, (uint)_vertexBufferCount, _vertexBuffers.AsSpan(0, _vertexBufferCount), offsets,
             ReadOnlySpan<VkDeviceSize>.Empty, strides);
@@ -1927,24 +1964,23 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
         // Emit each remaining dynamic state only when it changed since the previous draw. The cache is
         // invalidated at BeginDraw, so the first draw of a command buffer still emits everything.
-        if (!_stateInitialized || _cVertexType != VertexType)
+        if (!_stateInitialized || _cVertexLayout != _vertexLayout)
         {
-            if (VertexType == null)
+            if (_vertexLayout == null)
             {
                 // No vertex input: a draw whose vertices come only from SV_VertexID and whose per-instance data is read
                 // from a storage buffer by SV_InstanceID (the instanced SDF batch). Bind an EMPTY vertex-input state so
-                // the pipeline expects no vertex buffer (else GetBindingDescription2(null) throws + aborts the frame).
+                // the pipeline expects no vertex buffer.
                 commandBuffer.SetVertexInputEXT(0, default(VertexInputBindingDescription2EXT), 0, System.Array.Empty<VertexInputAttributeDescription2EXT>());
             }
             else
             {
-                var bindingDescription = VertexType.GetBindingDescription2();
-                var attributes = VertexType.GetVertexAttributeDescription2();
-                commandBuffer.SetVertexInputEXT(1, bindingDescription, (uint)attributes.Length, attributes);
+                commandBuffer.SetVertexInputEXT((uint)_vertexLayout.Bindings.Length, _vertexLayout.Bindings,
+                    (uint)_vertexLayout.Inputs.Length, _vertexLayout.Inputs);
             }
-            _cVertexType = VertexType;
+            _cVertexLayout = _vertexLayout;
         }
-        if (_vertexBufferCount > 0 && _vertexBuffersType != VertexType)
+        if (_vertexBufferCount > 0 && _vertexBuffersLayout != _vertexLayout)
             BindVertexBuffers(commandBuffer);
         if (!_stateInitialized || _cRasterizerDiscard != RasterizerDiscardEnabled)
         { commandBuffer.SetRasterizerDiscardEnable(RasterizerDiscardEnabled); _cRasterizerDiscard = RasterizerDiscardEnabled; }
@@ -2119,6 +2155,30 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         SetDrawingState(commandBuffer);
 
         commandBuffer.Draw((uint)vertexCount, instanceCount, firstVertex, firstInstance);
+    }
+
+    public void DrawIndexed(uint indexCount, uint instanceCount = 1, uint firstIndex = 0, int vertexOffset = 0,
+        uint firstInstance = 0)
+    {
+        CheckDrawKind(isMeshTaskDraw: false);
+        if (_hashing)
+        {
+            HashDrawState();
+            Hash(0xD7);
+            Hash(((ulong)indexCount << 32) | instanceCount);
+            Hash(((ulong)firstIndex << 32) | (uint)vertexOffset);
+            Hash(firstInstance);
+            if (_swallowing)
+            {
+                _stateInitialized = true;
+                return;
+            }
+        }
+
+        var commandBuffer = CurrentCommandBuffer;
+        SetDrawingState(commandBuffer);
+
+        commandBuffer.DrawIndexed(indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
     }
 
     public void DrawMeshTasks(uint groupCountX, uint groupCountY = 1, uint groupCountZ = 1)
