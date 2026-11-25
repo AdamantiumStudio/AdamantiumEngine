@@ -164,6 +164,9 @@ namespace Adamantium.Fonts
 
         public bool IsMonospaced { get; internal set; }
 
+        /// <inheritdoc />
+        public FontEmbedding Embedding { get; internal set; } = FontEmbedding.Free;
+
         public Int16 StrikeoutPosition { get; internal set; }
 
         public Int16 StrikeoutSize { get; internal set; }

@@ -14,7 +14,8 @@ namespace Adamantium.Pdf.Writing;
 
 /// <summary>Builds a content stream (ISO 32000-2, 8.2): paths, their paint, line style and opacity, pictures, forms,
 /// shadings and soft masks - a page (<see cref="ToContentStream"/> and <see cref="ToResources"/>) or an annotation's
-/// appearance (<see cref="ToFormXObject(PdfRectangle)"/>). Text is drawn by its outlines, as paths. Opacity, blend modes
+/// appearance (<see cref="ToFormXObject(PdfRectangle)"/>). Text is drawn in fonts a new document carries
+/// (<see cref="PdfDocumentWriter.Font"/>), or by its outlines, as paths. Opacity, blend modes
 /// and soft masks go through graphics state parameter dictionaries the builder names itself, and so do the pictures,
 /// forms, shadings and patterns drawn: each one object, named once however often it is drawn.</summary>
 public sealed class PdfContentBuilder
@@ -26,6 +27,8 @@ public sealed class PdfContentBuilder
     private readonly Dictionary<PdfObject, string> _xObjects = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<PdfObject, string> _shadings = new(ReferenceEqualityComparer.Instance);
     private readonly Dictionary<PdfObject, string> _patterns = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<PdfObject, string> _fonts = new(ReferenceEqualityComparer.Instance);
+    private PdfEmbeddedFont _font;
 
     public PdfContentBuilder SaveState() => Operator("q");
 
@@ -204,8 +207,61 @@ public sealed class PdfContentBuilder
 
     public PdfContentBuilder EndPath() => Operator("n");
 
-    /// <summary>The operators built so far.</summary>
-    public byte[] ToContent() => Encoding.ASCII.GetBytes(_operations.ToString());
+    /// <summary>Begins text (ISO 32000-2, 9.4) set in <paramref name="font"/>, one unit to the em: the size is in the
+    /// matrix of each <see cref="Glyph"/>. Ended by <see cref="EndText"/>; paths are not drawn between the two.</summary>
+    public PdfContentBuilder BeginText(PdfEmbeddedFont font)
+    {
+        ArgumentNullException.ThrowIfNull(font);
+        if (_font != null)
+        {
+            throw new InvalidOperationException("Text is begun already.");
+        }
+
+        var name = Named(_fonts, font.Reference, "F");
+        _font = font;
+        _operations.Append("BT\n/").Append(name).Append(" 1 Tf\n");
+        return this;
+    }
+
+    /// <summary>Draws the glyph of index <paramref name="glyph"/>, its em square placed by the matrix, standing for
+    /// <paramref name="text"/> - empty for nothing, null for what the font says it stands for. One the font cannot draw
+    /// (<see cref="PdfEmbeddedFont.CanDraw"/>) is refused.</summary>
+    public PdfContentBuilder Glyph(uint glyph, double a, double b, double c, double d, double e, double f,
+        string text = null)
+    {
+        if (_font == null)
+        {
+            throw new InvalidOperationException("A glyph is drawn between BeginText and EndText.");
+        }
+
+        // Standing here for other than what the font has it stand for, it says so itself (ISO 32000-2, 14.9.4).
+        var saysItsText = _font.Use(glyph, text);
+        if (saysItsText)
+        {
+            _operations.Append("/Span <</ActualText <FEFF").Append(Convert.ToHexString(Encoding.BigEndianUnicode.GetBytes(text)))
+                .Append(">>> BDC\n");
+        }
+
+        Operator("Tm", a, b, c, d, e, f);
+        _operations.Append('<').Append(glyph.ToString("X4")).Append("> Tj\n");
+        return saysItsText ? Operator("EMC") : this;
+    }
+
+    public PdfContentBuilder EndText()
+    {
+        if (_font == null)
+        {
+            throw new InvalidOperationException("No text is begun.");
+        }
+
+        _font = null;
+        return Operator("ET");
+    }
+
+    /// <summary>The operators built so far; not asked for within text.</summary>
+    public byte[] ToContent() => _font == null
+        ? Encoding.ASCII.GetBytes(_operations.ToString())
+        : throw new InvalidOperationException("The text begun is not ended.");
 
     /// <summary>The operators as a form XObject of <paramref name="bbox"/>, its resources named - an appearance
     /// stream (ISO 32000-2, 12.5.5).</summary>
@@ -297,7 +353,7 @@ public sealed class PdfContentBuilder
         return new PdfStream(dictionary, Deflate(ToContent()));
     }
 
-    /// <summary>The resources the operators name: graphics states, external objects, shadings, patterns.</summary>
+    /// <summary>The resources the operators name: graphics states, external objects, shadings, patterns, fonts.</summary>
     public PdfDictionary ToResources()
     {
         var resources = new PdfDictionary();
@@ -337,6 +393,7 @@ public sealed class PdfContentBuilder
         Section(resources, PdfKeys.XObject, _xObjects);
         Section(resources, PdfKeys.Shading, _shadings);
         Section(resources, PdfKeys.Pattern, _patterns);
+        Section(resources, PdfKeys.Font, _fonts);
         return resources;
     }
 

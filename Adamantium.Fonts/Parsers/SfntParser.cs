@@ -1230,6 +1230,7 @@ namespace Adamantium.Fonts.Parsers
             os2.usWeightClass = FontReader.ReadUInt16();
             os2.usWidthClass = FontReader.ReadUInt16();
             os2.fsType = FontReader.ReadUInt16();
+            CurrentFont.Embedding = FontEmbedding.From(os2.fsType);
             os2.ySubscriptXSize = FontReader.ReadInt16();
             os2.ySubscriptYSize = FontReader.ReadInt16();
             os2.ySubscriptXOffset = FontReader.ReadInt16();

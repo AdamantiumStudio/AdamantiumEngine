@@ -14,5 +14,8 @@ public sealed class PdfReference : PdfObject
 
     public PdfObjectId Id { get; }
 
+    /// <summary>The writer of the one document it may be written into; null for what is not told.</summary>
+    internal object Writer { get; init; }
+
     public override string ToString() => Id + " R";
 }
