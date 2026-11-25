@@ -200,7 +200,7 @@ public interface IDynamicStateDevice
 
     void SetIndexBuffer(IBuffer indexBuffer);
 
-    void SetVertexBuffers(params IBuffer[] vertexBuffers);
+    void SetVertexBuffers(params ReadOnlySpan<IBuffer> vertexBuffers);
     
     Queue GraphicsQueue { get; }
 

@@ -90,10 +90,8 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         => topology is PrimitiveTopology.LineStrip or PrimitiveTopology.TriangleStrip or PrimitiveTopology.TriangleFan
             or PrimitiveTopology.LineStripWithAdjacency or PrimitiveTopology.TriangleStripWithAdjacency;
     private Type _cVertexType;
-    private static readonly VkDeviceSize[] OneZeroOffset = [0UL];
-    private readonly Adamantium.Vulkan.Core.Buffer[] _oneVertexBuffer = new Adamantium.Vulkan.Core.Buffer[1];
-    private Adamantium.Vulkan.Core.Buffer[] _vertexBuffers = [];
-    private VkDeviceSize[] _vertexOffsets = [];
+    private Adamantium.Vulkan.Core.Buffer[] _vertexBuffers = new Adamantium.Vulkan.Core.Buffer[4];
+    private int _vertexBufferCount;
     private Type _vertexBuffersType;
     private bool _cRasterizerDiscard;
     private PrimitiveTopology _cTopology;
@@ -1304,7 +1302,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
 
         // Fresh command buffer => dynamic state is undefined, so the state cache must re-emit everything next draw.
         _stateInitialized = false;
-        _vertexBuffers = [];
+        _vertexBufferCount = 0;
         _depthBiasKnown = false;
         _isTessellationKnown = false;
         _boundShaderPass = null;
@@ -1854,9 +1852,9 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         BindVertexBuffer(CurrentCommandBuffer, vertexBuffer);
     }
 
-    public void SetVertexBuffers(params IBuffer[] vertexBuffers)
+    public void SetVertexBuffers(params ReadOnlySpan<IBuffer> vertexBuffers)
     {
-        if (vertexBuffers == null || vertexBuffers.Length == 0) return;
+        if (vertexBuffers.IsEmpty) return;
 
         if (_hashing)
         {
@@ -1865,28 +1863,34 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             if (_swallowing) return;
         }
 
-        BindVertexBuffers(CurrentCommandBuffer, vertexBuffers.Select(x => x.GetBuffer()).ToArray(),
-            new VkDeviceSize[vertexBuffers.Length]);
+        if (_vertexBuffers.Length < vertexBuffers.Length)
+            Array.Resize(ref _vertexBuffers, vertexBuffers.Length);
+        for (var i = 0; i < vertexBuffers.Length; i++)
+            _vertexBuffers[i] = vertexBuffers[i].GetBuffer();
+        _vertexBufferCount = vertexBuffers.Length;
+        BindVertexBuffers(CurrentCommandBuffer);
     }
 
     private void BindVertexBuffer(CommandBuffer commandBuffer, IBuffer vertexBuffer)
     {
-        _oneVertexBuffer[0] = vertexBuffer.GetBuffer();
-        BindVertexBuffers(commandBuffer, _oneVertexBuffer, OneZeroOffset);
+        _vertexBuffers[0] = vertexBuffer.GetBuffer();
+        _vertexBufferCount = 1;
+        BindVertexBuffers(commandBuffer);
     }
 
-    private void BindVertexBuffers(CommandBuffer commandBuffer, Adamantium.Vulkan.Core.Buffer[] buffers, VkDeviceSize[] offsets)
+    private void BindVertexBuffers(CommandBuffer commandBuffer)
     {
-        _vertexBuffers = buffers;
-        _vertexOffsets = offsets;
         _vertexBuffersType = VertexType;
 
-        Span<VkDeviceSize> strides = stackalloc VkDeviceSize[buffers.Length];
+        Span<VkDeviceSize> offsets = stackalloc VkDeviceSize[_vertexBufferCount];
+        Span<VkDeviceSize> strides = stackalloc VkDeviceSize[_vertexBufferCount];
+        offsets.Clear();
         strides.Clear();
         if (VertexType != null)
             strides[0] = VertexType.GetBindingDescription2().Stride;
 
-        commandBuffer.BindVertexBuffers2(0, (uint)buffers.Length, buffers, offsets, ReadOnlySpan<VkDeviceSize>.Empty, strides);
+        commandBuffer.BindVertexBuffers2(0, (uint)_vertexBufferCount, _vertexBuffers.AsSpan(0, _vertexBufferCount), offsets,
+            ReadOnlySpan<VkDeviceSize>.Empty, strides);
     }
 
     public void SetIndexBuffer(IBuffer indexBuffer)
@@ -1940,8 +1944,8 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             }
             _cVertexType = VertexType;
         }
-        if (_vertexBuffers.Length > 0 && _vertexBuffersType != VertexType)
-            BindVertexBuffers(commandBuffer, _vertexBuffers, _vertexOffsets);
+        if (_vertexBufferCount > 0 && _vertexBuffersType != VertexType)
+            BindVertexBuffers(commandBuffer);
         if (!_stateInitialized || _cRasterizerDiscard != RasterizerDiscardEnabled)
         { commandBuffer.SetRasterizerDiscardEnable(RasterizerDiscardEnabled); _cRasterizerDiscard = RasterizerDiscardEnabled; }
         if (!_stateInitialized || _cTopology != PrimitiveTopology)
