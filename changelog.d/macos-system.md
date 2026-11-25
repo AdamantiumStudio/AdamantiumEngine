@@ -7,4 +7,5 @@
 
 ### Fixed
 
+- Text under a rounded clip: the clip's edge is a pixel wide, no longer fading the first row inside a straight side.
 - A pan of fingers with Alt kept down after the camera was flown orbits about what has come under the pointer.
