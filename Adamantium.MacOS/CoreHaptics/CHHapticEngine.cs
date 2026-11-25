@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using System.Threading;
 using Adamantium.MacOS.Foundation;
 using Adamantium.MacOS.ObjectiveC;
 
@@ -34,17 +35,34 @@ public static unsafe class CHHapticEngine
     private static readonly IntPtr StartAtSelector = ObjCRuntime.RegisterSelector("startAtTime:error:");
     private static readonly IntPtr SendParametersSelector = ObjCRuntime.RegisterSelector("sendParameters:atTime:error:");
 
-    /// <summary>A pattern at full strength without end, owned by the caller; <paramref name="sharpness"/> from 0, a deep
-    /// rumble, to 1, a fine buzz. Zero when the system makes none.</summary>
-    public static IntPtr CreateEndlessPattern(float sharpness, double duration)
+    private static readonly IntPtr SetStoppedHandlerSelector = ObjCRuntime.RegisterSelector("setStoppedHandler:");
+    private static readonly IntPtr SetResetHandlerSelector = ObjCRuntime.RegisterSelector("setResetHandler:");
+    private static readonly IntPtr StoppedBlock =
+        ObjCBlock.Create((IntPtr)(delegate* unmanaged<IntPtr, nint, void>)&OnStopped);
+    private static readonly IntPtr ResetBlock = ObjCBlock.Create((IntPtr)(delegate* unmanaged<IntPtr, void>)&OnReset);
+
+    private const nint EngineDestroyed = 5;
+
+    private static int _stops;
+
+    /// <summary>How many times the system has stopped an engine, any of the application's, by itself: one started before
+    /// the last may have to be started anew.</summary>
+    public static int Stops => Volatile.Read(ref _stops);
+
+    /// <summary>A pattern of <paramref name="duration"/> seconds, owned by the caller; <paramref name="sharpness"/> from 0,
+    /// a deep rumble, to 1, a fine buzz, and as strong as <paramref name="intensity"/> until changed
+    /// (<see cref="SetIntensity"/>). Zero when the system makes none.</summary>
+    public static IntPtr CreatePattern(float sharpness, float intensity, double duration)
     {
         var intensityParameter = CreateParameter(Intensity, 1);
         var sharpnessParameter = CreateParameter(Sharpness, sharpness);
         var hapticEvent = ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, IntPtr, double, double, IntPtr>)
             ObjCRuntime.MessageSend)(NSObject.Alloc(EventClass), InitEventSelector, Continuous,
             NSArray.Create([intensityParameter, sharpnessParameter]), 0, duration);
+        var first = CreateIntensity(intensity);
         var pattern = ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, IntPtr, IntPtr*, IntPtr>)ObjCRuntime.MessageSend)(
-            NSObject.Alloc(PatternClass), InitPatternSelector, NSArray.Create([hapticEvent]), NSArray.Create([]), null);
+            NSObject.Alloc(PatternClass), InitPatternSelector, NSArray.Create([hapticEvent]), NSArray.Create([first]), null);
+        NSObject.Release(first);
         NSObject.Release(intensityParameter);
         NSObject.Release(sharpnessParameter);
         NSObject.Release(hapticEvent);
@@ -55,6 +73,8 @@ public static unsafe class CHHapticEngine
     public static bool Start(IntPtr engine)
     {
         NSObject.Send(engine, SetHapticsOnlySelector, true);
+        NSObject.Send(engine, SetStoppedHandlerSelector, StoppedBlock);
+        NSObject.Send(engine, SetResetHandlerSelector, ResetBlock);
         return ((delegate* unmanaged<IntPtr, IntPtr, IntPtr*, byte>)ObjCRuntime.MessageSend)(engine, StartSelector, null) != 0;
     }
 
@@ -74,13 +94,27 @@ public static unsafe class CHHapticEngine
     /// <summary>Changes how strong the pattern plays, 0 to 1; false when the engine does not run.</summary>
     public static bool SetIntensity(IntPtr player, float intensity)
     {
-        var parameter = ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, float, double, IntPtr>)ObjCRuntime.MessageSend)(
-            NSObject.Alloc(DynamicParameterClass), InitDynamicSelector, IntensityControl, intensity, 0);
+        var parameter = CreateIntensity(intensity);
         var sent = ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, double, IntPtr*, byte>)ObjCRuntime.MessageSend)(player,
             SendParametersSelector, NSArray.Create([parameter]), 0, null) != 0;
         NSObject.Release(parameter);
         return sent;
     }
+
+    [UnmanagedCallersOnly]
+    private static void OnStopped(IntPtr block, nint reason)
+    {
+        // An engine let go of is told of as well: nothing to start anew.
+        if (reason != EngineDestroyed)
+            Interlocked.Increment(ref _stops);
+    }
+
+    [UnmanagedCallersOnly]
+    private static void OnReset(IntPtr block) => Interlocked.Increment(ref _stops);
+
+    private static IntPtr CreateIntensity(float intensity) =>
+        ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, float, double, IntPtr>)ObjCRuntime.MessageSend)(
+            NSObject.Alloc(DynamicParameterClass), InitDynamicSelector, IntensityControl, intensity, 0);
 
     private static IntPtr CreateParameter(IntPtr id, float value) =>
         ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, float, IntPtr>)ObjCRuntime.MessageSend)(

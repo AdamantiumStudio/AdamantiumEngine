@@ -20,6 +20,7 @@ public static unsafe class GCController
     private static readonly IntPtr ValueSelector = ObjCRuntime.RegisterSelector("value");
     private static readonly IntPtr XAxisSelector = ObjCRuntime.RegisterSelector("xAxis");
     private static readonly IntPtr YAxisSelector = ObjCRuntime.RegisterSelector("yAxis");
+    private static readonly IntPtr SetGestureStateSelector = ObjCRuntime.RegisterSelector("setPreferredSystemGestureState:");
     private static readonly IntPtr RespondsSelector = ObjCRuntime.RegisterSelector("respondsToSelector:");
     private static readonly IntPtr HapticsSelector = ObjCRuntime.RegisterSelector("haptics");
     private static readonly IntPtr LocalitiesSelector = ObjCRuntime.RegisterSelector("supportedLocalities");
@@ -90,6 +91,14 @@ public static unsafe class GCController
     /// <summary>Whether a gamepad of this kind has a property: an Xbox one's, say.</summary>
     public static bool HasProperty(IntPtr gamepad, IntPtr selector) =>
         ((delegate* unmanaged<IntPtr, IntPtr, IntPtr, byte>)ObjCRuntime.MessageSend)(gamepad, RespondsSelector, selector) != 0;
+
+    /// <summary>Has a button the system has gestures of its own for told to the application as well, at once.</summary>
+    public static void AlwaysReceive(IntPtr button)
+    {
+        const nint always = 1;
+        if (button != IntPtr.Zero && HasProperty(button, SetGestureStateSelector))
+            ((delegate* unmanaged<IntPtr, IntPtr, nint, void>)ObjCRuntime.MessageSend)(button, SetGestureStateSelector, always);
+    }
 
     /// <summary>Whether a button is down; not, for none.</summary>
     public static bool IsPressed(IntPtr button) => button != IntPtr.Zero && NSObject.SendForBoolean(button, IsPressedSelector);

@@ -60,6 +60,7 @@ public class InputService : EntityService
     private WorldPosition orbitPivot;
     private Vector2F orbitedFrom;
     private WorldPosition orbitedTo;
+    private QuaternionF orbitedRotation;
     private bool orbitingByPan;
     private const double SteeringQuietSeconds = 0.3;
     private Camera _steered;
@@ -428,7 +429,7 @@ public class InputService : EntityService
 
         var at = input.RelativePosition;
         if (!orbiting || camera != orbitCamera || byPan != orbitingByPan ||
-            byPan && (at != orbitedFrom || camera.WorldPosition != orbitedTo))
+            byPan && (at != orbitedFrom || camera.WorldPosition != orbitedTo || HasTurned(camera.Rotation, orbitedRotation)))
         {
             orbitPivot = PointUnder(camera, at);
             orbitCamera = camera;
@@ -441,8 +442,13 @@ public class InputService : EntityService
         {
             camera.Orbit(orbitPivot, pitch, yaw, observatory.PointerOutput?.OrbitStyle ?? CameraOrbitStyle.Turntable);
             orbitedTo = camera.WorldPosition;
+            orbitedRotation = camera.Rotation;
         }
     }
+
+    // More than what a rotation wears off as it is normalized.
+    private static bool HasTurned(QuaternionF rotation, QuaternionF from) =>
+        1 - MathF.Abs(QuaternionF.Dot(rotation, from)) > 1e-6f;
 
     private double DepthUnder(Camera camera, Vector2F pixel) =>
         HitUnder(camera, pixel, out var fromCamera)

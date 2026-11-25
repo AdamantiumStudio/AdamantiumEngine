@@ -259,6 +259,31 @@ public class CameraOrbitInputTests
         });
     }
 
+    // Turned by the keys where it stands between two pans.
+    [Test]
+    public void APanAfterTheCameraWasTurned_TakesAPointOfItsOwn()
+    {
+        output.Pointer = new Vector2F(400, 300);
+        output.Key(Keys.LeftAlt, InputType.Down);
+        Frame();
+        output.Gesture(new Vector2F(20, 0), 1, 0);
+        Frame();
+        camera.RotateRelativeXY(0, 90);
+        Frame();
+        var target = camera.WorldPosition + camera.Forward * 30.0;
+        var cube = new Entity(null, "Cube");
+        cube.Transform.Position = target;
+        cube.AddComponent(new MeshData { Mesh = Shapes.Cube.GenerateGeometry(GeometryType.Solid, 2.0, 2.0, 2.0) });
+        universe.EntityWorld.EntityManager.AddEntity(cube);
+        Frame();
+        var before = InView(target);
+        output.Gesture(new Vector2F(60, 0), 1, 0);
+        Frame();
+
+        var after = InView(target);
+        Assert.That(after.X, Is.EqualTo(before.X).Within(0.5), "the cube stays under the pointer");
+    }
+
     // Alt kept down between two drags: the second goes about what the pointer is on then.
     [Test]
     public void ASecondDragWithAltStillDown_TakesAPointOfItsOwn()
