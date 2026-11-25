@@ -11,8 +11,18 @@ public static class AudioOutput
     public static IAudioOutput CreateDefault(TimeSpan buffer)
     {
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(buffer, TimeSpan.Zero);
-        return OperatingSystem.IsWindows()
-            ? new WasapiOutput(AudioFormat.Default, buffer)
+        if (OperatingSystem.IsWindows())
+        {
+            return new WasapiOutput(AudioFormat.Default, buffer);
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            return new PulseOutput(AudioFormat.Default, buffer);
+        }
+
+        return OperatingSystem.IsMacOS()
+            ? new AudioQueueOutput(AudioFormat.Default, buffer)
             : throw new PlatformNotSupportedException("Pulsar plays to no device of this system yet.");
     }
 

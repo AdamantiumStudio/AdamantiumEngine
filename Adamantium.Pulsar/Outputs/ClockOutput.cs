@@ -10,7 +10,7 @@ internal sealed class ClockOutput(AudioFormat format, TimeSpan buffer) : Threade
         var schedule = new ClockSchedule(Format, buffer);
         var samples = new float[schedule.PeriodFrames * Format.Channels];
         var started = Stopwatch.GetTimestamp();
-        Opened(schedule.BufferFrames);
+        Opened(schedule.BufferFrames, AudioOutputState.Running);
         do
         {
             var periods = schedule.PeriodsAt(Stopwatch.GetElapsedTime(started), out var ranDry);

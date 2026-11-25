@@ -2,8 +2,8 @@ using NUnit.Framework;
 
 namespace Adamantium.Pulsar.Tests;
 
-/// <summary>An output of either kind: the clock's, and the default device's where the machine has one - a CI runner has
-/// none.</summary>
+/// <summary>An output of either kind: the clock's, and the default device's where the machine has one - of the CI runners
+/// the macOS one has.</summary>
 [TestFixture(false)]
 [TestFixture(true)]
 public class AudioOutputTests(bool toDevice)
@@ -21,20 +21,13 @@ public class AudioOutputTests(bool toDevice)
             return;
         }
 
-        if (!OperatingSystem.IsWindows())
-        {
-            Assert.Ignore("no device output here yet");
-        }
-
         _output = AudioOutput.CreateDefault(TimeSpan.FromMilliseconds(40));
-        try
+        _output.Start(new RecordingRenderer());
+        var problem = _output.DeviceProblem;
+        _output.Stop();
+        if (problem != null)
         {
-            _output.Start(new RecordingRenderer());
-            _output.Stop();
-        }
-        catch (AudioException e)
-        {
-            Assert.Ignore(e.Message);
+            Assert.Ignore(problem);
         }
     }
 
@@ -108,8 +101,9 @@ public class AudioOutputTests(bool toDevice)
         OnlyOnADevice();
         _output.Start(new RecordingRenderer { Call = 30, AtCall = () => Thread.Sleep(300) });
 
+        // A busy machine may be late before the call is.
+        Assert.That(SpinWait.SpinUntil(() => _output.Statistics.LongestRender >= TimeSpan.FromMilliseconds(290), Patience), Is.True);
         Assert.That(SpinWait.SpinUntil(() => _output.Statistics.Gaps > 0, Patience), Is.True);
-        Assert.That(_output.Statistics.LongestRender, Is.GreaterThanOrEqualTo(TimeSpan.FromMilliseconds(290)));
     }
 
     [Test]
@@ -186,7 +180,8 @@ public class AudioOutputTests(bool toDevice)
     [Test]
     public void ARendererThatThrows_FailsTheOutput_AndStoppingSaysWhy()
     {
-        _output.Start(new RecordingRenderer { Call = 3, AtCall = () => throw new InvalidOperationException("broken") });
+        // After the calls a device is filled by before it opens.
+        _output.Start(new RecordingRenderer { Call = 10, AtCall = () => throw new InvalidOperationException("broken") });
 
         Assert.That(SpinWait.SpinUntil(() => _output.State == AudioOutputState.Failed, Patience), Is.True);
         Assert.That(() => _output.Stop(), Throws.InvalidOperationException.With.Message.EqualTo("broken"));
