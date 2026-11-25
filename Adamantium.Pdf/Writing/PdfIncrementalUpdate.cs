@@ -56,7 +56,7 @@ public sealed class PdfIncrementalUpdate
     public PdfReference Add(PdfObject value)
     {
         ArgumentNullException.ThrowIfNull(value);
-        value = PdfIndirection.Lift(value, Inner);
+        value = PdfIndirection.Lift(value, Inner, this);
         if (_next >= MaxObjectNumber)
         {
             throw new PdfException("The file has as many objects as a file may have.");
@@ -76,7 +76,7 @@ public sealed class PdfIncrementalUpdate
     {
         ArgumentNullException.ThrowIfNull(value);
         Check(id);
-        value = PdfIndirection.Lift(value, Inner);
+        value = PdfIndirection.Lift(value, Inner, this);
         _freed.Remove(id.Number);
         _written[id.Number] = (id, value);
         _next = Math.Max(_next, id.Number + 1);

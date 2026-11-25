@@ -174,7 +174,7 @@ namespace Adamantium.Fonts
                     }
                     catch (Exception exception) when (exception is not OutOfMemoryException)
                     {
-                        // A broken outline - one starting on a control point, an empty one - from a font a document
+                        // A broken outline - a cubic starting on a control point, an empty one - from a font a document
                         // carries: drawn as no path, its half-split segments dropped so a later split starts clean.
                         foreach (var outline in Outlines)
                         {
@@ -266,10 +266,14 @@ namespace Adamantium.Fonts
             {
                 var segment = new OutlineSegment();
                 
-                // outline should start from non-control point
+                // outline should start from non-control point: the last one, or between two controls the point midway
                 if (outline.Points[0].IsControl)
                 {
-                    segment.AddPoint(outline.Points.Last());
+                    var first = outline.Points[0];
+                    var last = outline.Points[^1];
+                    segment.AddPoint(last.IsControl
+                        ? new Vector2<double>((first.X + last.X) / 2, (first.Y + last.Y) / 2)
+                        : last);
                 }
                 
                 outline.AddSegment(segment);

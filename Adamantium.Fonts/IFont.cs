@@ -53,6 +53,9 @@ namespace Adamantium.Fonts
         /// <summary>How wide the font is ('OS/2' usWidthClass).</summary>
         public FontStretch Stretch { get; }
 
+        /// <summary>What the font's license lets a document carry of it ('OS/2' fsType).</summary>
+        public FontEmbedding Embedding { get; }
+
         /// <summary>How far the pen moves after a glyph, in font units, from this font's own 'hmtx': the fonts of a
         /// collection share outlines, not metrics.</summary>
         public ushort GetAdvanceWidth(uint glyphIndex);

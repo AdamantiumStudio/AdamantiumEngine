@@ -11,11 +11,12 @@ internal static class PdfIndirection
 {
     /// <summary><paramref name="value"/> with each stream inside it - not itself - replaced by the reference
     /// <paramref name="add"/> gives it. <paramref name="add"/> gets the stream as it was and lifts what is inside it
-    /// itself, so it can tell a stream it has written before by the stream, not by a copy.</summary>
-    public static PdfObject Lift(PdfObject value, Func<PdfStream, PdfReference> add)
+    /// itself, so it can tell a stream it has written before by the stream, not by a copy. A reference into what another
+    /// writer than <paramref name="writer"/> writes is refused: it would name some other object there.</summary>
+    public static PdfObject Lift(PdfObject value, Func<PdfStream, PdfReference> add, object writer)
     {
         ArgumentNullException.ThrowIfNull(add);
-        return value is PdfStream stream ? LiftStream(stream, add) : Inner(value, add, 0);
+        return value is PdfStream stream ? LiftStream(stream, add, writer) : Inner(value, add, writer, 0);
     }
 
     /// <summary>The reference to <paramref name="stream"/>, written by <paramref name="write"/> unless
@@ -49,16 +50,16 @@ internal static class PdfIndirection
 
     private const int MaxDepth = 256;
 
-    private static PdfStream LiftStream(PdfStream stream, Func<PdfStream, PdfReference> add)
+    private static PdfStream LiftStream(PdfStream stream, Func<PdfStream, PdfReference> add, object writer)
     {
-        var dictionary = (PdfDictionary)Inner(stream.Dictionary, add, 0);
+        var dictionary = (PdfDictionary)Inner(stream.Dictionary, add, writer, 0);
         // The copy keeps the number it was read as: a file's encrypted bytes are told by it.
         return ReferenceEquals(dictionary, stream.Dictionary)
             ? stream
             : new PdfStream(dictionary, stream.Data) { Id = stream.Id };
     }
 
-    private static PdfObject Inner(PdfObject value, Func<PdfStream, PdfReference> add, int depth)
+    private static PdfObject Inner(PdfObject value, Func<PdfStream, PdfReference> add, object writer, int depth)
     {
         if (depth > MaxDepth)
         {
@@ -69,12 +70,14 @@ internal static class PdfIndirection
         {
             case PdfStream stream:
                 return add(stream);
+            case PdfReference { Writer: { } own } when own != writer:
+                throw new PdfException("What is set in a font of one document cannot be written into another.");
             case PdfDictionary dictionary:
             {
                 PdfDictionary copy = null;
                 foreach (var (key, item) in dictionary)
                 {
-                    var lifted = Inner(item, add, depth + 1);
+                    var lifted = Inner(item, add, writer, depth + 1);
                     if (copy == null && !ReferenceEquals(lifted, item))
                     {
                         copy = new PdfDictionary();
@@ -99,7 +102,7 @@ internal static class PdfIndirection
                 List<PdfObject> copy = null;
                 for (var index = 0; index < array.Count; index++)
                 {
-                    var lifted = Inner(array[index], add, depth + 1);
+                    var lifted = Inner(array[index], add, writer, depth + 1);
                     if (copy == null && !ReferenceEquals(lifted, array[index]))
                     {
                         copy = new List<PdfObject>(array.Count);
