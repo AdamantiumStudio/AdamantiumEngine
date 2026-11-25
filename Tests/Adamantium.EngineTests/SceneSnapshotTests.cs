@@ -228,6 +228,55 @@ public class SceneSnapshotTests
         });
     }
 
+    // A layer renamed while a game's changes are kept: put back either way, the bodies and colliders name the new one -
+    // those changed, and one taken out that comes back.
+    [Test]
+    public async Task ChangesKept_ThroughALayerRenamed_NameTheNewLayer()
+    {
+        var file = new SceneFile();
+        file.Shapes.Add(new SceneShape
+        {
+            Uid = 10, Name = "Crate", Type = typeof(CubeShape).FullName,
+            Body = new SceneBody { Kind = Adamantium.DarkMatter.BodyKind.Dynamic, Layer = "Ghosts" },
+            Collider = new SceneCollider { Kind = ColliderKind.Box, Traits = new ColliderTraits { Layer = "Ghosts" } }
+        });
+        file.Shapes.Add(new SceneShape
+        {
+            Uid = 11, Name = "Lost", Type = typeof(CubeShape).FullName,
+            Body = new SceneBody { Kind = Adamantium.DarkMatter.BodyKind.Dynamic, Layer = "Ghosts" }
+        });
+        await new SceneBuilder(_scene, new CountingAssets()).Build(file);
+        _world.ForceUpdate();
+        var crate = Named("Crate");
+        var lost = Named("Lost");
+        var snapshot = SceneSnapshot.Take(_scene);
+        crate.GetComponent<RigidBody>().Mass = 9;
+        _world.EntityManager.RemoveEntity(lost);
+        _world.ForceUpdate();
+        var kept = snapshot.KeepChanges();
+        _world.ForceUpdate();
+        var namedBefore = kept.NamesLayer("Ghosts");
+
+        // The scene shown is renamed by its editor; what is kept, here.
+        crate.GetComponent<RigidBody>().Layer = "Spirits";
+        crate.GetComponent<Collider>().Layer = "Spirits";
+        kept.RenameLayer("Ghosts", "Spirits");
+        kept.PutBefore();
+        _world.ForceUpdate();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(namedBefore, Is.True);
+            Assert.That(kept.NamesLayer("Ghosts"), Is.False);
+            Assert.That(kept.NamesLayer("Spirits"), Is.True);
+            Assert.That(crate.GetComponent<RigidBody>().Mass, Is.Not.EqualTo(9), "put back");
+            Assert.That(crate.GetComponent<RigidBody>().Layer, Is.EqualTo("Spirits"));
+            Assert.That(crate.GetComponent<Collider>().Layer, Is.EqualTo("Spirits"));
+            Assert.That(InScene(lost), Is.True, "what was taken out, back");
+            Assert.That(lost.GetComponent<RigidBody>().Layer, Is.EqualTo("Spirits"));
+        });
+    }
+
     // A collider sized and moved in a game is the template's fitted one again; one the scene sizes keeps its sizes.
     [Test]
     public async Task AColliderSizedInAGame_GoesBack()

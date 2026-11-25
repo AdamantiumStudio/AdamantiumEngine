@@ -66,6 +66,10 @@ internal sealed class SceneState
 
     public bool Contains(Entity entity) => _states.ContainsKey(entity);
 
+    public void RenameLayer(string from, string to) => _file.RenameLayer(from, to);
+
+    public bool NamesLayer(string layer) => _file.NamesLayer(layer);
+
     public void PutOn(IReadOnlyCollection<Entity> changed, IReadOnlyCollection<Entity> comingBack,
         IReadOnlyCollection<Entity> going, IReadOnlySet<Entity> keep)
     {
@@ -260,21 +264,12 @@ internal sealed class SceneState
     private Dictionary<UInt128, ScenePlacement> GetEntriesById()
     {
         var byId = new Dictionary<UInt128, ScenePlacement>();
-        AddEntries(byId, _file.Models);
-        AddEntries(byId, _file.Lights);
-        AddEntries(byId, _file.Cameras);
-        AddEntries(byId, _file.SpawnPoints);
-        AddEntries(byId, _file.Markers);
-        AddEntries(byId, _file.Shapes);
-        return byId;
-    }
-
-    private static void AddEntries<T>(Dictionary<UInt128, ScenePlacement> byId, List<T> section) where T : ScenePlacement
-    {
-        foreach (var entry in section)
+        foreach (var entry in _file.Entries())
         {
             byId[entry.Uid] = entry;
         }
+
+        return byId;
     }
 
     private Dictionary<UInt128, List<SceneComponent>> GetComponentsById()
