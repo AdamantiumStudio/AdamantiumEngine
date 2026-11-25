@@ -95,10 +95,80 @@ public class AudioOutputTests(bool toDevice)
     [Test]
     public void ARendererLateByMoreThanTheBuffer_IsAGap()
     {
-        _output.Start(new RecordingRenderer { Call = 5, AtCall = () => Thread.Sleep(300) });
+        _output.Start(new RecordingRenderer { Call = 30, AtCall = () => Thread.Sleep(300) });
 
         Assert.That(SpinWait.SpinUntil(() => _output.Statistics.Gaps > 0, Patience), Is.True);
         Assert.That(_output.Statistics.LongestRender, Is.GreaterThanOrEqualTo(TimeSpan.FromMilliseconds(290)));
+    }
+
+    [Test]
+    public void ARendererLateOnce_IsOneGap()
+    {
+        for (var round = 0; round < 5; round++)
+        {
+            var renderer = new RecordingRenderer { Call = 30, AtCall = () => Thread.Sleep(300) };
+            _output.Start(renderer);
+            Assert.That(SpinWait.SpinUntil(() => _output.Statistics.Gaps > 0, Patience), Is.True);
+            var before = renderer.Frames;
+            SpinWait.SpinUntil(() => renderer.Frames > before + _output.Format.SampleRate / 5, Patience);
+
+            Assert.That(_output.Statistics.Gaps, Is.EqualTo(1), $"round {round}");
+            _output.Stop();
+        }
+    }
+
+    [Test]
+    public void ARendererSlowerThanTheDevice_IsStoppedAllTheSame()
+    {
+        _output.Start(new SlowRenderer());
+        Thread.Sleep(300);
+
+        Assert.That(Task.Run(() => _output.Stop()).Wait(Patience), Is.True);
+    }
+
+    [TestCase(1, TestName = "StoppedFromItsRenderer_AtTheFirstCall_IsRefused")]
+    [TestCase(5, TestName = "StoppedFromItsRenderer_IsRefused")]
+    public void StoppedFromItsRenderer_IsRefused(int call)
+    {
+        Exception stopping = null;
+        Exception disposing = null;
+        var done = new ManualResetEventSlim();
+        _output.Start(new RecordingRenderer
+        {
+            Call = call,
+            AtCall = () =>
+            {
+                stopping = Catch(_output.Stop);
+                disposing = Catch(_output.Dispose);
+                done.Set();
+            },
+        });
+
+        Assert.That(done.Wait(Patience), Is.True);
+        Assert.Multiple(() =>
+        {
+            Assert.That(stopping, Is.InstanceOf<InvalidOperationException>());
+            Assert.That(disposing, Is.InstanceOf<InvalidOperationException>());
+            Assert.That(_output.Stop, Throws.Nothing, "it plays on, and is stopped from outside");
+        });
+    }
+
+    private static Exception Catch(Action action)
+    {
+        try
+        {
+            action();
+            return null;
+        }
+        catch (Exception e)
+        {
+            return e;
+        }
+    }
+
+    private sealed class SlowRenderer : IAudioRenderer
+    {
+        public void Render(Span<float> samples, AudioFormat format) => Thread.Sleep(60);
     }
 
     [Test]

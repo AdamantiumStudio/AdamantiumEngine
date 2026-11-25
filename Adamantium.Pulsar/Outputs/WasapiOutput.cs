@@ -8,9 +8,10 @@ namespace Adamantium.Pulsar.Outputs;
 internal sealed class WasapiOutput(AudioFormat format, TimeSpan buffer) : ThreadedOutput(format)
 {
     private const int WaitFailed = -1;
-    private const int DeviceWantsMore = 0;
-    // The device's clock moves by whole reads of its own, 10 ms apart as a rule: less than half of one is no silence.
+    private const int DeviceWantsMore = 1;
+    // In seconds. The device reads 10 ms at a time as a rule: less than half of that is no silence.
     private const double LeastSilence = 0.005;
+    private const double ClockJitter = 0.001;
 
     private AudioClient _client;
     private AudioRenderClient _render;
@@ -18,7 +19,8 @@ internal sealed class WasapiOutput(AudioFormat format, TimeSpan buffer) : Thread
     private int _bufferFrames;
     private double _clockFrequency;
     private double _silence;
-    private bool _clockRuns;
+    private bool _silent;
+    private ulong _silentAt;
 
     protected override void Play()
     {
@@ -57,7 +59,8 @@ internal sealed class WasapiOutput(AudioFormat format, TimeSpan buffer) : Thread
         Check(_client.GetClock(out _clock), "read the stream's clock");
         Check(_clock.GetFrequency(out var frequency), "read the stream's clock");
         _clockFrequency = frequency;
-        _clockRuns = false;
+        _silent = false;
+        _silence = 0;
     }
 
     private void Close()
@@ -76,7 +79,8 @@ internal sealed class WasapiOutput(AudioFormat format, TimeSpan buffer) : Thread
         var stopping = Stopping.SafeWaitHandle.DangerousGetHandle();
         while (true)
         {
-            var came = AudioThread.WaitForEither(more, stopping);
+            // The first of two that came is told: a device that always wants more must not hide the stop.
+            var came = AudioThread.WaitForEither(stopping, more);
             if (came == WaitFailed)
             {
                 throw new AudioException($"The audio device can not be waited for (error {Marshal.GetLastPInvokeError()}).");
@@ -101,13 +105,20 @@ internal sealed class WasapiOutput(AudioFormat format, TimeSpan buffer) : Thread
         }
 
         Check(_render.GetBuffer(frames, out var samples), "take the buffer");
+        var rendered = 0;
         try
         {
             Render(new Span<float>(samples, frames * Format.Channels));
+            rendered = frames;
         }
         finally
         {
-            _render.ReleaseBuffer(frames);
+            // A renderer that threw left nothing to play.
+            var released = _render.ReleaseBuffer(rendered);
+            if (rendered != 0)
+            {
+                Check(released, "give the buffer back");
+            }
         }
 
         Filled(FellSilent());
@@ -123,9 +134,17 @@ internal sealed class WasapiOutput(AudioFormat format, TimeSpan buffer) : Thread
         }
 
         var behind = time / (double)TimeSpan.TicksPerSecond - position / _clockFrequency;
-        if (!_clockRuns)
+        // The start of a stream is none: the device takes several reads at once and waits for more.
+        if (position / _clockFrequency < 2.0 * _bufferFrames / Format.SampleRate)
         {
-            _clockRuns = true;
+            _silence = behind;
+            return false;
+        }
+
+        // One silence until the device moves evenly again: what it was given meanwhile it takes up some fills later.
+        if (_silent)
+        {
+            _silent = position == _silentAt || behind - _silence > ClockJitter;
             _silence = behind;
             return false;
         }
@@ -138,6 +157,8 @@ internal sealed class WasapiOutput(AudioFormat format, TimeSpan buffer) : Thread
         }
 
         _silence = behind;
+        _silent = true;
+        _silentAt = position;
         return true;
     }
 

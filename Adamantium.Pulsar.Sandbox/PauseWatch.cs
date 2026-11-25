@@ -31,7 +31,8 @@ internal sealed class PauseWatch : IDisposable
 
     private void Watch()
     {
-        long seen = 0;
+        // The last one before this is none of its own.
+        var seen = GC.GetGCMemoryInfo(GCKind.Any).Index;
         while (!_stopping.WaitOne(1))
         {
             var info = GC.GetGCMemoryInfo(GCKind.Any);

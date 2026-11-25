@@ -24,20 +24,25 @@ internal sealed class ClockOutput(AudioFormat format, TimeSpan buffer) : Threade
                 written = played;
             }
 
+            var before = written;
             while (written - played + periodFrames <= bufferFrames)
             {
                 Render(samples);
                 written += periodFrames;
             }
 
-            Filled(ranDry);
+            if (written != before)
+            {
+                Filled(ranDry);
+            }
         }
         while (!Stopping.WaitOne(TimeUntil(written - bufferFrames + periodFrames, started)));
     }
 
+    // A wait counts whole milliseconds and drops the rest: one more, or the thread would spin through it.
     private TimeSpan TimeUntil(long frames, long started)
     {
         var left = Format.DurationOf(frames) - Stopwatch.GetElapsedTime(started);
-        return left > TimeSpan.Zero ? left : TimeSpan.Zero;
+        return left > TimeSpan.Zero ? left + TimeSpan.FromMilliseconds(1) : TimeSpan.FromMilliseconds(1);
     }
 }

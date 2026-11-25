@@ -12,6 +12,7 @@ internal abstract class ThreadedOutput(AudioFormat format) : IAudioOutput
     private Thread _thread;
     private ExceptionDispatchInfo _failure;
     private int _state;
+    private int _threadId;
     private bool _disposed;
     private long _bufferFrames;
     private long _framesRendered;
@@ -63,6 +64,7 @@ internal abstract class ThreadedOutput(AudioFormat format) : IAudioOutput
 
     public void Stop()
     {
+        RefuseFromItsThread();
         lock (_lock)
         {
             End();
@@ -71,6 +73,7 @@ internal abstract class ThreadedOutput(AudioFormat format) : IAudioOutput
 
     public void Dispose()
     {
+        RefuseFromItsThread();
         lock (_lock)
         {
             if (_disposed)
@@ -138,8 +141,18 @@ internal abstract class ThreadedOutput(AudioFormat format) : IAudioOutput
         }
     }
 
+    // Before the lock: whoever holds it waits for this thread.
+    private void RefuseFromItsThread()
+    {
+        if (Volatile.Read(ref _threadId) == Environment.CurrentManagedThreadId)
+        {
+            throw new InvalidOperationException("The output can not be stopped from its own renderer.");
+        }
+    }
+
     private void Run()
     {
+        Volatile.Write(ref _threadId, Environment.CurrentManagedThreadId);
         try
         {
             Play();
@@ -152,6 +165,8 @@ internal abstract class ThreadedOutput(AudioFormat format) : IAudioOutput
         }
         finally
         {
+            // The id may be another thread's once this one ends.
+            Volatile.Write(ref _threadId, 0);
             _opened.Set();
         }
     }
@@ -161,11 +176,6 @@ internal abstract class ThreadedOutput(AudioFormat format) : IAudioOutput
         if (_thread == null)
         {
             return;
-        }
-
-        if (_thread == Thread.CurrentThread)
-        {
-            throw new InvalidOperationException("The output can not be stopped from its own renderer.");
         }
 
         _stopping.Set();

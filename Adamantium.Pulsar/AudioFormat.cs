@@ -6,7 +6,9 @@ public readonly record struct AudioFormat(int SampleRate, int Channels)
     /// <summary>What Pulsar mixes in.</summary>
     public static AudioFormat Default => new(48000, 2);
 
-    public TimeSpan DurationOf(long frames) => TimeSpan.FromTicks(frames * TimeSpan.TicksPerSecond / SampleRate);
+    // 128 bits between: at 48 kHz 64 overflow after 222 days.
+    public TimeSpan DurationOf(long frames) =>
+        TimeSpan.FromTicks((long)((Int128)frames * TimeSpan.TicksPerSecond / SampleRate));
 
-    public long FramesIn(TimeSpan duration) => duration.Ticks * SampleRate / TimeSpan.TicksPerSecond;
+    public long FramesIn(TimeSpan duration) => (long)((Int128)duration.Ticks * SampleRate / TimeSpan.TicksPerSecond);
 }
