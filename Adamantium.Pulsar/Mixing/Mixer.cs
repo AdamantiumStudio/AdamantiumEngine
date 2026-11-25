@@ -16,12 +16,10 @@ internal sealed class Mixer
     private const float KeepHeard = 1.25f;
 
     private readonly int _sampleRate = AudioFormat.Default.SampleRate;
-    private readonly int _audible;
     private readonly Voice[] _voices;
     private readonly Bus[] _buses;
     private readonly int[] _active;
-    private readonly int[] _ranked;
-    private readonly long[] _ranks;
+    private readonly HighestRanked _loudest;
     private readonly int[] _positions;
     // Parents before their children.
     private readonly int[] _busOrder;
@@ -37,11 +35,9 @@ internal sealed class Mixer
 
     public Mixer(AudioEngineSettings settings, SlotReturns endedVoices, SlotReturns removedBuses)
     {
-        _audible = settings.AudibleVoices;
         _voices = new Voice[settings.Voices];
         _active = new int[settings.Voices];
-        _ranked = new int[settings.Voices];
-        _ranks = new long[settings.Voices];
+        _loudest = new HighestRanked(Math.Min(settings.AudibleVoices, settings.Voices));
         _positions = new int[settings.Voices];
         _buses = new Bus[settings.Buses];
         _busOrder = new int[settings.Buses];
@@ -215,7 +211,7 @@ internal sealed class Mixer
 
     private void SelectHeard()
     {
-        var count = 0;
+        _loudest.Clear();
         for (var index = 0; index < _activeCount; index++)
         {
             ref var voice = ref _voices[_active[index]];
@@ -226,21 +222,16 @@ internal sealed class Mixer
             if (voice.Selected)
             {
                 // A positive float's bits are in its order.
-                _ranks[count] = -(((long)voice.Priority << 32) + BitConverter.SingleToInt32Bits(loudness));
-                _ranked[count++] = _active[index];
+                var rank = ((long)voice.Priority << 32) + BitConverter.SingleToInt32Bits(loudness);
+                var dropped = _loudest.Add(rank, _active[index]);
+                if (dropped >= 0)
+                {
+                    _voices[dropped].Selected = false;
+                }
             }
         }
 
-        if (count > _audible)
-        {
-            Array.Sort(_ranks, _ranked, 0, count);
-            for (var index = _audible; index < count; index++)
-            {
-                _voices[_ranked[index]].Selected = false;
-            }
-        }
-
-        Volatile.Write(ref _heard, Math.Min(count, _audible));
+        Volatile.Write(ref _heard, _loudest.Count);
     }
 
     private void MixVoice(ref Voice voice)
