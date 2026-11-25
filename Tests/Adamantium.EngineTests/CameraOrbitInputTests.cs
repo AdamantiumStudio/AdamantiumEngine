@@ -246,10 +246,17 @@ public class CameraOrbitInputTests
         cube.AddComponent(new MeshData { Mesh = Shapes.Cube.GenerateGeometry(GeometryType.Solid, 2.0, 2.0, 2.0) });
         universe.EntityWorld.EntityManager.AddEntity(cube);
         Frame();
-        output.Gesture(new Vector2F(60, 0), 1, 0);
+        var face = target - camera.Forward * 1.0;
+        var before = InView(face);
+        output.Gesture(new Vector2F(900, 0), 1, 0);
         Frame();
 
-        Assert.That((camera.Owner.Transform.Position - target).Length(), Is.EqualTo(30).Within(0.5), "about the cube");
+        var after = InView(face);
+        Assert.Multiple(() =>
+        {
+            Assert.That((camera.Owner.Transform.Position - face).Length(), Is.EqualTo(29).Within(0.1), "about the cube");
+            Assert.That(after.X, Is.EqualTo(before.X).Within(0.1), "which stays under the pointer");
+        });
     }
 
     // Alt kept down between two drags: the second goes about what the pointer is on then.
