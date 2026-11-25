@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net11.0</TargetFramework>
+
+        <IsPackable>false</IsPackable>
+
+        <Platforms>AnyCPU</Platforms>
+
+        <Configurations>Debug;Release</Configurations>
+
+        <LangVersion>latest</LangVersion>
+
+        <ImplicitUsings>enable</ImplicitUsings>
+
+        <!-- Tests that count the bytes allocated must not catch the JIT moving a method to a higher tier. -->
+        <TieredCompilation>false</TieredCompilation>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="NUnit" Version="3.13.2" />
+        <PackageReference Include="NUnit3TestAdapter" Version="4.0.0" />
+        <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.7.0" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <ProjectReference Include="..\..\Adamantium.Pulsar\Adamantium.Pulsar.csproj" />
+    </ItemGroup>
+
+</Project>
