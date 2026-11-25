@@ -7,6 +7,7 @@ namespace Adamantium.MacOS.Foundation;
 public static unsafe class NSURL
 {
     private static readonly IntPtr Class = ObjCFrameworks.GetClass("NSURL");
+    private static readonly IntPtr FileUrlSelector = ObjCRuntime.RegisterSelector("fileURLWithPath:");
     private static readonly IntPtr UrlWithStringSelector = ObjCRuntime.RegisterSelector("URLWithString:");
     private static readonly IntPtr FilePathUrlSelector = ObjCRuntime.RegisterSelector("filePathURL");
     private static readonly IntPtr PathSelector = ObjCRuntime.RegisterSelector("path");
@@ -17,6 +18,12 @@ public static unsafe class NSURL
     {
         Path = string.Join('/', Array.ConvertAll(path.Split('/'), Uri.EscapeDataString))
     }.Uri.AbsoluteUri;
+
+    /// <summary>The NSURL of the file at <paramref name="path"/>, autoreleased.</summary>
+    public static IntPtr Create(string path) => SendWithText(FileUrlSelector, path);
+
+    /// <summary>The path of an NSURL of a file.</summary>
+    public static string PathOf(IntPtr url) => url == IntPtr.Zero ? null : NSString.ToManaged(NSObject.Send(url, PathSelector));
 
     /// <summary>The path of a file's URL, one that names the file by its number too; null for another URL.</summary>
     public static string ToPath(string url)

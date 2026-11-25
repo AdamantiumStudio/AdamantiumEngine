@@ -30,6 +30,9 @@ public static unsafe class NSEvent
     private static readonly IntPtr MomentumPhaseSelector = ObjCRuntime.RegisterSelector("momentumPhase");
     private static readonly IntPtr MagnificationSelector = ObjCRuntime.RegisterSelector("magnification");
     private static readonly IntPtr RotationSelector = ObjCRuntime.RegisterSelector("rotation");
+    private static readonly IntPtr DoubleClickIntervalSelector = ObjCRuntime.RegisterSelector("doubleClickInterval");
+    private static readonly IntPtr KeyRepeatDelaySelector = ObjCRuntime.RegisterSelector("keyRepeatDelay");
+    private static readonly IntPtr KeyRepeatIntervalSelector = ObjCRuntime.RegisterSelector("keyRepeatInterval");
     private static readonly IntPtr MouseLocationSelector = ObjCRuntime.RegisterSelector("mouseLocation");
     private static readonly IntPtr DeltaXSelector = ObjCRuntime.RegisterSelector("deltaX");
     private static readonly IntPtr DeltaYSelector = ObjCRuntime.RegisterSelector("deltaY");
@@ -96,6 +99,15 @@ public static unsafe class NSEvent
     /// <summary>How far the fingers of a rotate event turned since the last one, in degrees counterclockwise.</summary>
     public static float RotationOf(IntPtr nsEvent) =>
         ((delegate* unmanaged<IntPtr, IntPtr, float>)ObjCRuntime.MessageSend)(nsEvent, RotationSelector);
+
+    /// <summary>The longest time between the clicks of a double click, in seconds.</summary>
+    public static double DoubleClickInterval => NSObject.SendForDouble(Class, DoubleClickIntervalSelector);
+
+    /// <summary>How long a key held waits before it repeats, in seconds.</summary>
+    public static double KeyRepeatDelay => NSObject.SendForDouble(Class, KeyRepeatDelaySelector);
+
+    /// <summary>The time between two repeats of a key held, in seconds.</summary>
+    public static double KeyRepeatInterval => NSObject.SendForDouble(Class, KeyRepeatIntervalSelector);
 
     /// <summary>Where the cursor is now, in AppKit's points of the desktop.</summary>
     public static CGPoint MouseLocation =>

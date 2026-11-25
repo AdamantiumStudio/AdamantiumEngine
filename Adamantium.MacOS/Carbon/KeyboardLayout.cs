@@ -1,5 +1,6 @@
 using System;
 using System.Runtime.InteropServices;
+using Adamantium.MacOS.Foundation;
 
 namespace Adamantium.MacOS.Carbon;
 
@@ -15,6 +16,12 @@ public static unsafe class KeyboardLayout
     private static readonly IntPtr LayoutDataProperty = Marshal.ReadIntPtr(
         NativeLibrary.GetExport(NativeLibrary.Load(Carbon), "kTISPropertyUnicodeKeyLayoutData"));
 
+    private static readonly IntPtr LanguagesProperty = Marshal.ReadIntPtr(
+        NativeLibrary.GetExport(NativeLibrary.Load(Carbon), "kTISPropertyInputSourceLanguages"));
+
+    /// <summary>The notification, told to every application, of the user adding or taking away a layout.</summary>
+    public const string EnabledChangedNotification = "com.apple.Carbon.TISNotifyEnabledKeyboardInputSourcesChanged";
+
     /// <summary>The layout in use, or, where it types no Latin letters, the one in use that does; the caller releases it.
     /// </summary>
     public static IntPtr CopyCurrentLatin() => TISCopyCurrentASCIICapableKeyboardLayoutInputSource();
@@ -28,6 +35,22 @@ public static unsafe class KeyboardLayout
     {
         if (layout != IntPtr.Zero)
             CFRelease(layout);
+    }
+
+    /// <summary>The languages of the layouts and input methods the user switches between, each one's own first.</summary>
+    public static string[] EnabledLanguages()
+    {
+        var sources = TISCreateInputSourceList(IntPtr.Zero, 0);
+        var languages = new System.Collections.Generic.List<string>();
+        for (var i = 0; i < NSArray.CountOf(sources); i++)
+        {
+            var listed = TISGetInputSourceProperty(NSArray.ObjectAt(sources, i), LanguagesProperty);
+            if (NSArray.CountOf(listed) > 0)
+                languages.Add(NSString.ToManaged(NSArray.ObjectAt(listed, 0)));
+        }
+
+        Release(sources);
+        return languages.ToArray();
     }
 
     /// <summary>The character <paramref name="layout"/> has on the key of hardware code <paramref name="keyCode"/>, with
@@ -50,6 +73,9 @@ public static unsafe class KeyboardLayout
 
     [DllImport(Carbon)]
     private static extern IntPtr TISCopyCurrentASCIICapableKeyboardLayoutInputSource();
+
+    [DllImport(Carbon)]
+    private static extern IntPtr TISCreateInputSourceList(IntPtr properties, byte includeAllInstalled);
 
     [DllImport(Carbon)]
     private static extern IntPtr TISGetInputSourceProperty(IntPtr source, IntPtr property);

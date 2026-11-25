@@ -26,6 +26,7 @@ public static unsafe class NSApplication
     private static readonly IntPtr DefaultRunLoopMode = NSString.Create("kCFRunLoopDefaultMode");
 
     private static readonly IntPtr KeyWindowSelector = ObjCRuntime.RegisterSelector("keyWindow");
+    private static readonly IntPtr CurrentEventSelector = ObjCRuntime.RegisterSelector("currentEvent");
     private static readonly IntPtr SetMainMenuSelector = ObjCRuntime.RegisterSelector("setMainMenu:");
     private static readonly IntPtr SetWindowsMenuSelector = ObjCRuntime.RegisterSelector("setWindowsMenu:");
     private static readonly IntPtr SetServicesMenuSelector = ObjCRuntime.RegisterSelector("setServicesMenu:");
@@ -34,6 +35,9 @@ public static unsafe class NSApplication
 
     /// <summary>The window that has the keyboard; zero when none has.</summary>
     public static IntPtr KeyWindow => NSObject.Send(Shared, KeyWindowSelector);
+
+    /// <summary>The event being answered; zero for none.</summary>
+    public static IntPtr CurrentEvent => NSObject.Send(Shared, CurrentEventSelector);
 
     /// <summary>Whether the application is the active one.</summary>
     public static bool IsActive => NSObject.SendForBoolean(Shared, IsActiveSelector);

@@ -24,6 +24,16 @@ public static unsafe class NSArray
     /// <summary>How many objects the array has; none for a null one.</summary>
     public static int CountOf(IntPtr array) => array == IntPtr.Zero ? 0 : (int)NSObject.SendForInteger(array, CountSelector);
 
+    /// <summary>The strings of an array of NSStrings; none for a null one.</summary>
+    public static string[] ToStrings(IntPtr array)
+    {
+        var strings = new string[CountOf(array)];
+        for (var i = 0; i < strings.Length; i++)
+            strings[i] = NSString.ToManaged(ObjectAt(array, i));
+
+        return strings;
+    }
+
     /// <summary>The object at <paramref name="index"/>, owned by the array.</summary>
     public static IntPtr ObjectAt(IntPtr array, int index) =>
         ((delegate* unmanaged<IntPtr, IntPtr, nuint, IntPtr>)ObjCRuntime.MessageSend)(array, ObjectAtIndexSelector,
