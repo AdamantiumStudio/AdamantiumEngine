@@ -11,6 +11,9 @@ internal static unsafe partial class Pulse
     public const int StreamReady = 2;
     public const int StreamFailed = 3;
 
+    /// <summary>A server that does not run is not started.</summary>
+    public const int NoAutoSpawn = 1;
+
     public const uint Default = uint.MaxValue;
 
     private const int FloatLittleEndian = 5;
@@ -50,12 +53,15 @@ internal static unsafe partial class Pulse
     [LibraryImport(Library, EntryPoint = "pa_mainloop_get_api")]
     public static partial IntPtr ApiOf(IntPtr loop);
 
-    [LibraryImport(Library, EntryPoint = "pa_mainloop_iterate")]
-    public static partial int Iterate(IntPtr loop, int block, IntPtr result);
+    /// <param name="timeout">The longest <see cref="Poll"/> waits, in microseconds.</param>
+    [LibraryImport(Library, EntryPoint = "pa_mainloop_prepare")]
+    public static partial int Prepare(IntPtr loop, int timeout);
 
-    /// <summary>Ends the wait of <see cref="Iterate"/>, from any thread.</summary>
-    [LibraryImport(Library, EntryPoint = "pa_mainloop_wakeup")]
-    public static partial void Wake(IntPtr loop);
+    [LibraryImport(Library, EntryPoint = "pa_mainloop_poll")]
+    public static partial int Poll(IntPtr loop);
+
+    [LibraryImport(Library, EntryPoint = "pa_mainloop_dispatch")]
+    public static partial int Dispatch(IntPtr loop);
 
     [LibraryImport(Library, EntryPoint = "pa_context_new", StringMarshalling = StringMarshalling.Utf8)]
     public static partial IntPtr CreateContext(IntPtr api, string name);

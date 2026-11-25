@@ -24,12 +24,13 @@ internal sealed class WasapiOutput(AudioFormat format, TimeSpan buffer) : Device
 
     protected override void PlayToDevice()
     {
+        // Outside of the try: the stream, closed at its end, signals them until then.
+        using var wantsMore = new AutoResetEvent(false);
+        using var changed = new AutoResetEvent(false);
         var com = AudioThread.EnterCom();
         var proAudio = AudioThread.EnterProAudio();
         try
         {
-            using var wantsMore = new AutoResetEvent(false);
-            using var changed = new AutoResetEvent(false);
             using var watch = new DefaultOutputWatch(changed);
             Check(watch.Result, "hear of another default device");
             Open(wantsMore);

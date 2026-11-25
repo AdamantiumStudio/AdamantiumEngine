@@ -8,6 +8,12 @@ internal abstract class DeviceOutput(AudioFormat format, TimeSpan buffer) : Thre
 {
     private static readonly TimeSpan BetweenTries = TimeSpan.FromSeconds(1);
 
+    // One for all the time without a device: each begins a buffer ahead.
+    private ClockSchedule _silence;
+    private float[] _silentSamples;
+    private long _silentSince;
+    private long _playingSince;
+
     /// <summary>How much sound to keep ready.</summary>
     protected TimeSpan Wanted { get; } = buffer;
 
@@ -15,8 +21,11 @@ internal abstract class DeviceOutput(AudioFormat format, TimeSpan buffer) : Thre
 
     protected sealed override void Play()
     {
+        _silence = null;
         while (!IsStopping)
         {
+            _playingSince = 0;
+            ForgetLastFill();
             try
             {
                 try
@@ -31,7 +40,11 @@ internal abstract class DeviceOutput(AudioFormat format, TimeSpan buffer) : Thre
             catch (DeviceException e)
             {
                 DeviceProblem = e.Message;
-                PlayByClock();
+                // One that played is gone: the system may have another already. One that fails at once is waited for.
+                if (_playingSince == 0 || Stopwatch.GetElapsedTime(_playingSince) < BetweenTries)
+                {
+                    PlayByClock();
+                }
             }
         }
     }
@@ -46,25 +59,32 @@ internal abstract class DeviceOutput(AudioFormat format, TimeSpan buffer) : Thre
 
     protected void PlaysToDevice(long bufferFrames)
     {
+        _silence = null;
+        _playingSince = Stopwatch.GetTimestamp();
         DeviceProblem = null;
         Opened(bufferFrames, AudioOutputState.Running);
     }
 
     private void PlayByClock()
     {
-        var schedule = new ClockSchedule(Format, Wanted);
-        var samples = new float[schedule.PeriodFrames * Format.Channels];
-        Opened(schedule.BufferFrames, AudioOutputState.Silent);
+        if (_silence == null)
+        {
+            _silence = new ClockSchedule(Format, Wanted);
+            _silentSamples = new float[_silence.PeriodFrames * Format.Channels];
+            _silentSince = Stopwatch.GetTimestamp();
+            Opened(_silence.BufferFrames, AudioOutputState.Silent);
+        }
+
         var started = Stopwatch.GetTimestamp();
         while (Stopwatch.GetElapsedTime(started) < BetweenTries)
         {
-            var periods = schedule.PeriodsAt(Stopwatch.GetElapsedTime(started), out _);
+            var periods = _silence.PeriodsAt(Stopwatch.GetElapsedTime(_silentSince), out _);
             for (var period = 0; period < periods; period++)
             {
-                Render(samples);
+                Render(_silentSamples);
             }
 
-            if (Stopping.WaitOne(schedule.WaitAt(Stopwatch.GetElapsedTime(started))))
+            if (Stopping.WaitOne(_silence.WaitAt(Stopwatch.GetElapsedTime(_silentSince))))
             {
                 return;
             }

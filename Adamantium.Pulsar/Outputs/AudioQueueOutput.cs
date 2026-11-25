@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using Adamantium.MacOS.AudioToolbox;
 
@@ -8,6 +9,8 @@ namespace Adamantium.Pulsar.Outputs;
 internal sealed unsafe class AudioQueueOutput(AudioFormat format, TimeSpan buffer) : DeviceOutput(format, buffer)
 {
     private static readonly TimeSpan Period = TimeSpan.FromMilliseconds(10);
+    // A queue whose device is gone says nothing: it only gives no buffer back.
+    private static readonly TimeSpan Standstill = TimeSpan.FromSeconds(2);
     // How soon a stop is heard while nothing comes.
     private const double LoopSeconds = 0.05;
 
@@ -26,9 +29,19 @@ internal sealed unsafe class AudioQueueOutput(AudioFormat format, TimeSpan buffe
             Fill();
             Check(AudioQueue.Start(_queue, IntPtr.Zero), "start the queue");
             PlaysToDevice(periodFrames * _played.Length);
+            var lastPlayed = Stopwatch.GetTimestamp();
             while (!IsStopping)
             {
                 AudioQueue.RunLoop(mode, LoopSeconds, 1);
+                if (_playedCount != 0)
+                {
+                    lastPlayed = Stopwatch.GetTimestamp();
+                }
+                else if (Stopwatch.GetElapsedTime(lastPlayed) > Wanted + Standstill)
+                {
+                    throw new DeviceException("The audio device stopped playing.");
+                }
+
                 Fill();
             }
         }

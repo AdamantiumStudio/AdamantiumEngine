@@ -112,21 +112,16 @@ internal abstract class ThreadedOutput(AudioFormat format) : IAudioOutput
     /// </summary>
     protected abstract void Play();
 
-    /// <summary>For an output that waits on something else: <see cref="Stopping"/> is set. Called on the stopping thread.
-    /// </summary>
-    protected virtual void StopRequested()
-    {
-    }
-
     protected void Opened(long bufferFrames, AudioOutputState state)
     {
         Volatile.Write(ref _bufferFrames, bufferFrames);
-        // What passed without a device is no time between two fills of one.
-        _lastFill = 0;
         Volatile.Write(ref _state, (int)state);
         _hasOpened = true;
         _opened.Set();
     }
+
+    /// <summary>What passes between two devices is no time between two fills of one.</summary>
+    protected void ForgetLastFill() => _lastFill = 0;
 
     protected void Render(Span<float> samples)
     {
@@ -199,7 +194,6 @@ internal abstract class ThreadedOutput(AudioFormat format) : IAudioOutput
         }
 
         _stopping.Set();
-        StopRequested();
         _thread.Join();
         _thread = null;
         Renderer = null;

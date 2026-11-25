@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using Adamantium.Pulsar.Outputs;
 using NUnit.Framework;
 
@@ -8,6 +9,7 @@ namespace Adamantium.Pulsar.Tests;
 public class DeviceOutputTests
 {
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(20);
+    private static readonly TimeSpan Wanted = TimeSpan.FromMilliseconds(40);
 
     private FakeOutput _output;
 
@@ -68,6 +70,47 @@ public class DeviceOutputTests
     }
 
     [Test]
+    public void TryingAgain_DoesNotSpeedUpTheTime()
+    {
+        _output.HasDevice = false;
+        var renderer = new RecordingRenderer();
+        var started = Stopwatch.GetTimestamp();
+
+        _output.Start(renderer);
+
+        Assert.That(SpinWait.SpinUntil(() => _output.Played > 3, Patience), Is.True);
+        var ahead = renderer.Frames - AudioFormat.Default.FramesIn(Stopwatch.GetElapsedTime(started));
+        Assert.That(ahead, Is.LessThanOrEqualTo(AudioFormat.Default.FramesIn(Wanted)), "a buffer ahead, not one for each try");
+    }
+
+    [Test]
+    public void ADevicePlayedAWhileThenGone_AnotherIsOpenedAtOnce()
+    {
+        _output.Start(new RecordingRenderer());
+        Thread.Sleep(1100);
+        var states = _output.Played;
+
+        _output.Lost = true;
+
+        Assert.That(SpinWait.SpinUntil(() => _output.Played > states, Patience), Is.True);
+        Assert.That(_output.TimeToReopen, Is.LessThan(TimeSpan.FromMilliseconds(900)));
+        Assert.That(_output.State, Is.EqualTo(AudioOutputState.Running));
+    }
+
+    [Test]
+    public void TheTimeBetweenTwoDevices_IsNoTimeBetweenFills()
+    {
+        _output.Start(new RecordingRenderer());
+        Assert.That(SpinWait.SpinUntil(() => _output.Statistics.LongestBetweenFills > TimeSpan.Zero, Patience), Is.True);
+
+        _output.OpensSlowly = true;
+        _output.Change = true;
+
+        Assert.That(SpinWait.SpinUntil(() => _output.Played > 1, Patience), Is.True);
+        Assert.That(_output.Statistics.LongestBetweenFills, Is.LessThan(TimeSpan.FromMilliseconds(900)));
+    }
+
+    [Test]
     public void StoppedWhileSilent_ItStops()
     {
         _output.HasDevice = false;
@@ -88,11 +131,17 @@ public class DeviceOutputTests
         Assert.That(_output.Stop, Throws.InvalidOperationException);
     }
 
-    private sealed class FakeOutput() : DeviceOutput(AudioFormat.Default, TimeSpan.FromMilliseconds(40))
+    private sealed class FakeOutput() : DeviceOutput(AudioFormat.Default, DeviceOutputTests.Wanted)
     {
         public volatile bool HasDevice = true;
         public volatile bool Change;
+        public volatile bool Lost;
+        public volatile bool OpensSlowly;
+        private long _lostAt;
         private int _played;
+
+        public TimeSpan TimeToReopen { get; private set; }
+
         private int _closed;
 
         public int Played => Volatile.Read(ref _played);
@@ -101,17 +150,32 @@ public class DeviceOutputTests
 
         protected override void PlayToDevice()
         {
-            Interlocked.Increment(ref _played);
+            if (_lostAt != 0)
+            {
+                TimeToReopen = Stopwatch.GetElapsedTime(_lostAt);
+            }
+
             if (!HasDevice)
             {
+                Interlocked.Increment(ref _played);
                 throw new DeviceException("gone");
             }
 
+            if (OpensSlowly)
+            {
+                Thread.Sleep(1000);
+                Filled(false);
+            }
+
             PlaysToDevice(1920);
+            Interlocked.Increment(ref _played);
             while (!Stopping.WaitOne(1) && !Change)
             {
-                if (!HasDevice)
+                Filled(false);
+                if (!HasDevice || Lost)
                 {
+                    Lost = false;
+                    _lostAt = Stopwatch.GetTimestamp();
                     throw new DeviceException("gone");
                 }
             }

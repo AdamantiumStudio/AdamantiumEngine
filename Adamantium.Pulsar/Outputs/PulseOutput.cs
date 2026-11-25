@@ -1,3 +1,5 @@
+using System.Diagnostics;
+
 namespace Adamantium.Pulsar.Outputs;
 
 /// <summary>The default device of the sound server of Linux, PulseAudio or PipeWire in its place. The server moves the
@@ -6,7 +8,11 @@ internal sealed unsafe class PulseOutput(AudioFormat format, TimeSpan buffer) : 
 {
     private static readonly TimeSpan Period = TimeSpan.FromMilliseconds(10);
 
-    private readonly object _loopLock = new();
+    // A server that hangs is none: the output starts by the clock.
+    private static readonly TimeSpan Answer = TimeSpan.FromSeconds(3);
+    // How soon a stop is heard while nothing comes.
+    private const int LoopMicroseconds = 20_000;
+
     private IntPtr _loop;
     private IntPtr _context;
     private IntPtr _stream;
@@ -39,27 +45,12 @@ internal sealed unsafe class PulseOutput(AudioFormat format, TimeSpan buffer) : 
         }
     }
 
-    protected override void StopRequested()
-    {
-        lock (_loopLock)
-        {
-            if (_loop != IntPtr.Zero)
-            {
-                Pulse.Wake(_loop);
-            }
-        }
-    }
-
     private void Open()
     {
-        var loop = Pulse.CreateLoop();
-        lock (_loopLock)
-        {
-            _loop = loop;
-        }
-
+        var started = Stopwatch.GetTimestamp();
+        _loop = Pulse.CreateLoop();
         _context = Pulse.CreateContext(Pulse.ApiOf(_loop), AppDomain.CurrentDomain.FriendlyName);
-        if (Pulse.ConnectContext(_context, IntPtr.Zero, 0, IntPtr.Zero) < 0)
+        if (Pulse.ConnectContext(_context, IntPtr.Zero, Pulse.NoAutoSpawn, IntPtr.Zero) < 0)
         {
             Fail("connect to the sound server");
         }
@@ -68,6 +59,7 @@ internal sealed unsafe class PulseOutput(AudioFormat format, TimeSpan buffer) : 
         {
             Iterate();
             CheckContext();
+            CheckAnswered(started);
         }
 
         if (IsStopping)
@@ -80,6 +72,7 @@ internal sealed unsafe class PulseOutput(AudioFormat format, TimeSpan buffer) : 
         {
             Iterate();
             CheckAlive();
+            CheckAnswered(started);
         }
 
         _underflow = Pulse.UnderflowIndex(_stream);
@@ -120,13 +113,10 @@ internal sealed unsafe class PulseOutput(AudioFormat format, TimeSpan buffer) : 
             _context = IntPtr.Zero;
         }
 
-        lock (_loopLock)
+        if (_loop != IntPtr.Zero)
         {
-            if (_loop != IntPtr.Zero)
-            {
-                Pulse.FreeLoop(_loop);
-                _loop = IntPtr.Zero;
-            }
+            Pulse.FreeLoop(_loop);
+            _loop = IntPtr.Zero;
         }
     }
 
@@ -188,9 +178,17 @@ internal sealed unsafe class PulseOutput(AudioFormat format, TimeSpan buffer) : 
 
     private void Iterate()
     {
-        if (Pulse.Iterate(_loop, 1, IntPtr.Zero) < 0)
+        if (Pulse.Prepare(_loop, LoopMicroseconds) < 0 || Pulse.Poll(_loop) < 0 || Pulse.Dispatch(_loop) < 0)
         {
             Fail("hear the sound server");
+        }
+    }
+
+    private static void CheckAnswered(long started)
+    {
+        if (Stopwatch.GetElapsedTime(started) > Answer)
+        {
+            throw new DeviceException("The sound server does not answer.");
         }
     }
 

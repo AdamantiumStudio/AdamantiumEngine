@@ -101,8 +101,9 @@ public class AudioOutputTests(bool toDevice)
         OnlyOnADevice();
         _output.Start(new RecordingRenderer { Call = 30, AtCall = () => Thread.Sleep(300) });
 
+        // A busy machine may be late before the call is.
+        Assert.That(SpinWait.SpinUntil(() => _output.Statistics.LongestRender >= TimeSpan.FromMilliseconds(290), Patience), Is.True);
         Assert.That(SpinWait.SpinUntil(() => _output.Statistics.Gaps > 0, Patience), Is.True);
-        Assert.That(_output.Statistics.LongestRender, Is.GreaterThanOrEqualTo(TimeSpan.FromMilliseconds(290)));
     }
 
     [Test]
