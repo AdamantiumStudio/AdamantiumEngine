@@ -26,10 +26,14 @@ public static unsafe class NSApplication
     private static readonly IntPtr DefaultRunLoopMode = NSString.Create("kCFRunLoopDefaultMode");
 
     private static readonly IntPtr KeyWindowSelector = ObjCRuntime.RegisterSelector("keyWindow");
+    private static readonly IntPtr IsActiveSelector = ObjCRuntime.RegisterSelector("isActive");
     private static readonly IntPtr SetDelegateSelector = ObjCRuntime.RegisterSelector("setDelegate:");
 
     /// <summary>The window that has the keyboard; zero when none has.</summary>
     public static IntPtr KeyWindow => NSObject.Send(Shared, KeyWindowSelector);
+
+    /// <summary>Whether the application is the active one.</summary>
+    public static bool IsActive => NSObject.SendForBoolean(Shared, IsActiveSelector);
 
     /// <summary>Sets the application's delegate (not retained).</summary>
     public static void SetDelegate(IntPtr applicationDelegate) =>
