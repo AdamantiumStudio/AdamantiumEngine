@@ -4,9 +4,35 @@ using Adamantium.Pulsar;
 using Adamantium.Pulsar.Sandbox;
 
 // Pulsar.Sandbox tone [seconds]                      a quiet tone, to hear
+// Pulsar.Sandbox play file.wav                       a sound, to hear
+// Pulsar.Sandbox mix                                 what mixing costs
 // Pulsar.Sandbox measure [seconds] [buffers, ms] [loads]   silence, and how often it broke off
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 var command = args.Length > 0 ? args[0] : "tone";
+if (command == "mix")
+{
+    MixingCost.Measure();
+    return;
+}
+
+if (command == "play")
+{
+    var sound = WavFile.Read(File.ReadAllBytes(args[1]));
+    var engine = new AudioEngine();
+    using var output = AudioOutput.CreateDefault(TimeSpan.FromMilliseconds(80));
+    output.Start(engine);
+    var voice = engine.Play(engine.AddSound(sound));
+    while (engine.IsPlaying(voice))
+    {
+        Thread.Sleep(20);
+    }
+
+    // What was mixed is yet to be played.
+    Thread.Sleep(output.Buffer);
+    Console.WriteLine($"{sound.Format}, {sound.Duration}: {output.State} {output.DeviceProblem} {output.Statistics}");
+    return;
+}
+
 var seconds = args.Length > 1 ? int.Parse(args[1]) : 5;
 if (command == "tone")
 {

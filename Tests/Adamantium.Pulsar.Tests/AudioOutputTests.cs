@@ -114,7 +114,7 @@ public class AudioOutputTests(bool toDevice)
         using var output = AudioOutput.CreateDefault(TimeSpan.FromMilliseconds(160));
         for (var round = 0; round < 5; round++)
         {
-            var renderer = new RecordingRenderer { Call = 60, AtCall = () => Thread.Sleep(500) };
+            var renderer = new RecordingRenderer { AfterFrames = output.Format.SampleRate, AtCall = () => Thread.Sleep(500) };
             output.Start(renderer);
             Assert.That(SpinWait.SpinUntil(() => output.Statistics.Gaps > 0, Patience), Is.True);
             var before = renderer.Frames;

@@ -9,7 +9,7 @@
     <TargetFramework>net11.0</TargetFramework>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <IsPackable>true</IsPackable>
-    <Description>Pulsar, the audio engine of Adamantium: output to the system's audio devices. Stands on its own - no entities, no window, no GPU.</Description>
+    <Description>Pulsar, the audio engine of Adamantium: sounds mixed through buses, played to the system's audio devices. Stands on its own - no entities, no window, no GPU.</Description>
     <PackageTags>adamantium;engine;audio;sound</PackageTags>
   </PropertyGroup>
 
