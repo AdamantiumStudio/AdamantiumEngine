@@ -25,6 +25,10 @@ internal sealed class GlyphQuadBuilder
 
     public uint ElementsCount { get; private set; }
 
+    /// <summary>How many of the first items are the glyphs' effects - reflections, shadows, glows and outlines, under the
+    /// glyphs that follow them.</summary>
+    public uint EffectsCount { get; private set; }
+
     public FontAtlas FontAtlas { get; private set; }
 
     public bool NeedsGlyphRefresh => FontAtlas != null && (FontAtlas.IsDisposed || FontAtlas.Version != _atlasVersion);
@@ -43,6 +47,7 @@ internal sealed class GlyphQuadBuilder
     public void Clear()
     {
         ElementsCount = 0;
+        EffectsCount = 0;
     }
 
     public IEnumerable<(IFont Font, Glyph Glyph)> GetGlyphs(LaidOutText text)
@@ -108,6 +113,7 @@ internal sealed class GlyphQuadBuilder
         atlas.RequestAsync(GetGlyphs(text));
         _atlasVersion = atlas.Version;
         ElementsCount = 0;
+        EffectsCount = 0;
         _reflections.Clear();
         _shadows.Clear();
         _glows.Clear();
@@ -162,6 +168,7 @@ internal sealed class GlyphQuadBuilder
         }
 
         ElementsCount += (uint)under;
+        EffectsCount = (uint)under;
     }
 
     private void AddEffectItems(LaidOutText text, GlyphWordData word, uint first, GlyphEffectDefaults defaults)
@@ -195,7 +202,7 @@ internal sealed class GlyphQuadBuilder
             }
 
             var room = Math.Max(0, MostGrowth - item.Synthesis.X);
-            if (reflection is { Opacity: > 0, Size: > 0 } && Finite(reflection.Distance) && item.Rotation == 0 && horizontal)
+            if (Draws(reflection) && item.Rotation == 0 && horizontal)
             {
                 var axis = (float)(lineBottom + Math.Max(0, reflection.Distance));
                 var copy = item;
@@ -214,7 +221,7 @@ internal sealed class GlyphQuadBuilder
                 _reflections.Add(copy);
             }
 
-            if (shadow != null && Finite(shadow.OffsetX) && Finite(shadow.OffsetY) && Finite(shadow.Blur))
+            if (Draws(shadow))
             {
                 var copy = Colored(item, shadow.Color);
                 copy.ArrangeRect.X += (float)shadow.OffsetX;
@@ -223,7 +230,7 @@ internal sealed class GlyphQuadBuilder
                 _shadows.Add(copy);
             }
 
-            if (glow is { Radius: > 0 } && Finite(glow.Radius))
+            if (Draws(glow))
             {
                 var radius = (float)glow.Radius * perPixel;
                 var grow = Math.Min(radius / 2, room);
@@ -233,7 +240,7 @@ internal sealed class GlyphQuadBuilder
                 _glows.Add(copy);
             }
 
-            if (outline is { Width: > 0 } && Finite(outline.Width))
+            if (Draws(outline))
             {
                 var copy = Colored(item, outline.Color);
                 copy.Synthesis.X += Math.Min((float)outline.Width * perPixel, room);
@@ -243,6 +250,18 @@ internal sealed class GlyphQuadBuilder
     }
 
     private static bool Finite(double value) => double.IsFinite(value);
+
+    /// <summary>Whether an effect, by its own values, draws anything at all. A reflection draws only under upright glyphs
+    /// of horizontal text besides, which the glyphs themselves say.</summary>
+    internal static bool Draws(GlyphReflection reflection) =>
+        reflection is { Opacity: > 0, Size: > 0 } && Finite(reflection.Distance);
+
+    internal static bool Draws(GlyphShadow shadow) =>
+        shadow != null && Finite(shadow.OffsetX) && Finite(shadow.OffsetY) && Finite(shadow.Blur);
+
+    internal static bool Draws(GlyphGlow glow) => glow is { Radius: > 0 } && Finite(glow.Radius);
+
+    internal static bool Draws(GlyphOutline outline) => outline is { Width: > 0 } && Finite(outline.Width);
 
     private static Vector4F Flipped(Vector4F source) => new(source.X, source.Y + source.W, source.Z, -source.W);
 
@@ -260,7 +279,11 @@ internal sealed class GlyphQuadBuilder
         var n = (int)ElementsCount;
         var copy = new FontItem[n];
         Array.Copy(_items, copy, n);
-        return new FrozenGlyphRun(copy, n, FontAtlas, fontSize) { AtlasVersion = _atlasVersion };
+        return new FrozenGlyphRun(copy, n, FontAtlas, fontSize)
+        {
+            AtlasVersion = _atlasVersion,
+            EffectsCount = (int)Math.Min(EffectsCount, ElementsCount),
+        };
     }
 
     internal static RectangleF CellSource(GlyphTextureData cell)
