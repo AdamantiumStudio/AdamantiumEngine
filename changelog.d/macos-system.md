@@ -7,7 +7,7 @@
 - A gamepad the engine takes in buzzes for half a second, so whoever holds it knows it is connected; its coming and
   going is logged.
 - `GamepadVibration`, a component of the gamepads' vibration - each motor's strength and sharpness, the triggers', how
-  long - played by `GamepadVibrationService`; `Gamepad.SetSharpness`, where the gamepad can tell (Core Haptics);
+  long - played by `GamepadVibrationService`, which stops it at a breakpoint and when it is let go of; `Gamepad.SetSharpness`, where the gamepad can tell (Core Haptics);
   `IUniversePlatform.Gamepads`.
 
 ### Fixed

@@ -51,4 +51,25 @@ public class GamepadVibrationService : EntityService
         player?.Update();
         base.Update(appTime);
     }
+
+    // Its time is counted by frames: where they stop coming - a game at a breakpoint, a world let go of - so does it.
+    public override void UpdateAtBreakpoint()
+    {
+        StopPlaying();
+        base.UpdateAtBreakpoint();
+    }
+
+    public override void UnloadContent()
+    {
+        StopPlaying();
+        base.UnloadContent();
+    }
+
+    private void StopPlaying()
+    {
+        if (player is { IsPlaying: true })
+        {
+            player.Stop();
+        }
+    }
 }
