@@ -110,9 +110,12 @@ internal static class PassResourcePlacement
         }
     }
 
+    // A name already placed, or another name of a binding already placed, is not placed again: the binding's one
+    // descriptor, or mapping, serves every name of it.
     private static EffectData.PassResource Add(EffectData.Pass pass, EffectData.ResourceParameter declared)
     {
-        if (pass.Resources.Exists(resource => resource.Name == declared.Name))
+        if (pass.Resources.Exists(resource => resource.Name == declared.Name
+                                              || resource.Set == declared.Set && resource.Binding == declared.Binding))
         {
             return null;
         }

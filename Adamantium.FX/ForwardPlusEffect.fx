@@ -281,9 +281,14 @@ float4 GlowUp_PS(float4 position : SV_POSITION) : SV_TARGET
     return float4((GlowAt(uv) * 4.0f + sides * 2.0f + corners) / 16.0f, 0.0f);
 }
 
-// The linear frame in meshTextures, resolved, and its glow - NoMap for none.
+// The linear frame in meshTextures, and its glow - NoMap for none. Of more than one sample, the frame is read through
+// sceneSamples, the same textures seen as multisampled.
 uint SceneLightTexture;
+uint SceneLightSamples;
 uint GlowTexture;
+
+[[vk::binding(0, 1)]]
+Texture2DMS<float4> sceneSamples[];
 // x: what the light is multiplied by before the curve, y: the share of the glow, z: what the glow is divided by - the
 // copies it sums - w unused.
 float4 ToneMapping;
@@ -317,20 +322,45 @@ float3 Agx(float3 light)
     return pow(max(mul(c, outset), 0.0f), 2.2f);
 }
 
-// The frame as the screen shows it, premultiplied by how much the scene covers: where it drew nothing its glow still
-// lies over what is behind.
+// One sample of the frame as the screen shows it, premultiplied by how much the scene covers it: the light of what
+// covers it through the curve, then by its share; where nothing covers it, its glow over what is behind.
+float4 OnScreen(float4 held, float3 glow, float share)
+{
+    float coverage = saturate(held.a);
+    float3 covered = held.a > 0.0f ? held.rgb / held.a : 0.0f;
+    float3 overScene = Srgb(Agx(lerp(covered, glow, share) * ToneMapping.x));
+    float3 overBehind = Srgb(Agx(glow * share * ToneMapping.x));
+    return float4(overScene * coverage + overBehind * (1.0f - coverage), coverage);
+}
+
+// The frame as the screen shows it, each of a pixel's samples through the curve before they are averaged: a bright bar
+// over a quarter of a pixel gives it a quarter of its white, not its light shared out and then brightened, which makes
+// a thin bright line thicken and thin as it moves across the pixels.
 [shader("fragment")]
 float4 ToneMap_PS(float4 position : SV_POSITION) : SV_TARGET
 {
-    float4 scene = meshTextures[NonUniformResourceIndex(SceneLightTexture)].Load(int3(position.xy, 0));
-    float3 light = scene.rgb;
+    float3 glow = 0.0f;
+    float share = 0.0f;
     if (GlowTexture != NoMap)
     {
-        float3 glow = meshTextures[NonUniformResourceIndex(GlowTexture)].Sample(sampleType, position.xy * FrameStep).rgb;
-        light = lerp(light, glow / ToneMapping.z, ToneMapping.y);
+        glow = meshTextures[NonUniformResourceIndex(GlowTexture)].Sample(sampleType, position.xy * FrameStep).rgb
+               / ToneMapping.z;
+        share = ToneMapping.y;
     }
 
-    return float4(Srgb(Agx(light * ToneMapping.x)), saturate(scene.a));
+    int2 pixel = int2(position.xy);
+    if (SceneLightSamples <= 1)
+    {
+        return OnScreen(meshTextures[NonUniformResourceIndex(SceneLightTexture)].Load(int3(pixel, 0)), glow, share);
+    }
+
+    float4 sum = 0.0f;
+    for (uint i = 0; i < SceneLightSamples; i++)
+    {
+        sum += OnScreen(sceneSamples[NonUniformResourceIndex(SceneLightTexture)].Load(pixel, i), glow, share);
+    }
+
+    return sum / SceneLightSamples;
 }
 
 // What the light is multiplied by before the tone curve, for the sky drawn straight into the screen's frame.

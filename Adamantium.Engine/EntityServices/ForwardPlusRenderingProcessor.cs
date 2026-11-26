@@ -1321,6 +1321,15 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var device = GraphicsDevice;
         device.SuspendRendering();
         PrepareToRead(sceneLight);
+        var samples = !ReferenceEquals(sceneLight.ResolveTexture, sceneLight);
+        if (samples)
+        {
+            // The tone curve reads each sample of it; the glow, the resolved copy.
+            device.InsertImageMemoryBarrier(device.CurrentCommandBuffer, sceneLight, AccessFlagBits2.ColorAttachmentWriteBit,
+                AccessFlagBits2.ShaderReadBit, ImageLayout.ColorAttachmentOptimal, ImageLayout.ShaderReadOnlyOptimal,
+                PipelineStageFlagBits2.ColorAttachmentOutputBit, PipelineStageFlagBits2.FragmentShaderBit);
+        }
+
         KeepDepthForNextPass();
         var glowTexture = MeshInstance.NoMap;
         try
@@ -1334,7 +1343,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
         var descriptors = ((GraphicsDevice)device).DescriptorManager;
         var parameters = effect.Parameters;
-        parameters["SceneLightTexture"].SetValue(descriptors.TextureIndex(sceneLight.ResolveTexture));
+        parameters["SceneLightTexture"].SetValue(descriptors.TextureIndex(samples ? sceneLight : sceneLight.ResolveTexture));
+        parameters["SceneLightSamples"].SetValue(samples ? (uint)sceneLight.MSAALevel : 1u);
         parameters["GlowTexture"].SetValue(glowTexture);
         parameters["ToneMapping"].SetValue(new Vector4F(MathF.Pow(2f, exposure), Math.Clamp(glow, 0f, 1f),
             Math.Max(1, glowCopies.Length), 0f));

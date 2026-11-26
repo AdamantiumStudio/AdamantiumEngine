@@ -198,10 +198,14 @@ internal sealed class EffectCompilerInternal : IDisposable
     {
         var resources = pass.Stages.Concat(pass.HitGroups.SelectMany(group => group.Shaders))
             .SelectMany(link => effectData.Shaders[link.Index].ResourceParameters);
+        // Two names of one binding are the effect's mistake - but for the shared table of textures, an array of no length
+        // one shader reads as plain and another as multisampled: the same descriptors, seen two ways.
         foreach (var shared in resources.GroupBy(resource => (resource.Set, resource.Binding)))
         {
             var names = shared.Select(resource => resource.Name).Distinct().ToList();
-            if (names.Count > 1)
+            var oneTable = shared.All(resource => resource.Count == 0)
+                           && shared.Select(resource => resource.Type).Distinct().Count() == 1;
+            if (names.Count > 1 && !oneTable)
             {
                 logger.Error($"{string.Join(", ", names)} take binding {shared.Key.Binding} of set {shared.Key.Set} " +
                              "together, which Vulkan does not allow.", location);

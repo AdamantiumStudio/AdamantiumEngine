@@ -39,7 +39,13 @@
 
 - The scene's surfaces are sampled anisotropically (`SamplerStates.AnisotropicRepeat`), sharp along a slant.
 
+- An effect may read the shared table of textures - an array of no length - both as plain textures and as
+  multisampled ones, under two names on one binding; any other two resources on one binding are still an error.
+
 ### Fixed
 
+- A thin bright line in a high dynamic range frame no longer thickens and thins as it moves across the pixels: each of a
+  pixel's samples is brought through the tone curve before they are averaged, where the average of a bright line and
+  what is round it was brightened whole.
 - `TextureExtensions.RecordLayoutTransition` gave a depth image the color aspect for any layout but
   `DepthStencilAttachmentOptimal`; it takes the aspect from the image's format.

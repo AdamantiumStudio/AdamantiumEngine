@@ -421,6 +421,64 @@ public class ForwardPlusLightingTests
         });
     }
 
+    // A bright bar a pixel wide moved across the pixels a quarter at a time: its samples fall two in one pixel and two in
+    // the next, or all in one, and the row it lies in holds the same - each pixel its share of the bar's white, as a plain
+    // frame's samples average, not the bar's light shared out and then brightened, which makes a split bar twice as
+    // bright. Over nothing, and over a dark wall that covers the rest of each pixel.
+    [TestCase(false)]
+    [TestCase(true)]
+    public void ABrightBarAPixelWide_GivesTheSameLight_WhereverItFallsInThePixel(bool overADarkWall)
+    {
+        var scene = _universe.EntityWorld.MainScene;
+        scene.Environment.HighDynamicRange = true;
+        scene.Environment.Glow = 0;
+        var eye = _output.Camera;
+        eye.Owner.Transform.Position = new WorldPosition(0, 0, -4);
+        eye.SetFreeLookAt(WorldPosition.Zero);
+        RunFrame();
+        if (overADarkWall)
+        {
+            var wall = new ShapeTemplate(new CubeShape()).Build(new Entity(null, "Wall"));
+            wall.AddComponent(new Material { DiffuseColor = new Vector4F(0.02f, 0.02f, 0.02f, 1) });
+            wall.Transform.ScaleFactor = new Vector3F(8, 8, 0.1f);
+            wall.Transform.Position = new WorldPosition(0, 0, 1);
+            _universe.EntityWorld.EntityManager.AddEntity(wall, scene);
+        }
+
+        var unitsAPixel = 1.0 / (Clip(eye, new WorldPosition(1, 0, 0)) - Clip(eye, WorldPosition.Zero)) / (Size / 2.0);
+        var bar = new ShapeTemplate(new CubeShape()).Build(new Entity(null, "Bar"));
+        bar.AddComponent(new Material { DiffuseColor = new Vector4F(0, 0, 0, 1), Emission = new Vector4F(16, 16, 16, 0) });
+        bar.Transform.ScaleFactor = new Vector3F((float)unitsAPixel, 1, 0.1f);
+        _universe.EntityWorld.EntityManager.AddEntity(bar, scene);
+        var rows = new List<int>();
+        for (var step = 0; step < 4; step++)
+        {
+            bar.Transform.Position = new WorldPosition(unitsAPixel * (0.5 + step * 0.25), 0, 0);
+            for (var frame = 0; frame < Frames; frame++)
+            {
+                RunFrame();
+            }
+
+            var pixels = Pixels(_output.ReadFrame(), $"forward-plus-bar-{overADarkWall}-{step}.png");
+            var middle = (int)Size / 2;
+            var row = 0;
+            for (var column = middle - 4; column <= middle + 4; column++)
+            {
+                row += pixels[(middle * (int)Size + column) * 4 + 1];
+            }
+
+            rows.Add(row);
+        }
+
+        Assert.That(rows.Max() - rows.Min(), Is.LessThanOrEqualTo(8), $"the row at each quarter: {string.Join(" ", rows)}");
+    }
+
+    // Where a point of the world falls across the picture, from -1 at its left to 1 at its right.
+    private static double Clip(Camera camera, WorldPosition point)
+    {
+        return Vector3F.TransformCoordinate(point.OffsetFrom(camera.WorldPosition), camera.ViewProjectionMatrix).X;
+    }
+
     // The checker cube's texture's levels, and how far apart the brightness of points on its face lie.
     private (uint Levels, int Spread) CheckerFace(bool withMipmaps)
     {
