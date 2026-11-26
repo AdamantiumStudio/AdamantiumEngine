@@ -4,6 +4,7 @@
   `NSData`, `NSURL`, `NSUserDefaults`, `NSLocale`, `NSFileManager`, making an `NSArray`, notifications of every
   application, the user's times of clicks and repeated keys, the live state of a key, the languages of the keyboard
   layouts, the window at a point, and Core Haptics for the motors of a controller.
+- A gamepad the engine takes in buzzes lightly for a moment, so whoever holds it knows it is connected.
 
 ### Fixed
 
