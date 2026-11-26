@@ -25,7 +25,7 @@ float3 OverWire(float3 lit, float3 barycentrics)
 [shader("fragment")]
 float4 LitColoredWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics) : SV_TARGET
 {
-    float3 lit = Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    float3 lit = Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy) + EmissionOf(input);
     return float4(OverWire(lit, barycentrics), 1.0f);
 }
 
@@ -33,7 +33,7 @@ float4 LitColoredWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics)
 float4 LitTexturedWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics) : SV_TARGET
 {
     float4 surface = SurfaceOf(input);
-    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy) + EmissionOf(input);
     return float4(OverWire(lit, barycentrics), 1.0f);
 }
 
@@ -41,8 +41,22 @@ float4 LitTexturedWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics
 float4 LitMaskedTexturedWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics) : SV_TARGET
 {
     float4 surface = MaskedSurfaceOf(input);
-    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy) + EmissionOf(input);
     return float4(OverWire(lit, barycentrics), 1.0f);
+}
+
+[shader("fragment")]
+float4 LitPhysicalWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics) : SV_TARGET
+{
+    return float4(OverWire(Srgb(LitPhysical(input, BaseColorOf(input)).rgb), barycentrics), 1.0f);
+}
+
+[shader("fragment")]
+float4 LitMaskedPhysicalWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics) : SV_TARGET
+{
+    float4 base = BaseColorOf(input);
+    clip(base.a - input.alphaCutoff);
+    return float4(OverWire(Srgb(LitPhysical(input, base).rgb), barycentrics), 1.0f);
 }
 
 technique ForwardPlusWire
@@ -81,5 +95,29 @@ technique ForwardPlusWire
     {
         VertexShader = LitSkinned_VS;
         PixelShader = LitMaskedTexturedWire_PS;
+    }
+
+    pass Physical
+    {
+        VertexShader = Lit_VS;
+        PixelShader = LitPhysicalWire_PS;
+    }
+
+    pass SkinnedPhysical
+    {
+        VertexShader = LitSkinned_VS;
+        PixelShader = LitPhysicalWire_PS;
+    }
+
+    pass MaskedPhysical
+    {
+        VertexShader = Lit_VS;
+        PixelShader = LitMaskedPhysicalWire_PS;
+    }
+
+    pass SkinnedMaskedPhysical
+    {
+        VertexShader = LitSkinned_VS;
+        PixelShader = LitMaskedPhysicalWire_PS;
     }
 }

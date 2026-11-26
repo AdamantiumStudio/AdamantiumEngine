@@ -51,27 +51,27 @@ void AssignLightsCS(uint3 tid : SV_DispatchThreadID)
 [shader("fragment")]
 float4 LitColored_PS(LIT_PIXEL input) : SV_TARGET
 {
-    return float4(Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy), 1.0f);
+    return float4(Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy) + EmissionOf(input), 1.0f);
 }
 
 [shader("fragment")]
 float4 LitTextured_PS(LIT_PIXEL input) : SV_TARGET
 {
     float4 surface = SurfaceOf(input);
-    return float4(Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy), 1.0f);
+    return float4(Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy) + EmissionOf(input), 1.0f);
 }
 
 [shader("fragment")]
 float4 LitMaskedTextured_PS(LIT_PIXEL input) : SV_TARGET
 {
     float4 surface = MaskedSurfaceOf(input);
-    return float4(Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy), 1.0f);
+    return float4(Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy) + EmissionOf(input), 1.0f);
 }
 
 [shader("fragment")]
 WEIGHTED_PIXEL LitWeightedColored_PS(LIT_PIXEL input)
 {
-    float3 lit = Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    float3 lit = Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy) + EmissionOf(input);
     return Weighted(lit, input.albedo.a, input.viewPosition.z);
 }
 
@@ -79,8 +79,29 @@ WEIGHTED_PIXEL LitWeightedColored_PS(LIT_PIXEL input)
 WEIGHTED_PIXEL LitWeightedTextured_PS(LIT_PIXEL input)
 {
     float4 surface = SurfaceOf(input);
-    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy) + EmissionOf(input);
     return Weighted(lit, surface.a * input.albedo.a, input.viewPosition.z);
+}
+
+[shader("fragment")]
+float4 LitPhysical_PS(LIT_PIXEL input) : SV_TARGET
+{
+    return float4(Srgb(LitPhysical(input, BaseColorOf(input)).rgb), 1.0f);
+}
+
+[shader("fragment")]
+float4 LitMaskedPhysical_PS(LIT_PIXEL input) : SV_TARGET
+{
+    float4 base = BaseColorOf(input);
+    clip(base.a - input.alphaCutoff);
+    return float4(Srgb(LitPhysical(input, base).rgb), 1.0f);
+}
+
+[shader("fragment")]
+WEIGHTED_PIXEL LitWeightedPhysical_PS(LIT_PIXEL input)
+{
+    float4 lit = LitPhysical(input, BaseColorOf(input));
+    return Weighted(Srgb(lit.rgb), lit.a, input.viewPosition.z);
 }
 
 // The see-through layers' textures in meshTextures, resolved: the weighted sums and the coverage.
@@ -175,6 +196,42 @@ technique ForwardPlus
     {
         VertexShader = LitSkinned_VS;
         PixelShader = LitWeightedTextured_PS;
+    }
+
+    pass Physical
+    {
+        VertexShader = Lit_VS;
+        PixelShader = LitPhysical_PS;
+    }
+
+    pass SkinnedPhysical
+    {
+        VertexShader = LitSkinned_VS;
+        PixelShader = LitPhysical_PS;
+    }
+
+    pass MaskedPhysical
+    {
+        VertexShader = Lit_VS;
+        PixelShader = LitMaskedPhysical_PS;
+    }
+
+    pass SkinnedMaskedPhysical
+    {
+        VertexShader = LitSkinned_VS;
+        PixelShader = LitMaskedPhysical_PS;
+    }
+
+    pass WeightedPhysical
+    {
+        VertexShader = Lit_VS;
+        PixelShader = LitWeightedPhysical_PS;
+    }
+
+    pass SkinnedWeightedPhysical
+    {
+        VertexShader = LitSkinned_VS;
+        PixelShader = LitWeightedPhysical_PS;
     }
 
     pass WeightedComposite

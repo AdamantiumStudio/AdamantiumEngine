@@ -99,6 +99,55 @@ public class ForwardPlusLightingTests
         });
     }
 
+    // A polished metal has no diffuse light: lit physically, its face in the sun but away from the sun's reflection is
+    // darker than the same face lit simply, where the color takes the light whatever the metalness.
+    [Test]
+    public void AMetalCube_LitPhysically_IsDarkerThanLitSimply()
+    {
+        // From the side, away from where the top mirrors the sun: the sun leans towards -Z, so its reflection does too.
+        var eye = _output.Camera;
+        eye.Owner.Transform.Position = new WorldPosition(16, -12, 0);
+        eye.SetFreeLookAt(WorldPosition.Zero);
+        var scene = _universe.EntityWorld.MainScene;
+        var lights = new LightManager(_universe, scene);
+        scene.Satellites.Add(lights);
+        var sun = new LightTemplate().BuildEntity(null, "Sun", LightType.Directional);
+        sun.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(150));
+        lights.AddLight(sun);
+
+        var simple = TopOf(LightingModel.Simple, "forward-plus-metal-simple.png");
+        var physical = TopOf(LightingModel.Physical, "forward-plus-metal-physical.png");
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(simple, Is.GreaterThan(150), "the top lit simply, in the sun");
+            Assert.That(physical, Is.LessThan(simple - 40), "the top lit physically, a metal without its reflection");
+        });
+    }
+
+    // How bright the top of a metal cube in the sun is, lit by the given model.
+    private double TopOf(LightingModel lighting, string savedAs)
+    {
+        var scene = _universe.EntityWorld.MainScene;
+        var cube = new ShapeTemplate(new CubeShape()).Build(new Entity(null, "Cube"));
+        cube.AddComponent(new Material { Lighting = lighting, MetallicFactor = 1, RoughnessFactor = 0.3f });
+        _universe.EntityWorld.EntityManager.AddEntity(cube, scene);
+        for (var frame = 0; frame < Frames; frame++)
+        {
+            RunFrame();
+        }
+
+        var top = FaceBrightness(Pixels(_output.ReadFrame(), savedAs), _output.Camera, new WorldPosition(0, -0.5, 0),
+            Vector3<double>.UnitX, Vector3<double>.UnitZ);
+        _universe.EntityWorld.EntityManager.RemoveEntity(cube);
+        for (var frame = 0; frame < Frames; frame++)
+        {
+            RunFrame();
+        }
+
+        return top.Average();
+    }
+
     // The brightness of a 4 x 4 grid of points inside a face of the unit cube.
     private static List<int> FaceBrightness(byte[] pixels, Camera camera, WorldPosition center,
         Vector3<double> across, Vector3<double> along)

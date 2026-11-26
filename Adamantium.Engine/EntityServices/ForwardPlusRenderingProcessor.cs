@@ -529,11 +529,23 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         // it; its wire is drawn as lines.
         var seeThrough = alphaMode == AlphaMode.Blend;
         withWire &= !seeThrough;
-        var pass = PassOf(withWire, skinned, textured, masked: alphaMode == AlphaMode.Mask, seeThrough);
+        var physical = material?.Lighting == LightingModel.Physical;
+        var pass = physical
+            ? PhysicalPassOf(withWire, skinned, masked: alphaMode == AlphaMode.Mask, seeThrough)
+            : PassOf(withWire, skinned, textured, masked: alphaMode == AlphaMode.Mask, seeThrough);
         var geometry = geometryCache.GetOrCreate(meshData.Mesh, meshData.ResolveVertexType());
         var (first, count) = skinned ? PaletteOf(entity.GetComponent<Skin>(), world) : default;
-        var textureIndex = texture != null ? ((GraphicsDevice)GraphicsDevice).DescriptorManager.TextureIndex(texture) : 0;
-        var instance = new MeshInstance(world, albedo, first, count, textureIndex, alphaCutoff);
+        var textureIndex = texture != null ? IndexOf(texture) : physical ? MeshInstance.NoMap : 0;
+        var emissive = IndexOf(LiveTexture(material?.EmissiveTexture));
+        var maps = physical
+            ? new MaterialMaps(IndexOf(LiveTexture(material.MetallicRoughnessTexture)),
+                IndexOf(LiveTexture(material.NormalTexture)), IndexOf(LiveTexture(material.OcclusionTexture)), emissive)
+            : MaterialMaps.None with { Emissive = emissive };
+        var surface = material == null
+            ? default
+            : new Vector4F(material.MetallicFactor, material.RoughnessFactor, material.NormalScale, material.OcclusionStrength);
+        var emission = material == null ? default : material.Emission with { W = 0 };
+        var instance = new MeshInstance(world, albedo, first, count, textureIndex, alphaCutoff, emission, surface, maps);
 
         Effect owner = withWire ? wireEffect : effect;
         var key = new MeshDrawKey(geometry, pass, MeshRenderExtensions.CullModeOf(material, world), meshData.DepthTestEnabled,
@@ -548,6 +560,28 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
 
         group.Instances.Add(instance);
+    }
+
+    private uint IndexOf(Texture texture) =>
+        texture == null ? MeshInstance.NoMap : ((GraphicsDevice)GraphicsDevice).DescriptorManager.TextureIndex(texture);
+
+    private static Texture LiveTexture(Texture texture) => texture is { IsDisposed: false } ? texture : null;
+
+    // A physical pass reads a texture when it has one, so one pass serves a surface with or without.
+    private IEffectPass PhysicalPassOf(bool withWire, bool skinned, bool masked, bool seeThrough)
+    {
+        if (seeThrough)
+            return skinned ? effect.ForwardPlusSkinnedWeightedPhysicalPass : effect.ForwardPlusWeightedPhysicalPass;
+        if (withWire)
+        {
+            if (masked)
+                return skinned ? wireEffect.ForwardPlusWireSkinnedMaskedPhysicalPass : wireEffect.ForwardPlusWireMaskedPhysicalPass;
+            return skinned ? wireEffect.ForwardPlusWireSkinnedPhysicalPass : wireEffect.ForwardPlusWirePhysicalPass;
+        }
+
+        if (masked)
+            return skinned ? effect.ForwardPlusSkinnedMaskedPhysicalPass : effect.ForwardPlusMaskedPhysicalPass;
+        return skinned ? effect.ForwardPlusSkinnedPhysicalPass : effect.ForwardPlusPhysicalPass;
     }
 
     // Only a textured surface's alpha changes across it, so only a textured pass is masked: a discard costs the early

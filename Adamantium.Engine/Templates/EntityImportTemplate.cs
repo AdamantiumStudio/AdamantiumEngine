@@ -367,6 +367,17 @@ public class EntityImportTemplate : IEntityTemplate
                     material.TexturePath = PathOf(materialData.DiffuseMap);
                     material.Texture = LoadTexture(image, material.TexturePath);
                 }
+
+                // A model that knows its metalness or carries the map of it is lit physically, its maps loaded.
+                material.MetallicRoughnessTexture = LoadMap(materialData.MetallicRoughnessMap, material.MetallicRoughnessPath);
+                material.NormalTexture = LoadMap(materialData.NormalMap, material.NormalMapPath);
+                material.OcclusionTexture = LoadMap(materialData.OcclusionMap, material.OcclusionMapPath);
+                material.EmissiveTexture = LoadMap(materialData.EmissiveMap, material.EmissiveMapPath);
+                if (materialData.MetallicFactor > 0 || material.MetallicRoughnessTexture != null)
+                {
+                    material.Lighting = LightingModel.Physical;
+                }
+
                 entity.AddComponent(material);
             }
             else
@@ -381,6 +392,9 @@ public class EntityImportTemplate : IEntityTemplate
             entity.AddComponent(material);
         }
     }
+
+    private Texture LoadMap(string imageKey, string path) =>
+        !string.IsNullOrEmpty(imageKey) && sceneData.Images.TryGetValue(imageKey, out var image) ? LoadTexture(image, path) : null;
 
     private string PathOf(string imageKey)
     {
