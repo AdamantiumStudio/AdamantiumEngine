@@ -27,6 +27,11 @@ public readonly struct SurfaceFormat : IEquatable<SurfaceFormat>
     /// <summary>Bytes a pixel takes - a block's for a compressed format.</summary>
     public int SizeInBytes => FormatHelper.SizeOfInBytes(Value);
 
+    /// <summary>Whether the format has a depth part.</summary>
+    public bool HasDepthFormat() =>
+        Value is Format.D16_UNORM or Format.D32_SFLOAT or Format.X8_D24_UNORM_PACK32 or Format.D16_UNORM_S8_UINT
+            or Format.D24_UNORM_S8_UINT or Format.D32_SFLOAT_S8_UINT;
+
     /// <summary>Whether the format has a stencil part.</summary>
     public bool HasStencilFormat() =>
         Value is Format.D16_UNORM_S8_UINT or Format.D24_UNORM_S8_UINT or Format.D32_SFLOAT_S8_UINT or Format.S8_UINT;

@@ -102,7 +102,7 @@ public unsafe class Texture : GraphicsResource, ITexture
         }
     }
 
-    protected Texture(IGraphicsDevice device, Image img, ImageUsageFlagBits usage, ImageLayout desiredLayout) : 
+    protected Texture(IGraphicsDevice device, Image img, ImageUsageFlagBits usage, ImageLayout desiredLayout) :
         base(device)
     {
         Description = img.Description;
@@ -110,6 +110,67 @@ public unsafe class Texture : GraphicsResource, ITexture
         Description.DesiredImageLayout = desiredLayout;
 
         CopyDataToImage(img.TotalSizeInBytes, img.DataPointer, Regions(img));
+    }
+
+    // A flat picture of one level, read in its final layout, whose format the device can halve with a linear blit.
+    private bool CanFillMipmaps(TextureDescription picture)
+    {
+        if (picture.MipLevels != 1 || picture.Dimension != TextureDimension.Texture2D || picture.ArrayLayers != 1
+            || picture.Depth != 1 || Description.DesiredImageLayout != ImageLayout.ShaderReadOnlyOptimal)
+        {
+            return false;
+        }
+
+        GraphicsDevice.Adapter.Adapter.GetPhysicalDeviceFormatProperties(picture.Format, out var properties);
+        const FormatFeatureFlagBits halving = FormatFeatureFlagBits.BlitSrcBit | FormatFeatureFlagBits.BlitDstBit
+                                              | FormatFeatureFlagBits.SampledImageFilterLinearBit;
+        return (properties.OptimalTilingFeatures & halving) == halving;
+    }
+
+    // Each level a linear blit of the one above, half its size - every texel the average of the four it covers - so a
+    // surface seen small or at a slant reads the level its pixels span instead of shimmering. Left read by shaders.
+    private void FillMipmaps()
+    {
+        var commands = GraphicsDevice.BeginSingleTimeCommand();
+        var levels = Description.MipLevels;
+        GraphicsDevice.InsertImageMemoryBarrier(commands, this, AccessFlagBits2.ShaderReadBit,
+            AccessFlagBits2.TransferWriteBit, ImageLayout.ShaderReadOnlyOptimal, ImageLayout.TransferDstOptimal,
+            PipelineStageFlagBits2.FragmentShaderBit, PipelineStageFlagBits2.AllTransferBit, 1, levels - 1);
+        GraphicsDevice.InsertImageMemoryBarrier(commands, this, AccessFlagBits2.ShaderReadBit,
+            AccessFlagBits2.TransferReadBit, ImageLayout.ShaderReadOnlyOptimal, ImageLayout.TransferSrcOptimal,
+            PipelineStageFlagBits2.FragmentShaderBit, PipelineStageFlagBits2.AllTransferBit, 0, 1);
+        var width = (int)Description.Width;
+        var height = (int)Description.Height;
+        for (var level = 1u; level < levels; level++)
+        {
+            var halfWidth = Math.Max(1, width / 2);
+            var halfHeight = Math.Max(1, height / 2);
+            var blit = new ImageBlit
+            {
+                SrcSubresource = new ImageSubresourceLayers
+                    { AspectMask = ImageAspectFlagBits.ColorBit, MipLevel = level - 1, BaseArrayLayer = 0, LayerCount = 1 },
+                SrcOffsets = new[] { new Offset3D(), new Offset3D { X = width, Y = height, Z = 1 } },
+                DstSubresource = new ImageSubresourceLayers
+                    { AspectMask = ImageAspectFlagBits.ColorBit, MipLevel = level, BaseArrayLayer = 0, LayerCount = 1 },
+                DstOffsets = new[] { new Offset3D(), new Offset3D { X = halfWidth, Y = halfHeight, Z = 1 } }
+            };
+            commands.BlitImage(VulkanImage, ImageLayout.TransferSrcOptimal, VulkanImage, ImageLayout.TransferDstOptimal, 1,
+                blit, Filter.Linear);
+            // The level above is done; the one just made is read for the next.
+            GraphicsDevice.InsertImageMemoryBarrier(commands, this, AccessFlagBits2.TransferReadBit,
+                AccessFlagBits2.ShaderReadBit, ImageLayout.TransferSrcOptimal, ImageLayout.ShaderReadOnlyOptimal,
+                PipelineStageFlagBits2.AllTransferBit, PipelineStageFlagBits2.FragmentShaderBit, level - 1, 1);
+            GraphicsDevice.InsertImageMemoryBarrier(commands, this, AccessFlagBits2.TransferWriteBit,
+                AccessFlagBits2.TransferReadBit, ImageLayout.TransferDstOptimal, ImageLayout.TransferSrcOptimal,
+                PipelineStageFlagBits2.AllTransferBit, PipelineStageFlagBits2.AllTransferBit, level, 1);
+            width = halfWidth;
+            height = halfHeight;
+        }
+
+        GraphicsDevice.InsertImageMemoryBarrier(commands, this, AccessFlagBits2.TransferReadBit,
+            AccessFlagBits2.ShaderReadBit, ImageLayout.TransferSrcOptimal, ImageLayout.ShaderReadOnlyOptimal,
+            PipelineStageFlagBits2.AllTransferBit, PipelineStageFlagBits2.FragmentShaderBit, levels - 1, 1);
+        GraphicsDevice.EndSingleTimeCommand(commands);
     }
 
     private static BufferImageCopy[] Regions(Image image)
@@ -143,8 +204,8 @@ public unsafe class Texture : GraphicsResource, ITexture
         return regions;
     }
 
-    protected Texture(IGraphicsDevice device, IRawBitmap bitmap, ImageUsageFlagBits usage, ImageLayout desiredLayout) :
-        base(device)
+    protected Texture(IGraphicsDevice device, IRawBitmap bitmap, ImageUsageFlagBits usage, ImageLayout desiredLayout,
+        bool withMipmaps = false) : base(device)
     {
         Description = bitmap.GetImageDescription();
         Description.Usage |= ImageUsageFlagBits.TransferDstBit | usage;
@@ -157,8 +218,20 @@ public unsafe class Texture : GraphicsResource, ITexture
             return;
         }
 
+        var fillsMipmaps = withMipmaps && CanFillMipmaps(Description);
+        if (fillsMipmaps)
+        {
+            Description.MipLevels = (uint)CountMipLevels((int)Description.Width, (int)Description.Height, 1);
+            Description.Usage |= ImageUsageFlagBits.TransferSrcBit;
+        }
+
+        // Only the picture's own level is copied; the smaller ones are made from it.
         var pixels = bitmap.GetRawPixels(0);
         CopyDataToImage((ulong)pixels.Length, pixels);
+        if (fillsMipmaps && Description.MipLevels > 1)
+        {
+            Build(FillMipmaps);
+        }
     }
 
     protected Texture(IGraphicsDevice device, ImageDescription description, byte[] data, ImageUsageFlagBits usage, ImageLayout desiredLayout) :
@@ -795,6 +868,25 @@ public unsafe class Texture : GraphicsResource, ITexture
     {
         var image = BitmapLoader.Load(stream);
         return new Texture(device, image, usage, initialLayout);
+    }
+
+    /// <summary>A picture read from <paramref name="stream"/> as a texture a scene samples: its smaller levels made from
+    /// it on the GPU, each half the one before, so a surface seen far off or at a slant does not shimmer. A picture that
+    /// has levels of its own, or whose format the device cannot halve, keeps what it has.</summary>
+    public static Texture LoadWithMipmaps(GraphicsDevice device, Stream stream)
+    {
+        var image = BitmapLoader.Load(stream);
+        return new Texture(device, image, ImageUsageFlagBits.SampledBit, ImageLayout.ShaderReadOnlyOptimal,
+            withMipmaps: true);
+    }
+
+    /// <summary>A picture read from <paramref name="filePath"/> as a texture a scene samples, as
+    /// <see cref="LoadWithMipmaps(GraphicsDevice, Stream)"/> makes it.</summary>
+    public static Texture LoadWithMipmaps(GraphicsDevice device, string filePath)
+    {
+        var image = BitmapLoader.Load(filePath);
+        return new Texture(device, image, ImageUsageFlagBits.SampledBit, ImageLayout.ShaderReadOnlyOptimal,
+            withMipmaps: true);
     }
 
     /// <summary>

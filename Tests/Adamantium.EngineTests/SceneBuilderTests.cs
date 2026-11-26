@@ -98,6 +98,36 @@ public class SceneBuilderTests
         return entities;
     }
 
+    // The scene's sky and frame are built into it and written back; a scene as a new one is writes no section, and a file
+    // without one sets them back to the defaults.
+    [Test]
+    public async Task TheEnvironment_IsBuiltIntoTheScene_AndWrittenBack()
+    {
+        var scene = new SceneFile
+        {
+            Environment = new SceneEnvironmentEntry
+            {
+                Sky = SkyKind.Stars, SkyStrength = 2, HighDynamicRange = true, Exposure = -1, Glow = 0.1f
+            }
+        };
+        await Build(scene);
+        var environment = universe.EntityWorld.MainScene.Environment;
+
+        var back = SceneCapture.Capture(universe.EntityWorld.MainScene).Environment;
+        var built = (environment.Sky, environment.SkyStrength, environment.HighDynamicRange, environment.Exposure,
+            environment.Glow);
+        await Build(new SceneFile());
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(built, Is.EqualTo((SkyKind.Stars, 2f, true, -1f, 0.1f)));
+            Assert.That((back.Sky, back.SkyStrength, back.HighDynamicRange, back.Exposure, back.Glow),
+                Is.EqualTo((SkyKind.Stars, 2f, true, -1f, 0.1f)));
+            Assert.That(environment.Sky, Is.EqualTo(SkyKind.None), "a file without the section");
+            Assert.That(SceneCapture.Capture(universe.EntityWorld.MainScene).Environment, Is.Null);
+        });
+    }
+
     // A masked shape's material takes how its alpha counts and its cutoff, and is written back with them.
     [Test]
     public async Task AShapesAlphaMode_GoesToItsMaterial_AndBack()

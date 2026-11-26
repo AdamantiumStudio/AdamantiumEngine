@@ -51,6 +51,9 @@ public sealed class Scene
     /// <summary>What is selected in the scene: each scene its own.</summary>
     public Selection Selection { get; }
 
+    /// <summary>The scene's sky and how its frame is brought to the screen.</summary>
+    public SceneEnvironment Environment { get; } = new();
+
     /// <summary>The scene's other one-of-a-kind objects - its lights.</summary>
     public Satellites Satellites { get; }
 

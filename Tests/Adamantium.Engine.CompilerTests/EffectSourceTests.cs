@@ -405,6 +405,28 @@ technique { pass { ComputeShader = CS; } }");
         Assert.That(Messages(result), Does.Contain("Test.fx(5,15)").And.Contain("First, Second take binding 3 of set 0"));
     }
 
+    // The shared table of textures read as plain by one shader and as multisampled by another is one binding seen two
+    // ways: no error, and placed once, its one mapping serving both names.
+    [Test]
+    public void ATextureTableReadAsPlainAndAsMultisampled_IsOneBinding()
+    {
+        var result = Compile("""
+            [[vk::binding(0, 1)]] Texture2D Plain[];
+            [[vk::binding(0, 1)]] Texture2DMS<float4> Samples[];
+            uint Which;
+            float4 VS(float4 position : POSITION) : SV_Position
+            {
+                return position + Plain[NonUniformResourceIndex(Which)].Load(int3(0, 0, 0));
+            }
+            float4 PS() : SV_Target { return Samples[NonUniformResourceIndex(Which)].Load(int2(0, 0), 1); }
+            technique T { pass { VertexShader = VS; PixelShader = PS; } }
+            """);
+
+        Assert.That(result.HasErrors, Is.False, Messages(result));
+        var placed = result.EffectData.Description.Techniques[0].Passes[0].Resources;
+        Assert.That(placed.Count(resource => resource.Set == 1 && resource.Binding == 0), Is.EqualTo(1));
+    }
+
     // The patch a draw hands a hull shader has to be the one it reads, so the effect keeps its size - the patch's, not
     // that of an array a control point holds.
     [Test]

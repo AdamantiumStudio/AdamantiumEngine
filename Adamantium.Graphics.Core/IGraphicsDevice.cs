@@ -375,7 +375,12 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
     /// the fields of the first, then of the next.</summary>
     void SetVertexTypes(params ReadOnlySpan<Type> vertexTypes);
 
-    IDepthStencilBuffer CreateDepthBuffer(uint width, 
+    /// <summary>A depth buffer a shader can read once it is drawn, as a shadow map is: of depth alone, without samples.
+    /// It rests in <c>ShaderReadOnlyOptimal</c>; a pass that draws into it - with no color target at all, if it likes -
+    /// turns it to <c>DepthStencilAttachmentOptimal</c> first and back after.</summary>
+    IDepthStencilBuffer CreateReadableDepthBuffer(uint width, uint height, DepthFormat format, string name = "");
+
+    IDepthStencilBuffer CreateDepthBuffer(uint width,
         uint height, 
         DepthFormat format, 
         MSAALevel msaa,

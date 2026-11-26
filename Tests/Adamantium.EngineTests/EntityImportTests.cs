@@ -405,6 +405,7 @@ public class EntityImportTests
 
         Assert.Multiple(() =>
         {
+            Assert.That(material.Lighting, Is.EqualTo(LightingModel.Physical), "a metal is lit physically");
             Assert.That(material.MetallicFactor, Is.EqualTo(0.9f));
             Assert.That(material.RoughnessFactor, Is.EqualTo(0.2f));
             Assert.That(material.NormalScale, Is.EqualTo(0.5f));
