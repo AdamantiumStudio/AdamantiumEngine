@@ -145,8 +145,9 @@ public sealed class ProjectPhysics
 
     private void ThrowIfUnreadable()
     {
+        // The reason goes inside, as a value an application says in its own language.
         if (FindProblem() is { } problem)
-            throw new InvalidOperationException(problem.Message);
+            throw new InvalidOperationException(problem.Message, problem);
     }
 
     /// <summary>The settings a game's simulation is made with: these, the gravity among them.</summary>

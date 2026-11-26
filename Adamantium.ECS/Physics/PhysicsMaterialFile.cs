@@ -148,8 +148,9 @@ public sealed class PhysicsMaterialFile
 
     private void ThrowIfUnreadable()
     {
+        // The reason goes inside, as a value an application says in its own language.
         if (FindProblem() is { } problem)
-            throw new InvalidOperationException(problem.Message);
+            throw new InvalidOperationException(problem.Message, problem);
     }
 
     // What makes the material one a game cannot take, as the exception reading it would throw; null when nothing.
