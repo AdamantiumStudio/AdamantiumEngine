@@ -34,6 +34,7 @@ public sealed class ContentBuilder
     public ContentBuilder()
     {
         Register(new ModelImporter(), new SceneDataWriter());
+        Register(new SoundImporter(), new SoundWriter());
     }
 
     /// <summary>

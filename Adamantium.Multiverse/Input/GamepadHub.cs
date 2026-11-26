@@ -2,6 +2,7 @@ using Adamantium.Core.Events;
 using Adamantium.Mathematics;
 using Adamantium.Multiverse.Events;
 using Adamantium.Multiverse.Payloads;
+using Serilog;
 
 namespace Adamantium.Multiverse.Input;
 
@@ -16,17 +17,29 @@ public class GamepadHub
 
     private const float ThumbDeadZone = 0.2f;
 
+    /// <summary>How strongly a gamepad taken in says so: an Elite Series 2 barely makes out half strength.</summary>
+    public const float GreetingStrength = 0.7f;
+
+    /// <summary>How fine it buzzes then: a deep rumble is barely felt on an Elite Series 2.</summary>
+    public const float GreetingSharpness = Gamepad.FineSharpness;
+
+    /// <summary>How long it says so.</summary>
+    public static readonly TimeSpan GreetingLength = TimeSpan.FromMilliseconds(500);
+
     private readonly IGamepadBackend backend;
     private readonly IEventAggregator events;
+    private readonly TimeProvider clock;
     private readonly Gamepad[] slots = new Gamepad[SlotCount];
     private readonly GamepadState[] states = new GamepadState[SlotCount];
     private readonly GamepadButton[] pressed = new GamepadButton[SlotCount];
     private readonly GamepadButton[] released = new GamepadButton[SlotCount];
+    private readonly long[] greetedAt = new long[SlotCount];
 
-    public GamepadHub(IGamepadBackend backend, IEventAggregator events)
+    public GamepadHub(IGamepadBackend backend, IEventAggregator events, TimeProvider clock = null)
     {
         this.backend = backend ?? throw new ArgumentNullException(nameof(backend));
         this.events = events;
+        this.clock = clock ?? TimeProvider.System;
     }
 
     /// <summary>The gamepad in <paramref name="slot"/>, or null when the slot is free.</summary>
@@ -69,9 +82,30 @@ public class GamepadHub
         {
             if (slots[slot] != null)
             {
+                EndGreeting(slot);
                 Read(slot);
             }
         }
+    }
+
+    // A gamepad taken in buzzes briefly, so whoever holds it knows the engine has it.
+    private void Greet(int slot)
+    {
+        slots[slot].SetSharpness(GreetingSharpness, GreetingSharpness);
+        slots[slot].SetVibration(GreetingStrength, GreetingStrength);
+        greetedAt[slot] = clock.GetTimestamp();
+    }
+
+    private void EndGreeting(int slot)
+    {
+        if (greetedAt[slot] == 0 || clock.GetElapsedTime(greetedAt[slot]) < GreetingLength)
+        {
+            return;
+        }
+
+        greetedAt[slot] = 0;
+        slots[slot].SetVibration(0, 0);
+        slots[slot].SetSharpness(Gamepad.DeepSharpness, Gamepad.FineSharpness);
     }
 
     private void DropDeparted(IReadOnlyList<Gamepad> connected)
@@ -87,6 +121,8 @@ public class GamepadHub
             released[slot] = states[slot].Buttons;
             states[slot] = default;
             slots[slot] = null;
+            greetedAt[slot] = 0;
+            Log.Logger.Information("Gamepad '{Name}' left slot {Slot}", gamepad.Name, slot);
             events?.GetEvent<GamepadDisconnectedEvent>().Publish(new GamepadPayload(slot, gamepad));
         }
     }
@@ -108,6 +144,8 @@ public class GamepadHub
             }
 
             slots[slot] = gamepad;
+            Log.Logger.Information("Gamepad '{Name}' took slot {Slot}", gamepad.Name, slot);
+            Greet(slot);
             events?.GetEvent<GamepadConnectedEvent>().Publish(new GamepadPayload(slot, gamepad));
         }
     }

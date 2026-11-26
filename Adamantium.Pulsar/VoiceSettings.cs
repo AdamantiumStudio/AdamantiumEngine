@@ -10,7 +10,7 @@ public readonly record struct VoiceSettings()
     /// <summary>How fast it plays: 2 is twice as fast, an octave higher.</summary>
     public float Pitch { get; init; } = 1;
 
-    /// <summary>-1 is left, 1 is right. A sound of one channel keeps its power across, 3 dB down in each at 0; of two, the
+    /// <summary>-1 is left, 1 is right. A sound of one channel keeps its power across, 3 dB down in each at 0; of more, the
     /// other side is turned down.</summary>
     public float Pan { get; init; }
 
@@ -27,4 +27,7 @@ public readonly record struct VoiceSettings()
     public long StartFrame { get; init; }
 
     public TimeSpan FadeIn { get; init; }
+
+    /// <summary>Where in space it is heard from; null for a voice heard as it is, as the interface's.</summary>
+    public SpatialSettings? Spatial { get; init; }
 }

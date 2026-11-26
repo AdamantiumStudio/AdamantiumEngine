@@ -18,10 +18,17 @@ internal struct Command
     /// <summary>How long it takes.</summary>
     public long Frames;
 
+    /// <summary>What to play, or null for a <see cref="Stream"/>.</summary>
     public SoundData Sound;
+
+    public SoundStream Stream;
 
     /// <summary>The frame of the sound it begins at.</summary>
     public int From;
 
     public VoiceSettings Settings;
+
+    public VoicePlace Place;
+
+    public Listener Listener;
 }

@@ -4,8 +4,9 @@ using Adamantium.Pulsar;
 using Adamantium.Pulsar.Sandbox;
 
 // Pulsar.Sandbox tone [seconds]                      a quiet tone, to hear
-// Pulsar.Sandbox play file.wav                       a sound, to hear
+// Pulsar.Sandbox play file [stream]                  a WAV or FLAC file, to hear; read while it plays
 // Pulsar.Sandbox mix                                 what mixing costs
+// Pulsar.Sandbox fly [seconds]                       a tone flying past, left to right, to hear it placed in space
 // Pulsar.Sandbox measure [seconds] [buffers, ms] [loads]   silence, and how often it broke off
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 var command = args.Length > 0 ? args[0] : "tone";
@@ -19,12 +20,14 @@ if (command == "play")
 {
     if (args.Length < 2)
     {
-        Console.WriteLine("play file.wav");
+        Console.WriteLine("play file [stream]");
         return;
     }
 
-    var sound = WavFile.Read(File.ReadAllBytes(args[1]));
-    var engine = new AudioEngine();
+    Sound sound = args.Contains("stream")
+        ? StreamedSound.Open(new SoundFileStorage(args[1]))
+        : SoundFile.Read(File.OpenRead(args[1]));
+    using var engine = new AudioEngine();
     using var output = AudioOutput.CreateDefault(TimeSpan.FromMilliseconds(80));
     output.Start(engine);
     var voice = engine.Play(engine.AddSound(sound));
@@ -40,7 +43,7 @@ if (command == "play")
         output.Stop();
     }
 
-    Console.WriteLine($"{sound.Format}, {sound.Duration}: {output.State} {output.DeviceProblem} {output.Statistics}");
+    Console.WriteLine($"{sound.Format}, {sound.Duration}: {output.State} {output.DeviceProblem} {output.Statistics}, stream gaps {engine.StreamGaps} {engine.StreamProblem}");
     return;
 }
 
@@ -52,6 +55,12 @@ if (command == "tone")
     Thread.Sleep(TimeSpan.FromSeconds(seconds));
     Console.WriteLine($"{output.State} {output.DeviceProblem}");
     Console.WriteLine(output.Statistics);
+    return;
+}
+
+if (command == "fly")
+{
+    FlyBy.Play(seconds);
     return;
 }
 

@@ -4,7 +4,7 @@ namespace Adamantium.Pulsar;
 
 /// <summary>Plays sounds: voices, mixed through a tree of buses. It is heard once an <see cref="IAudioOutput"/> is started
 /// with it. What is asked of it, from any thread, is done from the next block it renders on.</summary>
-public sealed class AudioEngine : IAudioRenderer
+public sealed class AudioEngine : IAudioRenderer, IDisposable
 {
     private readonly Lock _lock = new();
     private readonly CommandQueue _commands = new();
@@ -14,11 +14,13 @@ public sealed class AudioEngine : IAudioRenderer
     private readonly SlotReturns _endedVoices;
     private readonly SlotReturns _removedBuses;
     private readonly int[] _busParents;
-    private readonly List<SoundData> _sounds = [];
+    private readonly SoundStreamer _streamer = new();
+    private readonly List<Sound> _sounds = [];
     private readonly List<int> _soundGenerations = [];
     private readonly Stack<int> _freeSounds = [];
     // 1 while the commands are applied or a block is rendered.
     private int _mixing;
+    private bool _disposed;
 
     public AudioEngine()
         : this(new AudioEngineSettings())
@@ -31,13 +33,18 @@ public sealed class AudioEngine : IAudioRenderer
         ArgumentOutOfRangeException.ThrowIfLessThan(settings.Voices, 1, nameof(settings));
         ArgumentOutOfRangeException.ThrowIfLessThan(settings.AudibleVoices, 1, nameof(settings));
         ArgumentOutOfRangeException.ThrowIfLessThan(settings.Buses, 1, nameof(settings));
+        if (!(settings.SpeedOfSound > 0 && float.IsFinite(settings.SpeedOfSound)))
+        {
+            throw new ArgumentOutOfRangeException(nameof(settings), settings.SpeedOfSound, "A speed of sound is more than 0.");
+        }
+
         _voices = new SlotTable(settings.Voices);
         _buses = new SlotTable(settings.Buses);
         _busParents = new int[settings.Buses];
         Array.Fill(_busParents, -1);
         _endedVoices = new SlotReturns(settings.Voices);
         _removedBuses = new SlotReturns(settings.Buses);
-        _mixer = new Mixer(settings, _endedVoices, _removedBuses);
+        _mixer = new Mixer(settings, _streamer, _endedVoices, _removedBuses);
         // The master, slot 0.
         _buses.TryTake(out _);
     }
@@ -61,7 +68,13 @@ public sealed class AudioEngine : IAudioRenderer
         }
     }
 
-    public SoundId AddSound(SoundData sound)
+    /// <summary>How many times a streamed voice fell silent: its sound was not read soon enough.</summary>
+    public int StreamGaps => _mixer.StreamGaps;
+
+    /// <summary>Why a streamed sound was last cut off; null for none yet.</summary>
+    public string StreamProblem => _streamer.Problem;
+
+    public SoundId AddSound(Sound sound)
     {
         ArgumentNullException.ThrowIfNull(sound);
         lock (_lock)
@@ -98,11 +111,13 @@ public sealed class AudioEngine : IAudioRenderer
         CheckPitch(settings.Pitch);
         CheckPan(settings.Pan);
         ArgumentOutOfRangeException.ThrowIfLessThan(settings.From, TimeSpan.Zero, nameof(settings));
+        settings.Spatial?.Check();
         var fade = FramesIn(settings.FadeIn);
         lock (_lock)
         {
             var data = SoundOf(sound);
             var bus = SlotOf(settings.Bus);
+            ObjectDisposedException.ThrowIf(_disposed, this);
             TakeReturns();
             if (!_voices.TryTake(out var slot))
             {
@@ -111,10 +126,25 @@ public sealed class AudioEngine : IAudioRenderer
 
             // One that begins past its end ends at once.
             var from = (int)Math.Min(data.Frames, data.Format.FramesIn(settings.From));
+            var stream = data is StreamedSound streamed ? new SoundStream(streamed, from, settings.Loops) : null;
+            if (stream != null)
+            {
+                _streamer.Add(stream);
+            }
+
             _mixer.SetPosition(slot, from);
             Post(new Command
             {
-                Kind = CommandKind.Play, Slot = slot, Bus = bus, Sound = data, Settings = settings, Frames = fade, From = from,
+                Kind = CommandKind.Play,
+                Slot = slot,
+                Bus = bus,
+                Sound = data as SoundData,
+                Stream = stream,
+                Settings = settings.Spatial is { } spatial
+                    ? settings with { Spatial = spatial with { Place = Directed(spatial.Place) } }
+                    : settings,
+                Frames = fade,
+                From = from,
             });
             return new VoiceId(slot, _voices.GenerationOf(slot));
         }
@@ -148,6 +178,49 @@ public sealed class AudioEngine : IAudioRenderer
         PostTo(voice, new Command { Kind = CommandKind.SetVoicePan, Value = pan });
     }
 
+    /// <summary>Moves a voice played with <see cref="VoiceSettings.Spatial"/>; one played without is not placed.</summary>
+    public void SetPlace(VoiceId voice, in VoicePlace place)
+    {
+        CheckPlace(place);
+        PostTo(voice, new Command { Kind = CommandKind.SetVoicePlace, Place = Directed(place) });
+    }
+
+    /// <summary>Who hears the voices placed in space; until said, one with +X on the right, still.</summary>
+    public void SetListener(in Listener listener)
+    {
+        if (!IsFinite(listener.Right) || !IsFinite(listener.Velocity) || listener.Right == Vector3F.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(listener), listener, "A listener has a right, and moves finitely.");
+        }
+
+        lock (_lock)
+        {
+            Post(new Command
+            {
+                Kind = CommandKind.SetListener, Listener = listener with { Right = UnitOf(listener.Right) },
+            });
+        }
+    }
+
+    internal static void CheckPlace(in VoicePlace place)
+    {
+        if (!IsFinite(place.Position) || !IsFinite(place.Velocity) || !IsFinite(place.Facing))
+        {
+            throw new ArgumentOutOfRangeException(nameof(place), place, "A place is of finite numbers.");
+        }
+    }
+
+    /// <summary>Its facing of length 1, or none: the mixer divides by no length.</summary>
+    internal static VoicePlace Directed(in VoicePlace place) =>
+        place.Facing == Vector3F.Zero ? place : place with { Facing = UnitOf(place.Facing) };
+
+    // In double: in float the shortest square to 0, and the longest to infinity.
+    private static Vector3F UnitOf(Vector3F vector)
+    {
+        var length = Math.Sqrt((double)vector.X * vector.X + (double)vector.Y * vector.Y + (double)vector.Z * vector.Z);
+        return new Vector3F((float)(vector.X / length), (float)(vector.Y / length), (float)(vector.Z / length));
+    }
+
     /// <summary>Whether it has not ended: paused, unheard and yet to begin are playing too.</summary>
     public bool IsPlaying(VoiceId voice)
     {
@@ -167,6 +240,9 @@ public sealed class AudioEngine : IAudioRenderer
             return _voices.Holds(voice.Slot, voice.Generation) ? _mixer.PositionOf(voice.Slot) : -1;
         }
     }
+
+    /// <summary>For tests, which render faster than it is heard: no streamed voice wants more now.</summary>
+    internal bool IsReadAhead => _streamer.IsIdle;
 
     /// <exception cref="InvalidOperationException">There are <see cref="AudioEngineSettings.Buses"/> already.</exception>
     public BusId AddBus(BusId parent)
@@ -253,6 +329,17 @@ public sealed class AudioEngine : IAudioRenderer
         }
     }
 
+    /// <summary>Stops reading streamed sounds. An output that still plays it plays out what there is.</summary>
+    public void Dispose()
+    {
+        lock (_lock)
+        {
+            _disposed = true;
+        }
+
+        _streamer.Dispose();
+    }
+
     private static long FramesIn(TimeSpan duration)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(duration, TimeSpan.Zero);
@@ -275,6 +362,9 @@ public sealed class AudioEngine : IAudioRenderer
         }
     }
 
+    private static bool IsFinite(Vector3F vector) =>
+        float.IsFinite(vector.X) && float.IsFinite(vector.Y) && float.IsFinite(vector.Z);
+
     private static void CheckPan(float pan)
     {
         if (pan is not (>= -1 and <= 1))
@@ -283,7 +373,7 @@ public sealed class AudioEngine : IAudioRenderer
         }
     }
 
-    private SoundData SoundOf(SoundId sound)
+    private Sound SoundOf(SoundId sound)
     {
         if ((uint)sound.Slot < (uint)_sounds.Count && _soundGenerations[sound.Slot] == sound.Generation &&
             _sounds[sound.Slot] is { } data)

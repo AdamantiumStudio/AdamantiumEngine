@@ -15,11 +15,17 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Adamantium.MacOS\Adamantium.MacOS.csproj" />
+    <ProjectReference Include="..\Adamantium.Mathematics\Adamantium.Mathematics.csproj" />
     <ProjectReference Include="..\Adamantium.Win32\Adamantium.Win32.csproj" />
   </ItemGroup>
 
   <ItemGroup>
     <InternalsVisibleTo Include="Adamantium.Pulsar.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Decoding\Mp3Huffman.txt" LogicalName="Mp3Huffman.txt" />
+    <EmbeddedResource Include="Decoding\Mp3SynthesisWindow.txt" LogicalName="Mp3SynthesisWindow.txt" />
   </ItemGroup>
 
 </Project>

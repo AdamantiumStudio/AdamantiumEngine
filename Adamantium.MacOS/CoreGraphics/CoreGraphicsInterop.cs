@@ -43,6 +43,16 @@ public static unsafe class CoreGraphicsInterop
     [DllImport(CoreGraphics, EntryPoint = "CGDisplaySerialNumber")]
     public static extern uint DisplaySerial(uint display);
 
+    /// <summary>CGEventSourceKeyState: whether a key, by its hardware code, is down; <paramref name="state"/> 1 is the
+    /// hardware's.</summary>
+    [DllImport(CoreGraphics, EntryPoint = "CGEventSourceKeyState")]
+    [return: MarshalAs(UnmanagedType.U1)]
+    public static extern bool IsKeyDown(int state, ushort keyCode);
+
+    /// <summary>CGEventSourceFlagsState: the modifiers held and locked.</summary>
+    [DllImport(CoreGraphics, EntryPoint = "CGEventSourceFlagsState")]
+    public static extern ulong ModifierFlags(int state);
+
     /// <summary>CGWarpMouseCursorPosition: the cursor put at a point from the top left corner of the main display, with no
     /// event of it.</summary>
     [DllImport(CoreGraphics, EntryPoint = "CGWarpMouseCursorPosition")]

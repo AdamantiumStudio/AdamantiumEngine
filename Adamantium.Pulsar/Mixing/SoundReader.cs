@@ -3,12 +3,14 @@ namespace Adamantium.Pulsar.Mixing;
 /// <summary>Reads a voice's sound at its pitch and the mixer's rate.</summary>
 internal static class SoundReader
 {
-    private const long One = 1L << 32;
-    private const float FractionScale = 1f / One;
+    /// <summary>A frame, as positions count.</summary>
+    public const long One = 1L << 32;
+
+    public const float FractionScale = 1f / One;
 
     /// <summary>How far the sound goes in a frame of the mixer.</summary>
     public static long StepOf(in Voice voice, int sampleRate) =>
-        Math.Max(1, (long)((double)voice.Pitch * voice.Sound.Format.SampleRate / sampleRate * One));
+        Math.Max(1, (long)((double)voice.Pitch * voice.Doppler.Value * voice.Format.SampleRate / sampleRate * One));
 
     /// <summary>Goes on by <paramref name="frames"/> unread; false where the sound ended.</summary>
     public static bool Skip(ref Voice voice, long step, int frames)
@@ -33,7 +35,12 @@ internal static class SoundReader
             }
             else
             {
-                done += channels == 1 ? ReadMono(ref voice, step, rest) : ReadStereo(ref voice, step, rest);
+                done += channels switch
+                {
+                    1 => ReadMono(ref voice, step, rest),
+                    2 => ReadStereo(ref voice, step, rest),
+                    _ => ReadChannels(ref voice, step, rest, channels),
+                };
             }
         }
 
@@ -100,6 +107,7 @@ internal static class SoundReader
         return frame;
     }
 
+    // Two apart from many: a count of channels not known cost 10% of mixing at a pitch.
     private static int ReadStereo(ref Voice voice, long step, Span<float> samples)
     {
         var source = voice.Sound.Samples;
@@ -132,6 +140,39 @@ internal static class SoundReader
         return frame;
     }
 
+    private static int ReadChannels(ref Voice voice, long step, Span<float> samples, int channels)
+    {
+        var source = voice.Sound.Samples;
+        var start = voice.HasLooped ? voice.Sound.Loop.Start : 0;
+        var end = EndOf(voice);
+        var position = voice.Position;
+        var frame = 0;
+        for (; frame < samples.Length / channels; frame++)
+        {
+            var at = (int)(position >> 32);
+            if (at >= end)
+            {
+                break;
+            }
+
+            var fraction = (uint)position * FractionScale;
+            var inside = at > start && at + 2 < end;
+            for (var channel = 0; channel < channels; channel++)
+            {
+                var sample = at * channels + channel;
+                samples[frame * channels + channel] = inside
+                    ? Interpolate(source[sample - channels], source[sample], source[sample + channels],
+                        source[sample + channels * 2], fraction)
+                    : InterpolateAtEdge(voice, at, channel, fraction);
+            }
+
+            position += step;
+        }
+
+        voice.Position = position;
+        return frame;
+    }
+
     private static float InterpolateAtEdge(in Voice voice, int frame, int channel, float fraction) =>
         Interpolate(SampleAt(voice, frame - 1, channel), SampleAt(voice, frame, channel), SampleAt(voice, frame + 1, channel),
             SampleAt(voice, frame + 2, channel), fraction);
@@ -154,8 +195,8 @@ internal static class SoundReader
             : 0;
     }
 
-    // Catmull-Rom.
-    private static float Interpolate(float before, float from, float to, float after, float fraction)
+    /// <summary>Catmull-Rom.</summary>
+    public static float Interpolate(float before, float from, float to, float after, float fraction)
     {
         var slope = 0.5f * (to - before);
         var square = before - 2.5f * from + 2 * to - 0.5f * after;

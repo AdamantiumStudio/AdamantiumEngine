@@ -100,7 +100,7 @@ jobs:
       # The runners have no GPU. Adamantium.Engine.GraphicsTests and Adamantium.UniverseHost.Tests create a Vulkan device, so
       # they are left out; every other test runs without one.
       #
-      # The suites run at once, each in a process of its own: they share nothing, and one after another the run took
+      # The suites run side by side, each in a process of its own: they share nothing, and one after another the run took
       # the sum of them all. Built first, because several builds at once would write the same engine projects. The tests
       # inside a suite stay sequential.
       - name: Test
@@ -108,23 +108,32 @@ jobs:
         shell: bash
         run: |
           dotnet build AdamantiumEngine.Tests.sln -c Release
+          # The compilers the build left running hold a gigabyte the tests need.
+          dotnet build-server shutdown
+          # The macOS machine has 3 cores and 7 GB: every suite at once starved the tests that keep to a time budget there,
+          # a different one failing each run - as UI's CI found.
+          atOnce=32
+          if [ "$RUNNER_OS" = macOS ]; then atOnce=3; fi
           pids=()
           logs=()
-          for p in Tests/*/*.csproj; do
-            case "$p" in *GraphicsTests*|*UniverseHost.Tests*) continue ;; esac
-            log="$RUNNER_TEMP/$(basename "$p" .csproj).log"
-            # A test that hangs is stopped after 10 minutes; the blame sequence, uploaded below, says which it was.
-            dotnet test "$p" -c Release --no-build --blame-hang-timeout 10m --blame-hang-dump-type none > "$log" 2>&1 &
+          run() {
+            while [ "$(jobs -rp | wc -l)" -ge "$atOnce" ]; do sleep 1; done
+            local log="$1"; shift
+            "$@" > "$log" 2>&1 &
             pids+=($!)
             logs+=("$log")
+          }
+          for p in Tests/*/*.csproj; do
+            case "$p" in *GraphicsTests*|*UniverseHost.Tests*) continue ;; esac
+            # A test that hangs is stopped after 10 minutes; the blame sequence, uploaded below, says which it was.
+            run "$RUNNER_TEMP/$(basename "$p" .csproj).log" \
+              dotnet test "$p" -c Release --no-build --blame-hang-timeout 10m --blame-hang-dump-type none
           done
           # The physics' allocation tests again with the JIT's optimizations off, where allocations it removes show.
-          log="$RUNNER_TEMP/DarkMatterAllocationsMinOpts.log"
-          DOTNET_JITMinOpts=1 dotnet test Tests/Adamantium.DarkMatter.Tests/Adamantium.DarkMatter.Tests.csproj -c Release \
+          run "$RUNNER_TEMP/DarkMatterAllocationsMinOpts.log" \
+            env DOTNET_JITMinOpts=1 dotnet test Tests/Adamantium.DarkMatter.Tests/Adamantium.DarkMatter.Tests.csproj -c Release \
             --no-build --filter "FullyQualifiedName~AllocationTests" \
-            --results-directory "$RUNNER_TEMP/DarkMatterAllocationsMinOpts" > "$log" 2>&1 &
-          pids+=($!)
-          logs+=("$log")
+            --results-directory "$RUNNER_TEMP/DarkMatterAllocationsMinOpts"
           status=0
           for i in "${!pids[@]}"; do
             wait "${pids[$i]}" || status=1

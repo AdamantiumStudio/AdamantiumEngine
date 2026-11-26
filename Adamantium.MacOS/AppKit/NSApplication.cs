@@ -26,14 +26,34 @@ public static unsafe class NSApplication
     private static readonly IntPtr DefaultRunLoopMode = NSString.Create("kCFRunLoopDefaultMode");
 
     private static readonly IntPtr KeyWindowSelector = ObjCRuntime.RegisterSelector("keyWindow");
+    private static readonly IntPtr ApplicationIconImageSelector = ObjCRuntime.RegisterSelector("applicationIconImage");
+    private static readonly IntPtr CurrentEventSelector = ObjCRuntime.RegisterSelector("currentEvent");
+    private static readonly IntPtr SetMainMenuSelector = ObjCRuntime.RegisterSelector("setMainMenu:");
+    private static readonly IntPtr SetWindowsMenuSelector = ObjCRuntime.RegisterSelector("setWindowsMenu:");
+    private static readonly IntPtr SetServicesMenuSelector = ObjCRuntime.RegisterSelector("setServicesMenu:");
     private static readonly IntPtr IsActiveSelector = ObjCRuntime.RegisterSelector("isActive");
     private static readonly IntPtr SetDelegateSelector = ObjCRuntime.RegisterSelector("setDelegate:");
 
     /// <summary>The window that has the keyboard; zero when none has.</summary>
     public static IntPtr KeyWindow => NSObject.Send(Shared, KeyWindowSelector);
 
+    /// <summary>The icon the Dock shows, an NSImage.</summary>
+    public static IntPtr IconImage => NSObject.Send(Shared, ApplicationIconImageSelector);
+
+    /// <summary>The event being answered; zero for none.</summary>
+    public static IntPtr CurrentEvent => NSObject.Send(Shared, CurrentEventSelector);
+
     /// <summary>Whether the application is the active one.</summary>
     public static bool IsActive => NSObject.SendForBoolean(Shared, IsActiveSelector);
+
+    /// <summary>Sets the menu bar's menu: its items are the menus, the first the application's.</summary>
+    public static void SetMainMenu(IntPtr menu) => NSObject.Send(Shared, SetMainMenuSelector, menu);
+
+    /// <summary>Sets the menu that lists the application's windows.</summary>
+    public static void SetWindowsMenu(IntPtr menu) => NSObject.Send(Shared, SetWindowsMenuSelector, menu);
+
+    /// <summary>Sets the menu of the system's services.</summary>
+    public static void SetServicesMenu(IntPtr menu) => NSObject.Send(Shared, SetServicesMenuSelector, menu);
 
     /// <summary>Sets the application's delegate (not retained).</summary>
     public static void SetDelegate(IntPtr applicationDelegate) =>

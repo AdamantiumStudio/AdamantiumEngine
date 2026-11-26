@@ -51,6 +51,14 @@ public class PdfDocumentWriterTests
     }
 
     [Test]
+    public void TextStrokedAsWellAsFilled_IsRenderingMode2_AndBackTo0()
+    {
+        var content = Encoding.ASCII.GetString(new PdfContentBuilder().StrokesText(true).StrokesText(false).ToContent());
+
+        Assert.That(content, Is.EqualTo("2 Tr\n0 Tr\n"));
+    }
+
+    [Test]
     public void Information_IsWritten_AndTheFileHasAnIdentifier()
     {
         var created = new DateTimeOffset(2026, 11, 24, 21, 0, 0, TimeSpan.FromHours(3));

@@ -207,6 +207,10 @@ public sealed class PdfContentBuilder
 
     public PdfContentBuilder EndPath() => Operator("n");
 
+    /// <summary>Whether the glyphs that follow are stroked as well as filled (ISO 32000-2, 9.3.6: rendering mode 2 or
+    /// 0), with the line width and stroke color of the graphics state - a thickened face.</summary>
+    public PdfContentBuilder StrokesText(bool stroked) => Operator("Tr", stroked ? 2 : 0);
+
     /// <summary>Begins text (ISO 32000-2, 9.4) set in <paramref name="font"/>, one unit to the em: the size is in the
     /// matrix of each <see cref="Glyph"/>. Ended by <see cref="EndText"/>; paths are not drawn between the two.</summary>
     public PdfContentBuilder BeginText(PdfEmbeddedFont font)

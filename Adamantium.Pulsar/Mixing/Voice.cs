@@ -3,7 +3,10 @@ namespace Adamantium.Pulsar.Mixing;
 /// <summary>A sound being played.</summary>
 internal struct Voice
 {
+    /// <summary>What it plays, or null for a <see cref="Stream"/>.</summary>
     public SoundData Sound;
+
+    public SoundStream Stream;
     public int Bus;
     public int Priority;
     public bool Loops;
@@ -12,8 +15,14 @@ internal struct Voice
     public bool Started;
     public bool Ended;
 
+    /// <summary>Its stream was not read far enough.</summary>
+    public bool Starved;
+
     /// <summary>Whether it is among those heard.</summary>
     public bool Selected;
+
+    /// <summary>What it begins by is there: one answer for a block, or it would begin unheard.</summary>
+    public bool IsReady;
 
     public float Pitch;
     public float Pan;
@@ -27,8 +36,23 @@ internal struct Voice
     /// <summary>It went round its loop: what is before the loop's start is its end.</summary>
     public bool HasLooped;
 
+    /// <summary>Placed in space: its <see cref="VoiceSpace"/> is in the mixer's, at its slot.</summary>
+    public bool IsSpatial;
+
+    /// <summary>Of its place, for this block: how loud, and where across.</summary>
+    public float SpaceGain;
+
+    public float SpacePan;
+
+    /// <summary>What its pitch is shifted by; 1 for one not in space.</summary>
+    public Ramp Doppler;
+
     /// <summary>The gains its last block ended with.</summary>
     public float Left;
 
     public float Right;
+
+    public readonly AudioFormat Format => Stream?.Format ?? Sound.Format;
+
+    public readonly float[] Downmix => Stream != null ? Stream.Downmix : Sound.Downmix;
 }

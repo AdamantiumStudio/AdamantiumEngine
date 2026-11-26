@@ -14,6 +14,7 @@ public class GamepadHubTests
     private FakeGamepadBackend backend;
     private EventAggregator events;
     private GamepadHub hub;
+    private ManualClock clock;
     private List<GamepadPayload> connected;
     private List<GamepadPayload> disconnected;
 
@@ -22,7 +23,8 @@ public class GamepadHubTests
     {
         backend = new FakeGamepadBackend();
         events = new EventAggregator();
-        hub = new GamepadHub(backend, events);
+        clock = new ManualClock();
+        hub = new GamepadHub(backend, events, clock);
         connected = [];
         disconnected = [];
         events.GetEvent<GamepadConnectedEvent>().Subscribe(connected.Add);
@@ -145,5 +147,66 @@ public class GamepadHubTests
         hub.Update();
 
         Assert.That(hub.IsButtonDown(0, GamepadButton.None), Is.False);
+    }
+
+    [Test]
+    public void AnArrivingGamepad_BuzzesLightly_ThenStops()
+    {
+        var gamepad = new FakeGamepad();
+        backend.Connected.Add(gamepad);
+
+        hub.Update();
+        Assert.That(gamepad.LowFrequency, Is.EqualTo(GamepadHub.GreetingStrength));
+        Assert.That(gamepad.HighFrequency, Is.EqualTo(GamepadHub.GreetingStrength));
+        Assert.That(gamepad.LowSharpness, Is.EqualTo(GamepadHub.GreetingSharpness));
+
+        clock.Advance(GamepadHub.GreetingLength / 2);
+        hub.Update();
+        Assert.That(gamepad.VibrationsSet, Is.EqualTo(1), "still buzzing");
+
+        clock.Advance(GamepadHub.GreetingLength);
+        hub.Update();
+        hub.Update();
+        Assert.That(gamepad.LowFrequency, Is.Zero);
+        Assert.That(gamepad.HighFrequency, Is.Zero);
+        Assert.That(gamepad.VibrationsSet, Is.EqualTo(2), "stopped once");
+        Assert.That(gamepad.LowSharpness, Is.EqualTo(Gamepad.DeepSharpness), "each motor as fine as its own again");
+    }
+
+    [Test]
+    public void AGamepadThatStays_IsGreetedOnce()
+    {
+        var gamepad = new FakeGamepad();
+        backend.Connected.Add(gamepad);
+        hub.Update();
+        clock.Advance(GamepadHub.GreetingLength * 2);
+        hub.Update();
+
+        for (var i = 0; i < 10; i++)
+        {
+            clock.Advance(GamepadHub.GreetingLength);
+            hub.Update();
+        }
+
+        Assert.That(gamepad.VibrationsSet, Is.EqualTo(2));
+    }
+
+    [Test]
+    public void AGamepadThatComesBack_IsGreetedAgain()
+    {
+        var gamepad = new FakeGamepad();
+        backend.Connected.Add(gamepad);
+        hub.Update();
+        backend.Connected.Clear();
+        hub.Update();
+        clock.Advance(GamepadHub.GreetingLength * 2);
+        hub.Update();
+        Assert.That(gamepad.VibrationsSet, Is.EqualTo(1), "gone before it was stopped: nothing more is told to it");
+
+        backend.Connected.Add(gamepad);
+        hub.Update();
+
+        Assert.That(gamepad.VibrationsSet, Is.EqualTo(2));
+        Assert.That(gamepad.LowFrequency, Is.EqualTo(GamepadHub.GreetingStrength));
     }
 }
