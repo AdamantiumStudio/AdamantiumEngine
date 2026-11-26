@@ -36,6 +36,17 @@ internal struct Voice
     /// <summary>It went round its loop: what is before the loop's start is its end.</summary>
     public bool HasLooped;
 
+    /// <summary>Placed in space: its <see cref="VoiceSpace"/> is in the mixer's, at its slot.</summary>
+    public bool IsSpatial;
+
+    /// <summary>Of its place, for this block: how loud, and where across.</summary>
+    public float SpaceGain;
+
+    public float SpacePan;
+
+    /// <summary>What its pitch is shifted by; 1 for one not in space.</summary>
+    public Ramp Doppler;
+
     /// <summary>The gains its last block ended with.</summary>
     public float Left;
 

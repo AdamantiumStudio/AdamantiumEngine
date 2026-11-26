@@ -33,6 +33,11 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
         ArgumentOutOfRangeException.ThrowIfLessThan(settings.Voices, 1, nameof(settings));
         ArgumentOutOfRangeException.ThrowIfLessThan(settings.AudibleVoices, 1, nameof(settings));
         ArgumentOutOfRangeException.ThrowIfLessThan(settings.Buses, 1, nameof(settings));
+        if (!(settings.SpeedOfSound > 0 && float.IsFinite(settings.SpeedOfSound)))
+        {
+            throw new ArgumentOutOfRangeException(nameof(settings), settings.SpeedOfSound, "A speed of sound is more than 0.");
+        }
+
         _voices = new SlotTable(settings.Voices);
         _buses = new SlotTable(settings.Buses);
         _busParents = new int[settings.Buses];
@@ -106,6 +111,7 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
         CheckPitch(settings.Pitch);
         CheckPan(settings.Pan);
         ArgumentOutOfRangeException.ThrowIfLessThan(settings.From, TimeSpan.Zero, nameof(settings));
+        settings.Spatial?.Check();
         var fade = FramesIn(settings.FadeIn);
         lock (_lock)
         {
@@ -134,7 +140,9 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
                 Bus = bus,
                 Sound = data as SoundData,
                 Stream = stream,
-                Settings = settings,
+                Settings = settings.Spatial is { } spatial
+                    ? settings with { Spatial = spatial with { Place = Directed(spatial.Place) } }
+                    : settings,
                 Frames = fade,
                 From = from,
             });
@@ -168,6 +176,49 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
     {
         CheckPan(pan);
         PostTo(voice, new Command { Kind = CommandKind.SetVoicePan, Value = pan });
+    }
+
+    /// <summary>Moves a voice played with <see cref="VoiceSettings.Spatial"/>; one played without is not placed.</summary>
+    public void SetPlace(VoiceId voice, in VoicePlace place)
+    {
+        CheckPlace(place);
+        PostTo(voice, new Command { Kind = CommandKind.SetVoicePlace, Place = Directed(place) });
+    }
+
+    /// <summary>Who hears the voices placed in space; until said, one with +X on the right, still.</summary>
+    public void SetListener(in Listener listener)
+    {
+        if (!IsFinite(listener.Right) || !IsFinite(listener.Velocity) || listener.Right == Vector3F.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(listener), listener, "A listener has a right, and moves finitely.");
+        }
+
+        lock (_lock)
+        {
+            Post(new Command
+            {
+                Kind = CommandKind.SetListener, Listener = listener with { Right = UnitOf(listener.Right) },
+            });
+        }
+    }
+
+    internal static void CheckPlace(in VoicePlace place)
+    {
+        if (!IsFinite(place.Position) || !IsFinite(place.Velocity) || !IsFinite(place.Facing))
+        {
+            throw new ArgumentOutOfRangeException(nameof(place), place, "A place is of finite numbers.");
+        }
+    }
+
+    /// <summary>Its facing of length 1, or none: the mixer divides by no length.</summary>
+    internal static VoicePlace Directed(in VoicePlace place) =>
+        place.Facing == Vector3F.Zero ? place : place with { Facing = UnitOf(place.Facing) };
+
+    // In double: in float the shortest square to 0, and the longest to infinity.
+    private static Vector3F UnitOf(Vector3F vector)
+    {
+        var length = Math.Sqrt((double)vector.X * vector.X + (double)vector.Y * vector.Y + (double)vector.Z * vector.Z);
+        return new Vector3F((float)(vector.X / length), (float)(vector.Y / length), (float)(vector.Z / length));
     }
 
     /// <summary>Whether it has not ended: paused, unheard and yet to begin are playing too.</summary>
@@ -310,6 +361,9 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
             throw new ArgumentOutOfRangeException(nameof(pitch), pitch, "A pitch is from 0.01 to 100.");
         }
     }
+
+    private static bool IsFinite(Vector3F vector) =>
+        float.IsFinite(vector.X) && float.IsFinite(vector.Y) && float.IsFinite(vector.Z);
 
     private static void CheckPan(float pan)
     {

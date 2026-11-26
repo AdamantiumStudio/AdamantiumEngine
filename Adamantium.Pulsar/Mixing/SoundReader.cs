@@ -10,7 +10,7 @@ internal static class SoundReader
 
     /// <summary>How far the sound goes in a frame of the mixer.</summary>
     public static long StepOf(in Voice voice, int sampleRate) =>
-        Math.Max(1, (long)((double)voice.Pitch * voice.Format.SampleRate / sampleRate * One));
+        Math.Max(1, (long)((double)voice.Pitch * voice.Doppler.Value * voice.Format.SampleRate / sampleRate * One));
 
     /// <summary>Goes on by <paramref name="frames"/> unread; false where the sound ended.</summary>
     public static bool Skip(ref Voice voice, long step, int frames)

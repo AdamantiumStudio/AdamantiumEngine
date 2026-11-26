@@ -10,4 +10,7 @@ public sealed class AudioEngineSettings
 
     /// <summary>How many buses there can be, the master among them.</summary>
     public int Buses { get; init; } = 64;
+
+    /// <summary>In metres a second, for the Doppler shift: air's.</summary>
+    public float SpeedOfSound { get; init; } = 343;
 }

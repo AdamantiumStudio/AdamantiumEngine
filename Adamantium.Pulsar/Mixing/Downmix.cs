@@ -54,6 +54,23 @@ internal static class Downmix
         }
     }
 
+    /// <summary>In place: the first <paramref name="frames"/> frames of one channel, from those of two or more, for a
+    /// voice placed in space. Each side's share is half.</summary>
+    public static void ApplyToOne(Span<float> samples, int frames, int channels, float[] gains)
+    {
+        for (var frame = 0; frame < frames; frame++)
+        {
+            var sum = 0f;
+            var source = samples.Slice(frame * channels, channels);
+            for (var channel = 0; channel < channels; channel++)
+            {
+                sum += source[channel] * (gains == null ? 1 : gains[channel * 2] + gains[channel * 2 + 1]);
+            }
+
+            samples[frame] = sum * 0.5f;
+        }
+    }
+
     private static (float Left, float Right) GainsOf(Speakers speaker) => speaker switch
     {
         Speakers.FrontLeft or Speakers.TopFrontLeft => (1, 0),

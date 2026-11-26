@@ -14,9 +14,15 @@ internal sealed class Mixer
     private const float LeastHeard = 0.0001f;
     // A voice heard already is kept over one as loud.
     private const float KeepHeard = 1.25f;
+    // 50 ms: how fast a Doppler shift follows a place, not stepping a block at a time.
+    private const int DopplerFrames = 2400;
+    private const float DegreesPerRadian = 180 / MathF.PI;
 
     private readonly int _sampleRate = AudioFormat.Default.SampleRate;
+    private readonly float _speedOfSound;
+    private Listener _listener = new();
     private readonly Voice[] _voices;
+    private readonly VoiceSpace[] _spaces;
     private readonly Bus[] _buses;
     private readonly int[] _active;
     private readonly HighestRanked _loudest;
@@ -38,7 +44,9 @@ internal sealed class Mixer
     public Mixer(AudioEngineSettings settings, SoundStreamer streamer, SlotReturns endedVoices, SlotReturns removedBuses)
     {
         _streamer = streamer;
+        _speedOfSound = settings.SpeedOfSound;
         _voices = new Voice[settings.Voices];
+        _spaces = new VoiceSpace[settings.Voices];
         _active = new int[settings.Voices];
         _loudest = new HighestRanked(Math.Min(settings.AudibleVoices, settings.Voices));
         _positions = new int[settings.Voices];
@@ -87,6 +95,12 @@ internal sealed class Mixer
                 break;
             case CommandKind.SetVoicePan:
                 _voices[command.Slot].Pan = command.Value;
+                break;
+            case CommandKind.SetVoicePlace:
+                _spaces[command.Slot].Place = command.Place;
+                break;
+            case CommandKind.SetListener:
+                _listener = command.Listener;
                 break;
             case CommandKind.AddBus:
                 AddBus(command.Slot, command.Bus);
@@ -180,7 +194,15 @@ internal sealed class Mixer
             StartFrame = Math.Max(0, settings.StartFrame),
             // A stream begins there itself.
             Position = command.Stream == null ? (long)command.From << 32 : 0,
+            IsSpatial = settings.Spatial.HasValue,
         };
+        _spaces[command.Slot] = new VoiceSpace
+        {
+            Settings = settings.Spatial ?? default,
+            Place = settings.Spatial?.Place ?? default,
+        };
+        // Its first block at its place's pitch.
+        voice.Doppler = new Ramp(voice.IsSpatial ? Locate(ref voice, _spaces[command.Slot]) : 1);
         voice.Fade.Set(1, command.Frames);
         _active[_activeCount++] = command.Slot;
     }
@@ -230,7 +252,17 @@ internal sealed class Mixer
         {
             ref var voice = ref _voices[_active[index]];
             ref var bus = ref _buses[voice.Bus];
-            var loudness = voice.Volume.Highest * voice.Fade.Highest * bus.Loudness * (voice.Selected ? KeepHeard : 1);
+            if (voice.IsSpatial)
+            {
+                var doppler = Locate(ref voice, _spaces[_active[index]]);
+                if (doppler != voice.Doppler.Target)
+                {
+                    voice.Doppler.Set(doppler, DopplerFrames);
+                }
+            }
+
+            var loudness = voice.Volume.Highest * voice.Fade.Highest * bus.Loudness * (voice.Selected ? KeepHeard : 1) *
+                (voice.IsSpatial ? voice.SpaceGain : 1);
             voice.IsReady = voice.Stream == null || voice.Stream.IsReady;
             voice.Selected = loudness > LeastHeard && bus.IsSolo && !voice.Paused && !bus.IsPaused &&
                 (voice.Started || (voice.StartFrame < _frame + BlockFrames && voice.IsReady));
@@ -283,6 +315,10 @@ internal sealed class Mixer
 
         voice.Volume.Advance(frames);
         voice.Fade.Advance(frames);
+        if (voice.IsSpatial)
+        {
+            voice.Doppler.Advance(frames);
+        }
         var left = voice.Left;
         var right = voice.Right;
         SetGains(ref voice);
@@ -309,7 +345,12 @@ internal sealed class Mixer
                 voice.Starved = starved;
             }
 
-            if (voice.Downmix is { } downmix)
+            if (voice.IsSpatial && channels > 1)
+            {
+                Downmix.ApplyToOne(read, got, channels, voice.Downmix);
+                channels = 1;
+            }
+            else if (voice.Downmix is { } downmix)
             {
                 Downmix.Apply(read, got, channels, downmix);
                 channels = Channels;
@@ -324,12 +365,48 @@ internal sealed class Mixer
         voice.Ended |= voice.Stopping && !voice.Fade.IsMoving;
     }
 
+    // Where it is from the listener: how loud, where across, and the Doppler shift.
+    private float Locate(ref Voice voice, in VoiceSpace space)
+    {
+        var position = space.Place.Position;
+        var distance = position.Length();
+        voice.SpaceGain = space.Settings.Attenuation.GainAt(distance);
+        voice.SpacePan = 0;
+        if (!(distance > 1e-6f))
+        {
+            return 1;
+        }
+
+        var toVoice = position / distance;
+        // The listener's right and the facing are of length 1, or the facing none.
+        voice.SpacePan = Math.Clamp(Vector3F.Dot(toVoice, _listener.Right), -1, 1);
+        var facing = space.Place.Facing;
+        if (facing != Vector3F.Zero)
+        {
+            var cosine = Math.Clamp(-Vector3F.Dot(toVoice, facing), -1, 1);
+            voice.SpaceGain *= space.Settings.Cone.GainAt(MathF.Acos(cosine) * DegreesPerRadian);
+        }
+
+        // Toward each other along the line between, it is higher. A third to three times at most: what is faster
+        // than half of sound's speed is a jump, not a move.
+        var scale = space.Settings.DopplerScale;
+        var most = _speedOfSound / 2;
+        var listener = Math.Clamp(Vector3F.Dot(_listener.Velocity, toVoice) * scale, -most, most);
+        var source = Math.Clamp(Vector3F.Dot(space.Place.Velocity, toVoice) * scale, -most, most);
+        return (_speedOfSound + listener) / (_speedOfSound + source);
+    }
+
     private static void SetGains(ref Voice voice)
     {
         var gain = voice.Selected ? voice.Volume.Value * voice.Fade.Value : 0;
-        if (voice.Format.Channels == 1)
+        if (voice.IsSpatial)
         {
-            var angle = (voice.Pan + 1) * (MathF.PI / 4);
+            gain *= voice.SpaceGain;
+        }
+
+        if (voice.Format.Channels == 1 || voice.IsSpatial)
+        {
+            var angle = ((voice.IsSpatial ? voice.SpacePan : voice.Pan) + 1) * (MathF.PI / 4);
             voice.Left = gain * MathF.Cos(angle);
             voice.Right = gain * MathF.Sin(angle);
         }
