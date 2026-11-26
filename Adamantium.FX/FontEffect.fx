@@ -178,15 +178,21 @@ float TextClipDistance(float2 p, float2 halfSize, float4 radii)
     return min(max(q.x, q.y), 0.0) + length(max(q, float2(0.0, 0.0))) - r;
 }
 
-float ClipCoverage(float2 fragment, float4 box, float4 radii)
+// How much of the pixel lies inside an edge at the distance d. A pixel wide, as the UI's clips are: wider, it faded the
+// first row inside a straight side.
+float ClipEdge(float d)
+{
+    return saturate(0.5 - d / max(length(float2(ddx(d), ddy(d))), 1e-5));
+}
+
+float ClipCoverage(float2 fragment,float4 box, float4 radii)
 {
     if (box.z <= 0.0) return 1.0;
     float2 halfSize = max(box.zw * 0.5, float2(1.0, 1.0));
     float2 local = fragment + TargetOrigin - (box.xy + halfSize);
     float lim = min(halfSize.x, halfSize.y);
     float d = TextClipDistance(local, halfSize, min(radii, float4(lim, lim, lim, lim)));
-    float aa = fwidth(d) + 1e-4;
-    return 1.0 - smoothstep(-aa, aa, d);
+    return ClipEdge(d);
 }
 
 // The batch reads its clip from the transform table: row 0 of the slot's matrix is the box, row 1 the radii, and
@@ -229,8 +235,7 @@ float EffectClipCoverage(float3 point, float4 box, float4 radii)
     float2 local = point.xy / point.z - (box.xy + halfSize);
     float lim = min(halfSize.x, halfSize.y);
     float d = TextClipDistance(local, halfSize, min(radii, float4(lim, lim, lim, lim)));
-    float aa = fwidth(d) + 1e-4;
-    return 1.0 - smoothstep(-aa, aa, d);
+    return ClipEdge(d);
 }
 
 // A glyph's effects, read from the transform table as GlyphEffect.ToSlot writes them: from the slot `head`, each slot

@@ -9,4 +9,7 @@ public static class ComponentGroups
 
     /// <summary>What holds one body to another.</summary>
     public const string Joints = "Joints";
+
+    /// <summary>What the player holds: the gamepads' vibration.</summary>
+    public const string Input = "Input";
 }

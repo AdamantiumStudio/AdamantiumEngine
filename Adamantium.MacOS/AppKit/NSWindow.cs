@@ -35,6 +35,8 @@ public static unsafe class NSWindow
     private static readonly IntPtr BackingScaleFactorSelector = ObjCRuntime.RegisterSelector("backingScaleFactor");
     private static readonly IntPtr FrameSelector = ObjCRuntime.RegisterSelector("frame");
     private static readonly IntPtr SetFrameSelector = ObjCRuntime.RegisterSelector("setFrame:display:");
+    private static readonly IntPtr NumberAtPointSelector =
+        ObjCRuntime.RegisterSelector("windowNumberAtPoint:belowWindowWithWindowNumber:");
     private static readonly IntPtr ContentRectForFrameSelector = ObjCRuntime.RegisterSelector("contentRectForFrameRect:");
     private static readonly IntPtr FrameRectForContentSelector = ObjCRuntime.RegisterSelector("frameRectForContentRect:");
     private static readonly IntPtr ScreenSelector = ObjCRuntime.RegisterSelector("screen");
@@ -162,6 +164,12 @@ public static unsafe class NSWindow
 
     /// <summary>The window server's number for the window.</summary>
     public static nint NumberOf(IntPtr window) => NSObject.SendForInteger(window, WindowNumberSelector);
+
+    /// <summary>The number of the window on top at a point of the desktop, any application's, that would take a press
+    /// there; 0 for none.</summary>
+    public static nint NumberAt(CGPoint point) =>
+        ((delegate* unmanaged<IntPtr, IntPtr, CGPoint, nint, nint>)ObjCRuntime.MessageSend)(Class, NumberAtPointSelector,
+            point, 0);
 
     /// <summary>Makes the window see-through where nothing is drawn: not opaque, of no background color, without a
     /// shadow.</summary>

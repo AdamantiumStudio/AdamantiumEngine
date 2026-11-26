@@ -59,6 +59,8 @@ public class InputService : EntityService
     private Camera orbitCamera;
     private WorldPosition orbitPivot;
     private Vector2F orbitedFrom;
+    private WorldPosition orbitedTo;
+    private QuaternionF orbitedRotation;
     private bool orbitingByPan;
     private const double SteeringQuietSeconds = 0.3;
     private Camera _steered;
@@ -393,7 +395,8 @@ public class InputService : EntityService
     // before the drag moved, or the middle of the view where nothing was - out in space, say. The point stays until the
     // chord is let go. A camera that cannot orbit - on a host, following - turns about itself, as the look would.
     // A pan of fingers with Alt does the same about what is under the pointer, which it does not move: the point stays
-    // until Alt is let go or the pointer is moved, as one pan ending and the next beginning is not told here.
+    // until Alt is let go, the pointer is moved or the camera is flown, as one pan ending and the next beginning is not
+    // told here.
     private void Orbit(Camera camera)
     {
         var byPan = !orbit.IsHeld && orbitPan.IsHeld;
@@ -425,7 +428,8 @@ public class InputService : EntityService
         }
 
         var at = input.RelativePosition;
-        if (!orbiting || camera != orbitCamera || byPan != orbitingByPan || byPan && at != orbitedFrom)
+        if (!orbiting || camera != orbitCamera || byPan != orbitingByPan ||
+            byPan && (at != orbitedFrom || camera.WorldPosition != orbitedTo || HasTurned(camera.Rotation, orbitedRotation)))
         {
             orbitPivot = PointUnder(camera, at);
             orbitCamera = camera;
@@ -437,8 +441,14 @@ public class InputService : EntityService
         if (action.IsDown)
         {
             camera.Orbit(orbitPivot, pitch, yaw, observatory.PointerOutput?.OrbitStyle ?? CameraOrbitStyle.Turntable);
+            orbitedTo = camera.WorldPosition;
+            orbitedRotation = camera.Rotation;
         }
     }
+
+    // More than what a rotation wears off as it is normalized.
+    private static bool HasTurned(QuaternionF rotation, QuaternionF from) =>
+        1 - MathF.Abs(QuaternionF.Dot(rotation, from)) > 1e-6f;
 
     private double DepthUnder(Camera camera, Vector2F pixel) =>
         HitUnder(camera, pixel, out var fromCamera)

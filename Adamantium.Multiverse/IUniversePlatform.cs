@@ -14,6 +14,9 @@ namespace Adamantium.Multiverse
 
         bool HasOutputs { get; }
 
+        /// <summary>The gamepads of the machine, polled once a frame.</summary>
+        Input.GamepadHub Gamepads { get; }
+
         void Run(CancellationToken token);
 
         /// <summary>
