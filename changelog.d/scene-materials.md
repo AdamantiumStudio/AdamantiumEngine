@@ -12,7 +12,9 @@
   as an `Environment` section (left out while it is as a new scene's):
   - `Sky` - `SkyKind.None` (as before), `Studio`, `Stars` or `Even` - and `SkyStrength`: a sky made by the engine itself,
     drawn behind the scene. Physical surfaces take their light and reflections from it: what a matt surface gathers
-    round its normal and what a surface of each roughness mirrors, made once for the sky; with a multiple-scattering
+    round its normal and what a surface of each roughness mirrors, made once for the sky. The sky is drawn first in the
+    frame by a `SceneBackgroundProcessor` the scene's processor attaches beside itself, so an editor's ground grid lies
+    over it (`ToolsUnderlayProcessor.Order` is now one after it); with a multiple-scattering
     term, a white surface under an even sky sends back all the light it gets, metal or paint. Simple surfaces keep the
     ambient light.
   - `HighDynamicRange`: the scene lit in linear light without a ceiling, into a half-float frame of its own, then brought

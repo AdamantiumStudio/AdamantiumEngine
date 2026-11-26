@@ -68,6 +68,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private const uint SkyIrradianceWidth = 64;
     private const uint SkyReflectionWidth = 256;
     private const int SkyReflectionLevels = 6;
+    private RenderingService attachedTo;
+    private SceneBackgroundProcessor background;
     private bool linearFrame;
     private float exposure;
     private float glow;
@@ -211,8 +213,19 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         base.CreateDeviceResources();
     }
 
+    protected override void OnAttached()
+    {
+        base.OnAttached();
+        attachedTo = AssociatedService;
+        background = new SceneBackgroundProcessor(this);
+        attachedTo.AttachProcessor(background);
+    }
+
     protected override void OnDetached()
     {
+        attachedTo?.DetachProcessor(background);
+        background = null;
+        attachedTo = null;
         ReleaseDeviceResources();
         base.OnDetached();
     }
@@ -305,11 +318,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             try
             {
                 DrawGroups(groupsDrawn);
-                if (sky != SkyKind.None && skyMade == sky)
-                {
-                    DrawSkyBackground();
-                }
-
                 // The lines go with the opaque surfaces: what is see-through over them dims them as it does those. A
                 // see-through surface's own wire goes over it.
                 DrawLines(paletteAddress);
@@ -398,6 +406,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var withSky = sky != SkyKind.None && skyMade == sky;
         parameters["Sky"].SetValue(withSky ? (uint)sky : 0u);
         parameters["SkyStrength"].SetValue(skyStrength);
+        parameters["SkyExposure"].SetValue(MathF.Pow(2f, exposure));
         if (withSky)
         {
             parameters["WorldFromView"].SetValue(Matrix4x4F.Invert(camera.ViewMatrix));
@@ -495,12 +504,19 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         skyMade = null;
     }
 
-    // The sky behind the scene, where nothing was drawn: at the far end of the depth, neither writing it nor blended.
-    private void DrawSkyBackground()
+    /// <summary>The sky over the whole frame, before anything else is drawn in it: its
+    /// <see cref="SceneBackgroundProcessor"/> calls it. In a high dynamic range frame it goes through the same tone curve
+    /// as the scene. Nothing without a sky.</summary>
+    internal void DrawBackground()
     {
-        var device = GraphicsDevice;
-        effect.Parameters["SkyFromClip"].SetValue(Matrix4x4F.Invert(ActiveCamera.ViewProjectionMatrix));
-        DrawOverTarget(effect.ForwardPlusSkyBackgroundPass, ColorBlendEquations.Opaque, testsDepth: true);
+        var camera = Window?.Camera;
+        if (!prepared || camera == null || sky == SkyKind.None || skyMade != sky)
+        {
+            return;
+        }
+
+        effect.Parameters["SkyFromClip"].SetValue(Matrix4x4F.Invert(camera.ViewProjectionMatrix));
+        DrawOverTarget(effect.ForwardPlusSkyBackgroundPass, ColorBlendEquations.Opaque);
     }
 
     // A map of four cascades, each the light's resolution square: made anew when that changes.
@@ -1235,8 +1251,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         DrawOverTarget(effect.ForwardPlusWeightedCompositePass, ColorBlendEquations.AlphaBlend);
     }
 
-    // One triangle over the whole target by the pass, blended so, never writing depth; tested against it when asked.
-    private void DrawOverTarget(IEffectPass pass, ColorBlendEquationEXT blendEquation, bool testsDepth = false)
+    // One triangle over the whole target by the pass, blended so, neither tested nor writing depth.
+    private void DrawOverTarget(IEffectPass pass, ColorBlendEquationEXT blendEquation)
     {
         var device = GraphicsDevice;
         var blend = device.ColorBlendEquation;
@@ -1251,7 +1267,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         device.PrimitiveTopology = PrimitiveTopology.TriangleList;
         device.PolygonMode = PolygonMode.Fill;
         device.CullMode = CullModeFlagBits.None;
-        device.DepthTestEnabled = testsDepth;
+        device.DepthTestEnabled = false;
         device.DepthWriteEnable = false;
         try
         {

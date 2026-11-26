@@ -121,7 +121,7 @@ struct SKY_PIXEL
     float2 clip : TEXCOORD0;
 };
 
-// One triangle over the whole frame at the far end of its depth: only where nothing was drawn passes.
+// One triangle over the whole frame, before anything else is drawn in it.
 [shader("vertex")]
 SKY_PIXEL Sky_VS(uint vertexId : SV_VertexID)
 {
@@ -130,15 +130,6 @@ SKY_PIXEL Sky_VS(uint vertexId : SV_VertexID)
     output.position = float4(corner, 1.0f, 1.0f);
     output.clip = corner;
     return output;
-}
-
-[shader("fragment")]
-float4 SkyBackground_PS(SKY_PIXEL input) : SV_TARGET
-{
-    float4 far = mul(float4(input.clip, 1.0f, 1.0f), SkyFromClip);
-    float4 near = mul(float4(input.clip, 0.0f, 1.0f), SkyFromClip);
-    float3 direction = normalize(far.xyz / far.w - near.xyz / near.w);
-    return float4(PhysicalInFrame(SkyLight(direction, false) * SkyStrength), 1.0f);
 }
 
 float2 Hammersley(uint i, uint count)
@@ -342,6 +333,21 @@ float4 ToneMap_PS(float4 position : SV_POSITION) : SV_TARGET
     }
 
     return float4(Srgb(Agx(light * ToneMapping.x)), saturate(scene.a));
+}
+
+// What the light is multiplied by before the tone curve, for the sky drawn straight into the screen's frame.
+float SkyExposure;
+
+// The sky along the pixel's direction, as the screen shows it: through the tone curve when the scene's frame is linear,
+// as the scene over it will be.
+[shader("fragment")]
+float4 SkyBackground_PS(SKY_PIXEL input) : SV_TARGET
+{
+    float4 far = mul(float4(input.clip, 1.0f, 1.0f), SkyFromClip);
+    float4 near = mul(float4(input.clip, 0.0f, 1.0f), SkyFromClip);
+    float3 direction = normalize(far.xyz / far.w - near.xyz / near.w);
+    float3 light = SkyLight(direction, false) * SkyStrength;
+    return float4(LinearFrame != 0 ? Srgb(Agx(light * SkyExposure)) : Srgb(light), 1.0f);
 }
 
 technique ForwardPlus

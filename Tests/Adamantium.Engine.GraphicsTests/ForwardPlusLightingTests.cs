@@ -16,6 +16,7 @@ using engine::Adamantium.Engine.EntityServices;
 using engine::Adamantium.Engine.Managers;
 using engine::Adamantium.Engine.Templates;
 using engine::Adamantium.Engine.Templates.Lights;
+using engine::Adamantium.Engine.Tools;
 
 namespace Adamantium.Engine.GraphicsTests;
 
@@ -28,9 +29,12 @@ public class ForwardPlusLightingTests
     private const int Frames = 4;
     // How far apart two pixels of one flat face may be, in 8-bit levels: the specular term moves a little with the eye.
     private const int EvenWithin = 4;
+    // The rows of the ground's far edge, in this view, where it fades out.
+    private const int FloorFade = 16;
 
     private Universe _universe;
     private OffscreenOutput _output;
+    private RenderingService _rendering;
 
     [SetUp]
     public void MakeUniverse()
@@ -49,6 +53,7 @@ public class ForwardPlusLightingTests
         RunFrame();
         var rendering = _universe.CreateRenderService<RenderingService>(_output);
         rendering.AttachProcessor(new ForwardPlusRenderingProcessor());
+        _rendering = rendering;
     }
 
     [TearDown]
@@ -328,6 +333,68 @@ public class ForwardPlusLightingTests
         {
             Assert.That(top, Is.GreaterThan(150), "the sky above");
             Assert.That(bottom, Is.LessThan(top - 40), "the floor below, darker");
+        });
+    }
+
+    // The editor's ground grid lies over the sky: below the horizon its floor all along, no speck of the sky through it
+    // where the floor runs past the far plane - in a high dynamic range frame as in a plain one.
+    [TestCase(false)]
+    [TestCase(true)]
+    public void TheGroundGrid_LiesOverTheSky_WithNoSpeckAtTheHorizon(bool highDynamicRange)
+    {
+        var eye = _output.Camera;
+        // So near that the far floor's depth, pushed back a little, comes to the far end itself - where nothing was drawn.
+        eye.ZNear = 0.0005f;
+        eye.Owner.Transform.Position = new WorldPosition(0, -2, 0);
+        eye.SetFreeLookAt(new WorldPosition(0, -1.6, 10));
+        var scene = _universe.EntityWorld.MainScene;
+        scene.Environment.HighDynamicRange = highDynamicRange;
+        _universe.Satellites.Add(new engine::Adamantium.Engine.Observatory(_universe, _universe.EntityWorld));
+        var tools = _universe.EntityWorld.CreateService<ToolsService>(_universe.EntityWorld);
+        tools.AttachProcessor(new GroundGrid());
+        _rendering.AttachProcessor(new ToolsOverlayProcessor(tools));
+        byte[] Frame(SkyKind sky)
+        {
+            scene.Environment.Sky = sky;
+            for (var frame = 0; frame < Frames; frame++)
+            {
+                RunFrame();
+            }
+
+            return Pixels(_output.ReadFrame(), $"forward-plus-sky-under-grid-{sky}-{highDynamicRange}.png");
+        }
+
+        var bare = Frame(SkyKind.None);
+        var starry = Frame(SkyKind.Stars);
+        // Wherever the floor shows without a sky, it shows the same with one - but along its far edge, where it fades out
+        // and what is behind shows through it, as it should.
+        bool IsFloor(int pixel) => bare[pixel] + bare[pixel + 1] + bare[pixel + 2] >= 30;
+        var farEdge = 0;
+        while (farEdge < (int)Size && !IsFloor((farEdge * (int)Size + (int)Size / 2) * 4))
+        {
+            farEdge++;
+        }
+
+        var floorPixels = 0;
+        var differing = 0;
+        for (var pixel = (farEdge + FloorFade) * (int)Size * 4; pixel < bare.Length; pixel += 4)
+        {
+            if (!IsFloor(pixel))
+            {
+                continue;
+            }
+
+            floorPixels++;
+            if (Math.Abs(bare[pixel] - starry[pixel]) > 6 || Math.Abs(bare[pixel + 2] - starry[pixel + 2]) > 6)
+            {
+                differing++;
+            }
+        }
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(floorPixels, Is.GreaterThan(Size * Size / 8), "the floor fills the lower part");
+            Assert.That(differing, Is.EqualTo(0), $"floor pixels the sky shows through, of {floorPixels}");
         });
     }
 
