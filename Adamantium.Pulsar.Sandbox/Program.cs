@@ -6,6 +6,7 @@ using Adamantium.Pulsar.Sandbox;
 // Pulsar.Sandbox tone [seconds]                      a quiet tone, to hear
 // Pulsar.Sandbox play file [stream]                  a WAV or FLAC file, to hear; read while it plays
 // Pulsar.Sandbox mix                                 what mixing costs
+// Pulsar.Sandbox fly [seconds]                       a tone flying past, left to right, to hear it placed in space
 // Pulsar.Sandbox measure [seconds] [buffers, ms] [loads]   silence, and how often it broke off
 CultureInfo.CurrentCulture = CultureInfo.InvariantCulture;
 var command = args.Length > 0 ? args[0] : "tone";
@@ -54,6 +55,12 @@ if (command == "tone")
     Thread.Sleep(TimeSpan.FromSeconds(seconds));
     Console.WriteLine($"{output.State} {output.DeviceProblem}");
     Console.WriteLine(output.Statistics);
+    return;
+}
+
+if (command == "fly")
+{
+    FlyBy.Play(seconds);
     return;
 }
 

@@ -27,4 +27,7 @@ public readonly record struct VoiceSettings()
     public long StartFrame { get; init; }
 
     public TimeSpan FadeIn { get; init; }
+
+    /// <summary>Where in space it is heard from; null for a voice heard as it is, as the interface's.</summary>
+    public SpatialSettings? Spatial { get; init; }
 }

@@ -33,6 +33,11 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
         ArgumentOutOfRangeException.ThrowIfLessThan(settings.Voices, 1, nameof(settings));
         ArgumentOutOfRangeException.ThrowIfLessThan(settings.AudibleVoices, 1, nameof(settings));
         ArgumentOutOfRangeException.ThrowIfLessThan(settings.Buses, 1, nameof(settings));
+        if (!(settings.SpeedOfSound > 0 && float.IsFinite(settings.SpeedOfSound)))
+        {
+            throw new ArgumentOutOfRangeException(nameof(settings), settings.SpeedOfSound, "A speed of sound is more than 0.");
+        }
+
         _voices = new SlotTable(settings.Voices);
         _buses = new SlotTable(settings.Buses);
         _busParents = new int[settings.Buses];
@@ -106,6 +111,7 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
         CheckPitch(settings.Pitch);
         CheckPan(settings.Pan);
         ArgumentOutOfRangeException.ThrowIfLessThan(settings.From, TimeSpan.Zero, nameof(settings));
+        settings.Spatial?.Check();
         var fade = FramesIn(settings.FadeIn);
         lock (_lock)
         {
@@ -168,6 +174,36 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
     {
         CheckPan(pan);
         PostTo(voice, new Command { Kind = CommandKind.SetVoicePan, Value = pan });
+    }
+
+    /// <summary>Moves a voice played with <see cref="VoiceSettings.Spatial"/>; one played without is not placed.</summary>
+    public void SetPlace(VoiceId voice, in VoicePlace place)
+    {
+        CheckPlace(place);
+        PostTo(voice, new Command { Kind = CommandKind.SetVoicePlace, Place = place });
+    }
+
+    /// <summary>Who hears the voices placed in space; until said, one facing +Z with +X on the right, still.</summary>
+    public void SetListener(in Listener listener)
+    {
+        if (!IsFinite(listener.Forward) || !IsFinite(listener.Right) || !IsFinite(listener.Velocity) ||
+            listener.Forward == Vector3F.Zero || listener.Right == Vector3F.Zero)
+        {
+            throw new ArgumentOutOfRangeException(nameof(listener), listener, "A listener faces some way, and moves finitely.");
+        }
+
+        lock (_lock)
+        {
+            Post(new Command { Kind = CommandKind.SetListener, Listener = listener });
+        }
+    }
+
+    internal static void CheckPlace(in VoicePlace place)
+    {
+        if (!IsFinite(place.Position) || !IsFinite(place.Velocity) || !IsFinite(place.Facing))
+        {
+            throw new ArgumentOutOfRangeException(nameof(place), place, "A place is of finite numbers.");
+        }
     }
 
     /// <summary>Whether it has not ended: paused, unheard and yet to begin are playing too.</summary>
@@ -310,6 +346,9 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
             throw new ArgumentOutOfRangeException(nameof(pitch), pitch, "A pitch is from 0.01 to 100.");
         }
     }
+
+    private static bool IsFinite(Vector3F vector) =>
+        float.IsFinite(vector.X) && float.IsFinite(vector.Y) && float.IsFinite(vector.Z);
 
     private static void CheckPan(float pan)
     {

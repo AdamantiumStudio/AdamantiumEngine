@@ -8,6 +8,8 @@ internal enum CommandKind
     SetVoiceVolume,
     SetVoicePitch,
     SetVoicePan,
+    SetVoicePlace,
+    SetListener,
     AddBus,
     RemoveBus,
     SetBusVolume,

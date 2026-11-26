@@ -27,4 +27,8 @@ internal struct Command
     public int From;
 
     public VoiceSettings Settings;
+
+    public VoicePlace Place;
+
+    public Listener Listener;
 }
