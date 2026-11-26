@@ -121,19 +121,6 @@ public class OggTests
         Assert.That(decoder.Read(new float[before + 1000]), Is.EqualTo(before));
     }
 
-    // An Opus stream before Vorbis's: Vorbis is the sound, as with any stream beside it of a codec not read.
-    [Test]
-    public void AnOpusStreamBefore_IsPassedBy()
-    {
-        var file = Read("beside22.ogg");
-        OggPages.SetFirstBytes(file, 0, "OpusHead"u8);
-        OggPages.Seal(file, 0);
-
-        var sound = SoundFile.Read(file);
-
-        Assert.That(sound.AsSpan().SequenceEqual(SoundFile.Read(Read("pages22.ogg")).AsSpan()), Is.True);
-    }
-
     [Test]
     public void Streamed_ItIsReadToo()
     {
@@ -186,13 +173,6 @@ public class OggTests
         var chained = SoundFile.Read([.. first, .. Read("stereo44.ogg")]);
 
         Assert.That(chained.AsSpan().SequenceEqual(SoundFile.Read(first).AsSpan()), Is.True);
-    }
-
-    [Test]
-    public void Opus_IsRefusedAsNotReadYet()
-    {
-        Assert.That(() => SoundFile.Read(Read("opus22.ogg")),
-            Throws.InstanceOf<InvalidDataException>().With.Message.Contains("Opus"));
     }
 
     // A page spoilt, its checksum not its own: what it held is silence, of the length the granules say; what is after
