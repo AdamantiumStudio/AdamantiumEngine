@@ -1473,8 +1473,8 @@ internal sealed partial class PhysicsWorld : IPhysicsWorld
 
     private static void ValidateSettings(PhysicsSettings settings)
     {
-        if (settings.FindProblem() is { } problem)
-            throw new ArgumentOutOfRangeException(nameof(settings), problem);
+        if (settings.FindProblem() is not PhysicsSettingsProblem.None and var problem)
+            throw new ArgumentOutOfRangeException(nameof(settings), problem.Explained());
     }
 
     private static void ValidateDescription(BodyDescription description)
