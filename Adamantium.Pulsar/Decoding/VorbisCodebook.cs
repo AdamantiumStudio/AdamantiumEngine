@@ -70,6 +70,11 @@ internal sealed class VorbisCodebook
         float[] values = null;
         if (lookup is 1 or 2)
         {
+            if (dimensions == 0)
+            {
+                throw Damaged("a codebook of vectors has no dimensions");
+            }
+
             values = ReadValues(ref bits, lookup, dimensions, entries);
         }
         else if (lookup != 0)
@@ -187,11 +192,6 @@ internal sealed class VorbisCodebook
     // lookup1_values of 9.2.3: the greatest whose power of the dimensions is no more than the entries.
     private static int Lookup1Values(int entries, int dimensions)
     {
-        if (dimensions == 0)
-        {
-            throw Damaged("a codebook of a lattice has no dimensions");
-        }
-
         var value = (int)Math.Floor(Math.Pow(entries, 1.0 / dimensions));
         while (Math.Pow(value + 1, dimensions) <= entries)
         {

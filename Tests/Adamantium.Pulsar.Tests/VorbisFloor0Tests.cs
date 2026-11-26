@@ -20,7 +20,7 @@ public class VorbisFloor0Tests
     public void TheCurve_IsTheLspFiltersResponse(int order)
     {
         // A codebook of 2 dimensions, 4 entries of 2 bits; entry e is (e, e + 1) * 0.25 + 0.125.
-        var setup = new BitWriter();
+        var setup = new VorbisBitWriter();
         setup.Write(0x564342, 24);
         setup.Write(2, 16);
         setup.Write(4, 24);
@@ -54,7 +54,7 @@ public class VorbisFloor0Tests
         var floor = new VorbisFloor0(ref bits, books, 1);
 
         // Entries 2 and 3, their codewords 10 and 11, the highest bit first: each vector after the one before's last.
-        var packet = new BitWriter();
+        var packet = new VorbisBitWriter();
         packet.Write(Amplitude, AmplitudeBits);
         packet.Write(0, 1);
         packet.Write(1, 1);
@@ -113,27 +113,5 @@ public class VorbisFloor0Tests
 
         return Math.Exp(.11512925 * (Amplitude * AmplitudeOffset / ((Math.Pow(2, AmplitudeBits) - 1) * Math.Sqrt(p + q)) -
             AmplitudeOffset));
-    }
-
-    // The lowest bit of each byte first, as Vorbis packs them.
-    private sealed class BitWriter
-    {
-        private readonly List<byte> _bytes = [];
-        private int _bits;
-
-        public void Write(uint value, int count)
-        {
-            for (var bit = 0; bit < count; bit++, _bits++)
-            {
-                if (_bits % 8 == 0)
-                {
-                    _bytes.Add(0);
-                }
-
-                _bytes[^1] |= (byte)((value >> bit & 1) << (_bits % 8));
-            }
-        }
-
-        public byte[] ToArray() => [.. _bytes, 0, 0, 0, 0, 0, 0, 0, 0];
     }
 }

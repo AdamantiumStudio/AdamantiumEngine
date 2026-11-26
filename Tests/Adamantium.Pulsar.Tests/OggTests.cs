@@ -23,6 +23,8 @@ public class OggTests
     [TestCase("pages22", 22050, 1)]
     // Its granules 100000 on, as a stream cut from another's middle: read from its first sample all the same.
     [TestCase("later22", 22050, 1)]
+    // Pages of a second: the last holds more than two long blocks.
+    [TestCase("long8", 8000, 1)]
     public void WhatTheReferenceDecodes_IsDecoded(string name, int rate, int channels)
     {
         var sound = SoundFile.Read(Read(name + ".ogg"));
@@ -50,6 +52,8 @@ public class OggTests
     [TestCase("pages22.ogg")]
     [TestCase("trimmed22.ogg")]
     [TestCase("later22.ogg")]
+    // Into its last page, of a second: decoding begins on a page before it.
+    [TestCase("long8.ogg")]
     [TestCase("stereo44.ogg")]
     [TestCase("surround48.ogg")]
     [TestCase("flac22.oga")]
@@ -83,6 +87,51 @@ public class OggTests
         var trimmed = SoundFile.Read(Read("trimmed22.ogg"));
 
         Assert.That(trimmed.AsSpan().SequenceEqual(whole.AsSpan()[300..]), Is.True);
+    }
+
+    // One page of audio, its granule 100000 on: the stream begins there, not at 0, and has all its packets' samples,
+    // 26 blocks of 1024 overlapped, as no granule cuts its end now.
+    [Test]
+    public void OnePageOfALaterStream_IsItsSamples()
+    {
+        var file = Read("mono22.ogg");
+        var whole = SoundFile.Read(file);
+        var last = OggPages.Of(file)[^1];
+        OggPages.SetGranule(file, last, OggPages.GranuleOf(file, last) + 100000);
+        OggPages.Seal(file, last);
+
+        var later = SoundFile.Read(file);
+
+        Assert.That(later.Frames, Is.EqualTo(26 * 512));
+        Assert.That(later.AsSpan()[..whole.AsSpan().Length].SequenceEqual(whole.AsSpan()), Is.True);
+    }
+
+    // The last page's granule spoilt, its checksum no longer its own: the length is the page's before it, read whole.
+    [Test]
+    public void TheLastPagesGranuleSpoilt_IsNotTheLength()
+    {
+        var file = Read("long8.ogg");
+        var pages = OggPages.Of(file);
+        var before = OggPages.GranuleOf(file, pages[^2]);
+        file[pages[^1] + 12] = 0x40;
+
+        using var decoder = SoundFile.Open(new MemoryStream(file));
+
+        Assert.That(decoder.Frames, Is.EqualTo(before));
+        Assert.That(decoder.Read(new float[before + 1000]), Is.EqualTo(before));
+    }
+
+    // An Opus stream before Vorbis's: Vorbis is the sound, as with any stream beside it of a codec not read.
+    [Test]
+    public void AnOpusStreamBefore_IsPassedBy()
+    {
+        var file = Read("beside22.ogg");
+        OggPages.SetFirstBytes(file, 0, "OpusHead"u8);
+        OggPages.Seal(file, 0);
+
+        var sound = SoundFile.Read(file);
+
+        Assert.That(sound.AsSpan().SequenceEqual(SoundFile.Read(Read("pages22.ogg")).AsSpan()), Is.True);
     }
 
     [Test]

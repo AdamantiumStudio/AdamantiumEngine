@@ -43,9 +43,8 @@ internal sealed class VorbisDecoder : ISoundDecoder
     private readonly bool[] _floorUsed;
     private readonly bool[] _noResidue;
     private int _previousBlock;
-    // The page the last packet read ended on, and the samples of those that ended on it.
-    private int _page = -1;
-    private int _pageFrames;
+    // Decoded from the first audio packet on, none lost.
+    private bool _isFromStart;
     // Decoded samples not yet read, from where they begin in the stream when known.
     private float[] _ready;
     private int _readyFrom;
@@ -72,9 +71,15 @@ internal sealed class VorbisDecoder : ISoundDecoder
             var rate = BinaryPrimitives.ReadInt32LittleEndian(identification[5..]);
             _shortBlock = 1 << (identification[21] & 15);
             _longBlock = 1 << (identification[21] >> 4);
-            if (BinaryPrimitives.ReadInt32LittleEndian(identification) != 0 || _channels == 0 ||
-                _channels > AudioFormat.MostChannels || rate <= 0 || rate > AudioFormat.HighestRate || _shortBlock < 64 ||
-                _longBlock > 8192 || _shortBlock > _longBlock || (identification[22] & 1) == 0)
+            if (_channels > AudioFormat.MostChannels)
+            {
+                throw new InvalidDataException(
+                    $"The Vorbis stream has {_channels} channels; no more than {AudioFormat.MostChannels} are read.");
+            }
+
+            if (BinaryPrimitives.ReadInt32LittleEndian(identification) != 0 || _channels == 0 || rate <= 0 ||
+                rate > AudioFormat.HighestRate || _shortBlock < 64 || _longBlock > 8192 || _shortBlock > _longBlock ||
+                (identification[22] & 1) == 0)
             {
                 throw Damaged("its identification is of no stream this decoder reads");
             }
@@ -252,7 +257,8 @@ internal sealed class VorbisDecoder : ISoundDecoder
             }
         }
 
-        Restart(page);
+        // Placed by a page before the last, whose granule may cut the end and so place nothing.
+        Restart(Math.Min(page, Math.Max(_audioPage, pages.Count - 2)));
         _position = sample;
     }
 
@@ -342,10 +348,10 @@ internal sealed class VorbisDecoder : ISoundDecoder
     private void Restart(int page)
     {
         _ogg.SeekToPage(page);
-        _page = -1;
         _previousBlock = 0;
         _readyFrom = _readyFrames = 0;
         _isPlaced = false;
+        _isFromStart = page == _audioPage;
     }
 
     // Decodes until the samples decoded are placed by a granule; false at the end.
@@ -375,43 +381,23 @@ internal sealed class VorbisDecoder : ISoundDecoder
             // Read up to the loss, none are ready; those after it are placed again by the next granule.
             _previousBlock = 0;
             _readyFrom = _readyFrames = 0;
-            _isPlaced = false;
+            _isPlaced = _isFromStart = false;
         }
 
+        DecodePacket(packet);
         var page = _ogg.NextPage - 1;
-        if (page != _page)
-        {
-            _page = page;
-            _pageFrames = 0;
-        }
-
-        _pageFrames += DecodePacket(packet);
         var isLast = _ogg.Pages[page].IsLast;
         if (granule < 0 || _isPlaced && isLast)
         {
             return true;
         }
 
-        // The last sample of this packet's is the granule's: those ready end there. The last page's may be short of
-        // its packets' samples, which cuts the stream's end (A.2): its packets begin where the page before ended.
-        _readyAt = isLast && GranuleBefore(page) is var before and >= 0
-            ? before - (_readyFrames - _pageFrames)
-            : granule - _readyFrames;
+        // The last sample of this packet's is the granule's: those ready end there. The last page's may say fewer
+        // than its packets have, which cuts the stream's end (A.2); read from the stream's start with none placed
+        // before, they begin at 0.
+        _readyAt = isLast && _isFromStart && granule < _readyFrames ? 0 : granule - _readyFrames;
         _isPlaced = true;
         return true;
-    }
-
-    private long GranuleBefore(int page)
-    {
-        for (var at = page - 1; at >= 0; at--)
-        {
-            if (_ogg.Pages[at].Granule >= 0)
-            {
-                return _ogg.Pages[at].Granule;
-            }
-        }
-
-        return -1;
     }
 
     // 4.3: the packet's samples after those ready; how many, 0 for the first after a restart or one not audio.
@@ -591,12 +577,13 @@ internal sealed class VorbisDecoder : ISoundDecoder
         _readyFrames += count;
     }
 
+    // Of the last page whole: a damaged one's could say any length.
     private long LastGranule()
     {
         var pages = _ogg.Pages;
         for (var at = pages.Count - 1; at >= 0; at--)
         {
-            if (pages[at].Granule >= 0)
+            if (pages[at].Granule >= 0 && _ogg.IsWhole(at))
             {
                 return pages[at].Granule;
             }

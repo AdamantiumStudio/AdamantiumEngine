@@ -44,7 +44,18 @@ internal sealed class OggStream : IDisposable
     /// <summary>The logical stream of <paramref name="stream"/> whose first packet <paramref name="isKnown"/> takes, from
     /// the stream's position.</summary>
     /// <exception cref="InvalidDataException">It is no Ogg file, or has no such stream.</exception>
-    public static OggStream Open(Stream stream, Func<ReadOnlySpan<byte>, bool> isKnown)
+    public static OggStream Open(Stream stream, Func<ReadOnlySpan<byte>, bool> isKnown) =>
+        TryIndex(stream, isKnown, out var pages, out var serial)
+            ? new OggStream(stream, pages, serial)
+            : throw new InvalidDataException("The Ogg file has no stream of a sound it can read.");
+
+    /// <summary>Whether <paramref name="stream"/>, from its position, has a logical stream whose first packet
+    /// <paramref name="isKnown"/> takes.</summary>
+    public static bool Has(Stream stream, Func<ReadOnlySpan<byte>, bool> isKnown) =>
+        TryIndex(stream, isKnown, out _, out _);
+
+    private static bool TryIndex(Stream stream, Func<ReadOnlySpan<byte>, bool> isKnown, out OggPage[] found,
+        out uint chosen)
     {
         var header = new byte[HeaderLength + 255];
         var pages = new List<OggPage>();
@@ -75,9 +86,9 @@ internal sealed class OggStream : IDisposable
             at = page.End;
         }
 
-        return serial is { } chosen
-            ? new OggStream(stream, [.. pages], chosen)
-            : throw new InvalidDataException("The Ogg file has no stream of a sound it can read.");
+        found = [.. pages];
+        chosen = serial ?? 0;
+        return serial != null;
     }
 
     /// <summary>The next packet read is the first to begin on page <paramref name="page"/>.</summary>
@@ -130,6 +141,17 @@ internal sealed class OggStream : IDisposable
             _isLost = false;
             return true;
         }
+    }
+
+    /// <summary>Whether page <paramref name="page"/> is as its checksum says; what is being read is left as it is.
+    /// </summary>
+    public bool IsWhole(int page)
+    {
+        var info = _pages[page];
+        var bytes = new byte[info.HeaderLength + info.BodyLength];
+        _stream.Position = info.At;
+        return _stream.ReadAtLeast(bytes, bytes.Length, throwOnEndOfStream: false) == bytes.Length &&
+            BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(22)) == ChecksumOf(bytes);
     }
 
     /// <summary>Of page <paramref name="page"/>'s body, from <paramref name="from"/>, as much as there is of
