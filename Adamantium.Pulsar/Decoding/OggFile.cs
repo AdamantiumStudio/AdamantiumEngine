@@ -19,18 +19,11 @@ internal static class OggFile
 
         try
         {
-            if (!ogg.TryReadPacket(out var first, out _, out _))
-            {
-                throw new InvalidDataException("The Ogg file's first page is damaged.");
-            }
-
-            if (OggFlacStream.IsFlac(first))
-            {
-                return new FlacDecoder(new OggFlacStream(ogg));
-            }
-
-            ogg.SeekToPage(0);
-            return new VorbisDecoder(ogg);
+            // By the first page's body, as the stream was chosen by it: whole or not, Vorbis reads its packets checked.
+            Span<byte> first = stackalloc byte[64];
+            return OggFlacStream.IsFlac(first[..ogg.ReadBody(0, 0, first)])
+                ? new FlacDecoder(new OggFlacStream(ogg))
+                : new VorbisDecoder(ogg);
         }
         catch
         {

@@ -150,6 +150,18 @@ public class OggTests
         Assert.That(sound.AsSpan().SequenceEqual(SoundFile.Read(Read("flac22.flac")).AsSpan()), Is.True);
     }
 
+    // The checksum of its first page spoilt: FLAC all the same, which checks its frames' own.
+    [Test]
+    public void FlacInOgg_OfAFirstPageNotWhole_IsFlacStill()
+    {
+        var file = Read("flac22.oga");
+        file[22] ^= 0xFF;
+
+        var sound = SoundFile.Read(file);
+
+        Assert.That(sound.AsSpan().SequenceEqual(SoundFile.Read(Read("flac22.flac")).AsSpan()), Is.True);
+    }
+
     [Test]
     public void TheLoopOfItsComments_IsItsLoop()
     {

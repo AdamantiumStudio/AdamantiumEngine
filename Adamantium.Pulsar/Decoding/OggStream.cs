@@ -143,8 +143,8 @@ internal sealed class OggStream : IDisposable
         }
     }
 
-    /// <summary>Whether page <paramref name="page"/> is as its checksum says; what is being read is left as it is.
-    /// </summary>
+    /// <summary>Whether page <paramref name="page"/> is as its checksum says; the packet being read is left as it is,
+    /// the stream's position not.</summary>
     public bool IsWhole(int page)
     {
         var info = _pages[page];

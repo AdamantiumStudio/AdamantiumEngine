@@ -246,19 +246,30 @@ internal sealed class VorbisDecoder : ISoundDecoder
         }
 
         var sample = _start + frame;
-        var page = _audioPage;
         var pages = _ogg.Pages;
+        var after = _audioPage;
         for (var at = pages.Count - 1; at >= _audioPage; at--)
         {
             if (pages[at].Granule >= 0 && pages[at].Granule <= sample - SeekMargin * _longBlock)
             {
-                page = at + 1;
+                after = at + 1;
                 break;
             }
         }
 
-        // Placed by a page before the last, whose granule may cut the end and so place nothing.
-        Restart(Math.Min(page, Math.Max(_audioPage, pages.Count - 2)));
+        // From one that a packet begins and ends on, before the last: its own granule places what is decoded, which
+        // the last's, that may cut the end, would not.
+        var page = _audioPage;
+        for (var at = Math.Min(after, pages.Count - 2); at > _audioPage; at--)
+        {
+            if (!pages[at].IsContinued && pages[at].Granule >= 0)
+            {
+                page = at;
+                break;
+            }
+        }
+
+        Restart(page);
         _position = sample;
     }
 
@@ -394,7 +405,8 @@ internal sealed class VorbisDecoder : ISoundDecoder
 
         // The last sample of this packet's is the granule's: those ready end there. The last page's may say fewer
         // than its packets have, which cuts the stream's end (A.2); read from the stream's start with none placed
-        // before, they begin at 0.
+        // before, they begin at 0. After a page lost just before it, they are placed as if none were cut: up to what
+        // was, early.
         _readyAt = isLast && _isFromStart && granule < _readyFrames ? 0 : granule - _readyFrames;
         _isPlaced = true;
         return true;
