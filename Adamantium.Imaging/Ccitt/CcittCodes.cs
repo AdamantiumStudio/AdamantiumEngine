@@ -1,21 +1,25 @@
+using System;
+using System.Collections.Generic;
+using Adamantium.Core.Compression;
+
 namespace Adamantium.Imaging.Ccitt;
 
-/// <summary>The run-length codes of CCITT fax (ITU-T T.4, tables 1 to 3): terminating codes for runs of 0 to 63,
-/// make-up codes for multiples of 64, and the extended make-up codes both colors share. Each table is looked up by
-/// the next <see cref="Bits"/> bits; an entry is the run shifted left by 4 over the code's length, 0 for no code.
-/// </summary>
+/// <summary>The codes of CCITT fax (ITU-T T.4): the run lengths of tables 1 to 3 - terminating codes for runs of 0 to
+/// 63, make-up codes for multiples of 64, and the extended make-up codes both colors share - each standing for its
+/// run; and the two-dimensional modes of table 4.</summary>
 internal static class CcittCodes
 {
-    /// <summary>The bits a run table is looked up by - the longest code.</summary>
-    public const int Bits = 13;
+    /// <summary>The bits the next code is looked for in - more than the longest.</summary>
+    public const int Bits = 24;
+
     private static readonly string[] Extended =
     [
         "00000001000", "00000001100", "00000001101", "000000010010", "000000010011", "000000010100", "000000010101",
         "000000010110", "000000010111", "000000011100", "000000011101", "000000011110", "000000011111"
     ];
 
-    /// <summary>White runs by the next <see cref="Bits"/> bits.</summary>
-    public static readonly ushort[] White = Build(
+    /// <summary>White runs.</summary>
+    public static readonly PrefixCode White = Build(
     [
         "00110101", "000111", "0111", "1000", "1011", "1100", "1110", "1111", "10011", "10100", "00111", "01000",
         "001000", "000011", "110100", "110101", "101010", "101011", "0100111", "0001100", "0001000", "0010111",
@@ -32,8 +36,8 @@ internal static class CcittCodes
         "010011011"
     ]);
 
-    /// <summary>Black runs by the next <see cref="Bits"/> bits.</summary>
-    public static readonly ushort[] Black = Build(
+    /// <summary>Black runs.</summary>
+    public static readonly PrefixCode Black = Build(
     [
         "0000110111", "010", "11", "10", "011", "0011", "0010", "00011", "000101", "000100", "0000100", "0000101",
         "0000111", "00000100", "00000111", "000011000", "0000010111", "0000011000", "0000001000", "00001100111",
@@ -54,40 +58,47 @@ internal static class CcittCodes
         "0000001011011", "0000001100100", "0000001100101"
     ]);
 
-    private static ushort[] Build(string[] terminating, string[] makeUp)
+    /// <summary>The two-dimensional modes, by <see cref="CcittMode"/>; the extensions are not read.</summary>
+    public static readonly PrefixCode Modes = CodeOf(
+    [
+        Word("1", CcittMode.Vertical0), Word("011", CcittMode.VerticalRight1), Word("010", CcittMode.VerticalLeft1),
+        Word("001", CcittMode.Horizontal), Word("0001", CcittMode.Pass), Word("000011", CcittMode.VerticalRight2),
+        Word("000010", CcittMode.VerticalLeft2), Word("0000011", CcittMode.VerticalRight3),
+        Word("0000010", CcittMode.VerticalLeft3),
+    ]);
+
+    /// <summary>The symbol of the code the bits that come next begin by, and its length; -1 for none.</summary>
+    public static int Decode(in PrefixCode code, int next, out int length) =>
+        code.Decode((ulong)(uint)next << (64 - Bits), out length);
+
+    private static PrefixCode Build(string[] terminating, string[] makeUp)
     {
-        var table = new ushort[1 << Bits];
+        var words = new List<PrefixCodeWord>();
         for (var run = 0; run < terminating.Length; run++)
         {
-            Add(table, terminating[run], run);
+            words.Add(Word(terminating[run], run));
         }
 
-        for (var i = 0; i < makeUp.Length; i++)
+        for (var index = 0; index < makeUp.Length; index++)
         {
-            Add(table, makeUp[i], (i + 1) * 64);
+            words.Add(Word(makeUp[index], (index + 1) * 64));
         }
 
-        for (var i = 0; i < Extended.Length; i++)
+        for (var index = 0; index < Extended.Length; index++)
         {
-            Add(table, Extended[i], 1792 + i * 64);
+            words.Add(Word(Extended[index], 1792 + index * 64));
         }
 
-        return table;
+        return CodeOf([.. words]);
     }
 
-    private static void Add(ushort[] table, string code, int run)
-    {
-        var bits = 0;
-        foreach (var c in code)
-        {
-            bits = (bits << 1) | (c - '0');
-        }
+    private static PrefixCodeWord Word(string code, CcittMode mode) => Word(code, (int)mode);
 
-        var first = bits << (Bits - code.Length);
-        var last = (bits + 1) << (Bits - code.Length);
-        for (var i = first; i < last; i++)
-        {
-            table[i] = (ushort)((run << 4) | code.Length);
-        }
-    }
+    private static PrefixCodeWord Word(string code, int symbol) =>
+        new(Convert.ToUInt32(code, 2), code.Length, symbol);
+
+    private static PrefixCode CodeOf(PrefixCodeWord[] words) =>
+        PrefixCode.TryCreate(words, PrefixBitOrder.HighFirst, out var code)
+            ? code
+            : throw new InvalidOperationException("A CCITT code table is no prefix code.");
 }
