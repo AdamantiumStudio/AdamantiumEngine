@@ -136,6 +136,12 @@ internal sealed class WavDecoder : ISoundDecoder
 
     public void Dispose() => _stream.Dispose();
 
+    // UTF-8 where it is that; else, as most tools of Windows write it, Latin-1.
+    private static string TextOf(ReadOnlySpan<byte> text) =>
+        (System.Text.Unicode.Utf8.IsValid(text)
+            ? System.Text.Encoding.UTF8.GetString(text)
+            : System.Text.Encoding.Latin1.GetString(text)).Trim();
+
     // LIST INFO's chunks: INAM the title, IART the artist, IPRD the album; text ending by a zero, padded to even.
     private static SoundTags ReadInfo(ReadOnlySpan<byte> info)
     {
@@ -147,7 +153,7 @@ internal sealed class WavDecoder : ISoundDecoder
             var length = (int)Math.Min(BinaryPrimitives.ReadUInt32LittleEndian(info[4..]), info.Length - 8);
             var text = info.Slice(8, length);
             var end = text.IndexOf((byte)0);
-            var value = System.Text.Encoding.UTF8.GetString(end >= 0 ? text[..end] : text).Trim();
+            var value = TextOf(end >= 0 ? text[..end] : text);
             if (value.Length > 0)
             {
                 if (info.StartsWith("INAM"u8))

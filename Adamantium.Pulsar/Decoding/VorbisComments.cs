@@ -65,7 +65,8 @@ internal readonly struct VorbisComments
     {
         if (value == null && comment.Length > name.Length && comment.StartsWith(name, StringComparison.OrdinalIgnoreCase))
         {
-            value = comment[name.Length..];
+            var text = comment[name.Length..].Trim();
+            value = text.Length > 0 ? text : null;
         }
     }
 

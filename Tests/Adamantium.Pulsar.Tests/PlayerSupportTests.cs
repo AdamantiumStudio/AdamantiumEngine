@@ -106,7 +106,65 @@ public class PlayerSupportTests
         }
     }
 
-    private static byte[] Read(string name)
+    // The least of a part all above zero is above zero too.
+    [Test]
+    public void ThePeaksOfAPartOfOneSign_AreItsOwn()
+    {
+        var samples = Enumerable.Range(0, 1000).Select(frame => .5f + frame / 4000f).ToArray();
+
+        using var decoder = SoundFile.Open(new MemoryStream(WavFiles.Floats(48000, 1, samples)));
+        var peaks = SoundPeaks.Of(decoder, 10);
+        while (peaks.ReadOn(decoder, 1000))
+        {
+        }
+
+        Assert.That(peaks.MinimumOf(0, 3), Is.EqualTo(samples[300]));
+    }
+
+    // Fewer frames than parts: those of none are silence.
+    [Test]
+    public void ThePeaksOfAPartOfNoFrames_AreZero()
+    {
+        using var decoder = SoundFile.Open(new MemoryStream(WavFiles.Floats(48000, 1, [.5f, .5f])));
+        var peaks = SoundPeaks.Of(decoder, 4);
+        peaks.ReadOn(decoder, 10);
+
+        Assert.That(peaks.MinimumOf(0, 1), Is.Zero);
+        Assert.That(peaks.MaximumOf(0, 1), Is.Zero);
+        Assert.That(peaks.MinimumOf(0, 2), Is.EqualTo(.5f));
+    }
+
+    [Test]
+    public void ThePeaks_AreReadOfADecoderOfTheirChannelsOnly()
+    {
+        using var decoder = SoundFile.Open(new MemoryStream(WavFiles.Floats(48000, 1, new float[100])));
+
+        Assert.Throws<ArgumentException>(() => new SoundPeaks(2, 10, 100).ReadOn(decoder, 100));
+    }
+
+    // Most tools of Windows write an 8-bit code page there, not UTF-8.
+    [Test]
+    public void AWavTitleNotOfUtf8_IsReadAsLatin1()
+    {
+        byte[] info = [.. "INFOINAM"u8, 5, 0, 0, 0, (byte)'C', (byte)'a', (byte)'f', 0xE9, 0, 0];
+        byte[] list = [.. "LIST"u8, (byte)info.Length, 0, 0, 0, .. info];
+
+        using var decoder = SoundFile.Open(new MemoryStream([.. WavFiles.Floats(48000, 1, new float[100]), .. list]));
+
+        Assert.That(decoder.Tags.Title, Is.EqualTo("Café"));
+    }
+
+    // As of ID3 and WAV: blank is not said.
+    [Test]
+    public void ABlankComment_SaysNoTitle()
+    {
+        byte[] comment = [.. "TITLE=  "u8];
+        byte[] block = [0, 0, 0, 0, 1, 0, 0, 0, (byte)comment.Length, 0, 0, 0, .. comment];
+
+        Assert.That(Decoding.VorbisComments.Read(block).Tags.IsEmpty, Is.True);
+    }
+
+    internal static byte[] Read(string name)
     {
         using var resource = typeof(PlayerSupportTests).Assembly.GetManifestResourceStream("tags." + name);
         using var copy = new MemoryStream();

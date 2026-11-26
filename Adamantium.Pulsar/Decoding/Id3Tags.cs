@@ -37,7 +37,15 @@ internal static class Id3Tags
 
     private static SoundTags ReadVersion2(Span<byte> body, int version, int flags)
     {
-        if ((flags & 0x80) != 0)
+        // Of 2.2, that flag says the whole is compressed, by no scheme said.
+        if (version is < 2 or > 4 || version == 2 && (flags & 0x40) != 0)
+        {
+            return default;
+        }
+
+        // Of 2.4, each frame is unsynchronised, and its size counts its bytes as they are.
+        var isUnsynchronised = (flags & 0x80) != 0;
+        if (isUnsynchronised && version < 4)
         {
             body = WithoutUnsynchronisation(body);
         }
@@ -71,6 +79,11 @@ internal static class Id3Tags
             }
 
             var content = body.Slice(headerLength, size);
+            if (version > 2)
+            {
+                content = ContentOf(content, version, body[9], isUnsynchronised);
+            }
+
             if (id.SequenceEqual("TIT2"u8) || id.SequenceEqual("TT2"u8))
             {
                 title ??= TextOf(content);
@@ -88,6 +101,25 @@ internal static class Id3Tags
         }
 
         return new SoundTags(title, artist, album);
+    }
+
+    // A frame's own bytes, by its format flags: of 2.3 compressed, encrypted, grouped; of 2.4 grouped, compressed,
+    // encrypted, unsynchronised, of its length said. Empty for one compressed or encrypted, not read.
+    private static Span<byte> ContentOf(Span<byte> content, int version, byte format, bool isTagUnsynchronised)
+    {
+        if (version == 3)
+        {
+            return (format & 0xC0) != 0 ? default : (format & 0x20) != 0 && content.Length > 0 ? content[1..] : content;
+        }
+
+        var added = ((format & 0x40) != 0 ? 1 : 0) + ((format & 0x01) != 0 ? 4 : 0);
+        if ((format & 0x0C) != 0 || added > content.Length)
+        {
+            return default;
+        }
+
+        content = content[added..];
+        return (format & 0x02) != 0 || isTagUnsynchronised ? WithoutUnsynchronisation(content) : content;
     }
 
     // A text frame: its encoding, then its text; of several values, the first.

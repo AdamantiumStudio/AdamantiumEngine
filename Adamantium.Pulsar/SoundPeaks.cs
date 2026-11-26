@@ -25,6 +25,8 @@ public sealed class SoundPeaks
         _frames = frames;
         _minimums = new float[channels * buckets];
         _maximums = new float[channels * buckets];
+        _minimums.AsSpan().Fill(float.PositiveInfinity);
+        _maximums.AsSpan().Fill(float.NegativeInfinity);
         _chunk = new float[ChunkFrames * channels];
     }
 
@@ -46,16 +48,32 @@ public sealed class SoundPeaks
             : throw new ArgumentException("A sound of a length not known has no peaks to read.", nameof(decoder));
     }
 
-    public float MinimumOf(int channel, int bucket) => _minimums[channel * Buckets + bucket];
+    /// <summary>0 of a part of no frames, or not read yet.</summary>
+    public float MinimumOf(int channel, int bucket)
+    {
+        var minimum = _minimums[channel * Buckets + bucket];
+        return float.IsPositiveInfinity(minimum) ? 0 : minimum;
+    }
 
-    public float MaximumOf(int channel, int bucket) => _maximums[channel * Buckets + bucket];
+    /// <summary>0 of a part of no frames, or not read yet.</summary>
+    public float MaximumOf(int channel, int bucket)
+    {
+        var maximum = _maximums[channel * Buckets + bucket];
+        return float.IsNegativeInfinity(maximum) ? 0 : maximum;
+    }
 
-    /// <summary>Up to <paramref name="frames"/> more of <paramref name="decoder"/>, which reads on from where it was
-    /// left; false once the sound is read.</summary>
+    /// <summary>Up to <paramref name="frames"/> more of <paramref name="decoder"/>, of as many channels, which reads on
+    /// from where it was left; false once the sound is read.</summary>
     public bool ReadOn(ISoundDecoder decoder, int frames)
     {
         ArgumentNullException.ThrowIfNull(decoder);
         var channels = Channels;
+        if (decoder.Format.Channels != channels)
+        {
+            throw new ArgumentException($"The peaks are of {channels} channels, the sound of {decoder.Format.Channels}.",
+                nameof(decoder));
+        }
+
         while (frames > 0 && _read < _frames)
         {
             var wanted = (int)Math.Min(Math.Min(frames, ChunkFrames), _frames - _read);
