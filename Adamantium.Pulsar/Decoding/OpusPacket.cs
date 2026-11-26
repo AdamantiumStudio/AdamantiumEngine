@@ -251,11 +251,3 @@ internal static class OpusPacket
         return 2;
     }
 }
-
-internal enum OpusMode
-{
-    None,
-    Silk,
-    Hybrid,
-    Celt,
-}
