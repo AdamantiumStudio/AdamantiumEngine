@@ -16,15 +16,20 @@ public static class OpenTypeSubset
 {
     private const uint ChecksumMagic = 0xB1B0AFBA;
 
-    /// <summary>Writes the glyphs of <paramref name="font"/> at <paramref name="indices"/> - as <see
-    /// cref="CffSubset.IndicesOf"/> gives them, glyph 0 first - as an OpenType font called <paramref name="name"/>.
-    /// Embedded for printing: its 'OS/2' allows preview and print.</summary>
-    public static byte[] Write(IFont font, IReadOnlyList<uint> indices, string name)
+    /// <summary>Writes the glyphs of <paramref name="font"/> at <paramref name="indices"/> as an OpenType font called
+    /// <paramref name="name"/>; they are laid out as <see cref="CffSubset.IndicesOf"/> lays them, whatever their order.
+    /// Embedded for printing: its 'OS/2' allows preview and print, as a restricted font.</summary>
+    public static byte[] Write(IFont font, IEnumerable<uint> indices, string name)
     {
         ArgumentNullException.ThrowIfNull(font);
         ArgumentNullException.ThrowIfNull(indices);
         ArgumentException.ThrowIfNullOrEmpty(name);
-        var metrics = new Metrics(font, indices);
+        var laid = CffSubset.IndicesOf(font, indices);
+        return Write(font, laid, name, new Metrics(font, laid));
+    }
+
+    private static byte[] Write(IFont font, IReadOnlyList<uint> indices, string name, Metrics metrics)
+    {
         var tables = new SortedDictionary<string, byte[]>(StringComparer.Ordinal)
         {
             ["CFF "] = CffSubset.Write(font, indices, name),
@@ -34,7 +39,7 @@ public static class OpenTypeSubset
             ["hhea"] = Hhea(metrics),
             ["hmtx"] = Hmtx(metrics),
             ["maxp"] = Maxp(indices.Count),
-            ["name"] = Name(CffSubset.Plain(name)),
+            ["name"] = Name(CffSubset.Plain(name), Face(font)),
             ["post"] = Post(metrics),
         };
         return File(tables);
@@ -404,11 +409,20 @@ public static class OpenTypeSubset
     }
 
     // The family, the face and the PostScript name - the CFF program's - in UTF-16 on the Windows platform.
-    private static byte[] Name(string postScript)
+    // The face as 'head' and 'OS/2' have it: bold, italic, both, or regular.
+    private static string Face(IFont font) => (IsBold(font), IsItalic(font)) switch
+    {
+        (true, true) => "Bold Italic",
+        (true, false) => "Bold",
+        (false, true) => "Italic",
+        _ => "Regular",
+    };
+
+    private static byte[] Name(string postScript, string face)
     {
         var names = new (ushort Id, string Text)[]
         {
-            (1, postScript), (2, "Regular"), (3, postScript), (4, postScript), (5, "Version 1.0"), (6, postScript),
+            (1, postScript), (2, face), (3, postScript), (4, postScript), (5, "Version 1.0"), (6, postScript),
         };
         var strings = names.Select(name => Encoding.BigEndianUnicode.GetBytes(name.Text)).ToList();
         var storage = 6 + names.Length * 12;

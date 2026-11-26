@@ -67,4 +67,25 @@ public class OpenTypeSubsetTests
         Assert.That(checkedFonts, Is.GreaterThan(0));
         Assert.That(refused.Count, Is.LessThan(Files.Length / 10), string.Join(", ", refused));
     }
+
+    // Asked for out of order, without glyph 0, twice: laid out as the CFF program lays them, every table alike.
+    [Test]
+    public void GlyphsAskedForInAnyOrder_AreLaidOutAsTheProgramHasThem()
+    {
+        var font = Typeface.LoadFont(Path.Combine("TTFFonts", "SourceSans3-Regular.ttf"), 3).GetFont(0);
+        font.TryGetGlyphIndex('B', out var b);
+        font.TryGetGlyphIndex('A', out var a);
+        var scale = (double)CffSubset.UnitsPerEm / font.UnitsPerEm;
+
+        var read = Typeface.LoadFont(OpenTypeSubset.Write(font, [b, a, b], "ABCDEF+Probe"), 3).GetFont(0);
+
+        var first = System.Math.Min(a, b);
+        Assert.Multiple(() =>
+        {
+            Assert.That(read.Typeface.GlyphCount, Is.EqualTo(3), "glyph 0, then the two, once each");
+            Assert.That(read.GetAdvanceWidth(1), Is.EqualTo(font.GetAdvanceWidth(first) * scale).Within(0.51),
+                "the second glyph's width is not the lower index's");
+            Assert.That(read.TryGetGlyphIndex('A', out var readA) && readA == (a < b ? 1u : 2u), Is.True);
+        });
+    }
 }
