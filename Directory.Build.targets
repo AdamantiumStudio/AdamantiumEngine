@@ -1,5 +1,24 @@
 <Project>
 
+  <!-- A build for no platform copies the files of its packages for every system (runtimes/<rid>): built here, an app or
+       test runs on this machine's system, so the other systems' are not copied - each architecture of this one, unix
+       and any still are, laid out the same. Publishing and packing take them all, as they did. -->
+  <Target Name="LeaveOutOtherSystemsPackageFiles" AfterTargets="ResolveLockFileCopyLocalFiles"
+          Condition="'$(RuntimeIdentifier)' == ''">
+    <PropertyGroup>
+      <_ThisSystem>$(NETCoreSdkPortableRuntimeIdentifier.Split('-')[0])</_ThisSystem>
+    </PropertyGroup>
+    <ItemGroup>
+      <_OtherSystemsPackageFile Include="@(ReferenceCopyLocalPaths)"
+                                Condition="'%(ReferenceCopyLocalPaths.RuntimeIdentifier)' != '' And
+                                           '%(ReferenceCopyLocalPaths.RuntimeIdentifier)' != 'any' And
+                                           !$([System.String]::Copy('%(ReferenceCopyLocalPaths.RuntimeIdentifier)').StartsWith('$(_ThisSystem)')) And
+                                           ('$(_ThisSystem)' == 'win' Or
+                                            !$([System.String]::Copy('%(ReferenceCopyLocalPaths.RuntimeIdentifier)').StartsWith('unix')))" />
+      <ReferenceCopyLocalPaths Remove="@(_OtherSystemsPackageFile)" />
+    </ItemGroup>
+  </Target>
+
   <!-- The source generators read .auml/.fx through AdditionalFiles, which MSBuild's CoreCompile and Visual Studio's fast
        up-to-date check do not count as inputs: editing a view left the build "up to date" and the app ran the previously
        generated code. Added inside targets, not as project items, so an IDE does not list every such file again under
