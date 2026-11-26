@@ -405,6 +405,85 @@ public class ForwardPlusLightingTests
         });
     }
 
+    // A cube painted in a checker of single texels, seen far enough that a dozen texels fall in a pixel, lit head on:
+    // with its mip levels its face is an even grey; without, each pixel picks what texels it happens to hit.
+    [Test]
+    public void AFineCheckerSeenFarOff_IsAnEvenGrey_OnlyWithMipmaps()
+    {
+        var (withLevels, withSpread) = CheckerFace(withMipmaps: true);
+        var (withoutLevels, withoutSpread) = CheckerFace(withMipmaps: false);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That((withLevels, withoutLevels), Is.EqualTo((9u, 1u)), "levels down to one texel, or none");
+            Assert.That(withSpread, Is.LessThanOrEqualTo(12), "an even grey with the levels");
+            Assert.That(withoutSpread, Is.GreaterThan(withSpread * 3), "shimmering without them");
+        });
+    }
+
+    // The checker cube's texture's levels, and how far apart the brightness of points on its face lie.
+    private (uint Levels, int Spread) CheckerFace(bool withMipmaps)
+    {
+        var eye = _output.Camera;
+        eye.Owner.Transform.Position = new WorldPosition(0, 0, -12);
+        eye.SetFreeLookAt(WorldPosition.Zero);
+        var scene = _universe.EntityWorld.MainScene;
+        if (!scene.Satellites.TryGet<LightManager>(out _))
+        {
+            var lights = new LightManager(_universe, scene);
+            scene.Satellites.Add(lights);
+            var sun = new LightTemplate().BuildEntity(null, "Sun", LightType.Directional);
+            sun.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(-90));
+            lights.AddLight(sun);
+        }
+
+        using var picture = CheckerPng(256);
+        var device = (Adamantium.Graphics.GraphicsDevice)_rendering.GraphicsDevice;
+        using var texture = withMipmaps
+            ? Adamantium.Graphics.Texture.LoadWithMipmaps(device, picture)
+            : Adamantium.Graphics.Texture.Load(device, picture);
+        var cube = new ShapeTemplate(new CubeShape()).Build(new Entity(null, "Cube"));
+        cube.AddComponent(new Material { DiffuseColor = Vector4F.One, Texture = texture });
+        _universe.EntityWorld.EntityManager.AddEntity(cube, scene);
+        for (var frame = 0; frame < Frames; frame++)
+        {
+            RunFrame();
+        }
+
+        var face = FaceBrightness(Pixels(_output.ReadFrame(), $"forward-plus-checker-{withMipmaps}.png"), _output.Camera,
+            new WorldPosition(0, 0, -0.5), Vector3<double>.UnitX, Vector3<double>.UnitY);
+        _universe.EntityWorld.EntityManager.RemoveEntity(cube);
+        for (var frame = 0; frame < Frames; frame++)
+        {
+            RunFrame();
+        }
+
+        return (texture.Description.MipLevels, face.Max() - face.Min());
+    }
+
+    // A PNG of black and white texels in turn.
+    private static MemoryStream CheckerPng(int side)
+    {
+        using var image = Image.New2D((uint)side, (uint)side, SurfaceFormat.R8G8B8A8.UNorm);
+        var texels = new byte[side * side * 4];
+        for (var y = 0; y < side; y++)
+        {
+            for (var x = 0; x < side; x++)
+            {
+                var value = (byte)((x + y) % 2 == 0 ? 255 : 0);
+                var at = (y * side + x) * 4;
+                texels[at] = texels[at + 1] = texels[at + 2] = value;
+                texels[at + 3] = 255;
+            }
+        }
+
+        System.Runtime.InteropServices.Marshal.Copy(texels, 0, image.GetPixelBuffer(0, 0).DataPointer, texels.Length);
+        var stream = new MemoryStream();
+        image.Save(stream, ImageFileType.Png);
+        stream.Position = 0;
+        return stream;
+    }
+
     // How bright the top of a metal cube in the sun is, lit by the given model.
     private double TopOf(LightingModel lighting, string savedAs)
     {

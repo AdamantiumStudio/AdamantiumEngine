@@ -31,6 +31,14 @@
 - A pass may draw depth alone: with no color target, it takes its size from the depth buffer, and a buffer without
   stencil is attached as depth only.
 
+- `Texture.LoadWithMipmaps`: a picture loaded with its smaller levels made on the GPU, each half the one before, so a
+  surface seen far off or at a slant does not shimmer; a picture with levels of its own, or of a format the device
+  cannot halve, keeps what it has. `TextureAssetReader` - a scene's material maps - loads with it.
+
+### Changed
+
+- The scene's surfaces are sampled anisotropically (`SamplerStates.AnisotropicRepeat`), sharp along a slant.
+
 ### Fixed
 
 - `TextureExtensions.RecordLayoutTransition` gave a depth image the color aspect for any layout but

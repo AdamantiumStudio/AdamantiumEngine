@@ -400,6 +400,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         parameters["ClusterW"].SetValue(new Vector2F(projection.M34, projection.M44));
         parameters["ViewportRect"].SetValue(new Vector4F(viewport.X, viewport.Y, viewport.Width, viewport.Height));
         parameters["Ambient"].SetValue(Ambient);
+        // Anisotropic, so a surface seen at a slant keeps its detail sharp along it without shimmering across it.
+        parameters["sampleType"].SetResource(SamplerStates.AnisotropicRepeat);
         parameters["LinearFrame"].SetValue(linearFrame ? 1u : 0u);
         var shadowed = shadowCaster != null;
         var descriptors = ((GraphicsDevice)GraphicsDevice).DescriptorManager;
@@ -1137,7 +1139,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         {
             target?.Parameters["Instances"].SetValue(instanceAddress);
             target?.Parameters["Palettes"].SetValue(paletteAddress);
-            target?.Parameters["sampleType"].SetResource(SamplerStates.LinearRepeat);
         }
     }
 
