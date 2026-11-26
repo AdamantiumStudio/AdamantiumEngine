@@ -66,6 +66,31 @@ public class GlyphWordData
 
     internal double Tail { get; init; }
 
+    /// <summary>Where the glyph's outline is drawn, as the screen draws it: from the font's units, y up, to the layout's
+    /// space, y down - at its pen on its baseline, at its size, stretched by <see cref="HorizontalScale"/>, slanted by a
+    /// synthesized italic and turned for <see cref="Sideways"/>. Not for a glyph without a <see cref="Font"/> or a
+    /// <see cref="Glyph"/>.</summary>
+    public Matrix3x2<double> OutlineTransform
+    {
+        get
+        {
+            var scale = FontSize / Font.UnitsPerEm;
+            // Slanted in the glyph's own frame, before a turn - the screen slants every glyph of an italic's stretch.
+            var slant = Layout.TextGeometry.IsSlanted(Attributes) ? FontSynthesisRules.Slant : 0;
+            var drawn = new Matrix3x2<double>(scale * HorizontalScale, 0, slant * scale, -scale,
+                Layout.TextGeometry.Pen(this), Layout.TextGeometry.Baseline(this));
+            if (!Sideways)
+            {
+                return drawn;
+            }
+
+            // Turned a quarter clockwise about the corner of where it is drawn, as the screen turns it.
+            var corner = Layout.TextGeometry.DrawnRect(this);
+            var turn = new Matrix3x2<double>(0, 1, -1, 0, corner.X + corner.Y, corner.Y - corner.X);
+            return Matrix3x2<double>.Multiply(drawn, turn);
+        }
+    }
+
     public override string ToString()
     {
         return $"{Symbol} [{Rect}]";
