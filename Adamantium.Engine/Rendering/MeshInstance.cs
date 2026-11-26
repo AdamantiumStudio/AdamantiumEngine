@@ -26,8 +26,20 @@ public readonly struct MeshInstance
     /// <summary>Below this alpha an opaque pass leaves a pixel out; 0 keeps every pixel.</summary>
     public readonly float AlphaCutoff;
 
+    /// <summary>The light it gives off, its strength in; the alpha is unused.</summary>
+    public readonly Vector4F Emission;
+
+    /// <summary>Its metalness, roughness, how much its normal map bends and how much its occlusion map darkens.</summary>
+    public readonly Vector4F Surface;
+
+    /// <summary>Its maps' indices, <see cref="NoMap"/> where it has none.</summary>
+    public readonly MaterialMaps Maps;
+
+    /// <summary>An index that names no texture.</summary>
+    public const uint NoMap = uint.MaxValue;
+
     public MeshInstance(Matrix4x4F world, Vector4F albedo, uint paletteFirst, uint paletteCount, uint texture,
-        float alphaCutoff)
+        float alphaCutoff, Vector4F emission, Vector4F surface, MaterialMaps maps)
     {
         World = world;
         Albedo = albedo;
@@ -35,5 +47,8 @@ public readonly struct MeshInstance
         PaletteCount = paletteCount;
         Texture = texture;
         AlphaCutoff = alphaCutoff;
+        Emission = emission;
+        Surface = surface;
+        Maps = maps;
     }
 }

@@ -32,7 +32,8 @@ public static class TextureExtensions
         // All layers: with a count of 1 only layer 0 of an array texture changed layout.
         imageMemoryBarrier.SubresourceRange.LayerCount = Constants.VK_REMAINING_ARRAY_LAYERS;
 
-        if (newLayout == ImageLayout.DepthStencilAttachmentOptimal)
+        // The aspect is the image's, whatever layout it goes to: a depth buffer that rests readable is still depth.
+        if (newLayout == ImageLayout.DepthStencilAttachmentOptimal || texture.SurfaceFormat.HasDepthFormat())
         {
             imageMemoryBarrier.SubresourceRange.AspectMask = ImageAspectFlagBits.DepthBit;
 

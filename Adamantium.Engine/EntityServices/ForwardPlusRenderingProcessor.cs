@@ -53,6 +53,49 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private IRenderTarget weightedCoverage;
     private readonly IRenderTarget[] weightedTargets = new IRenderTarget[2];
     private readonly IRenderTarget[] frameTargets = new IRenderTarget[1];
+    private IRenderTarget sceneLight;
+    private IRenderTarget[] glowCopies = [];
+    private readonly IRenderTarget[] sceneLightTargets = new IRenderTarget[1];
+    private readonly IRenderTarget[] pictureTargets = new IRenderTarget[1];
+    private IRenderTarget skyIrradiance;
+    private IRenderTarget[] skyReflections = [];
+    private SkyKind? skyMade;
+    private SkyKind sky;
+    private float skyStrength;
+
+    // The sky's pictures: the light round a normal small, the mirrored sky from this wide, each rougher one half the one
+    // before.
+    private const uint SkyIrradianceWidth = 64;
+    private const uint SkyReflectionWidth = 256;
+    private const int SkyReflectionLevels = 6;
+    private RenderingService attachedTo;
+    private SceneBackgroundProcessor background;
+    private bool linearFrame;
+    private float exposure;
+    private float glow;
+    private IDepthStencilBuffer shadowMap;
+    private Light shadowCaster;
+    private int shadowLight = -1;
+    private readonly Matrix4x4F[] cascadeViews = new Matrix4x4F[Cascades];
+    private readonly Matrix4x4F[] cascadeLookups = new Matrix4x4F[Cascades];
+    private readonly IRenderTarget[] noTargets = [];
+    private uint cascadeSide;
+    private readonly BoundingFrustum<float>[] cascadeReaches = new BoundingFrustum<float>[Cascades];
+    private readonly List<MeshDrawGroup> casterGroups = [];
+    private readonly float[] cascadeEnds = new float[Cascades];
+    private readonly float[] cascadeTexels = new float[Cascades];
+
+    // The shadow's cascades, each a quarter of its map; how much of a cascade's reach follows the near ones' spacing.
+    private const int Cascades = 4;
+    private const float CascadeSpacing = 0.75f;
+    private const int DefaultCascadeSide = 1024;
+    private const int LargestCascadeSide = 4096;
+    private ColorComponentFlagBits frameChannels;
+    private Color frameClearColor;
+
+    // The glow's copies stop when the smaller side reaches this, or at so many.
+    private const uint SmallestGlow = 8;
+    private const int MostGlowCopies = 7;
 
     // The weighted sums add up; the coverage is laid over what the layers before covered.
     private static readonly ColorBlendEquationEXT[] WeightedBlends =
@@ -80,6 +123,11 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     /// <summary>The light every surface gets whatever the lights in the scene.</summary>
     public Vector3F Ambient { get; set; } = new(0.08f, 0.08f, 0.1f);
+
+    /// <summary>How far from the camera the shadow of a directional light reaches. The first directional light whose
+    /// <see cref="Light.IsWithShadows"/> is on casts it, in four cascades, each <see cref="Light.ShadowMapResolution"/>
+    /// texels square (1024 when it is not set).</summary>
+    public float ShadowDistance { get; set; } = 100f;
 
     /// <summary>The color of a surface that has neither a texture nor a diffuse color.</summary>
     public Vector3F UntexturedColor { get; set; } = new(0.75f, 0.75f, 0.75f);
@@ -165,8 +213,19 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         base.CreateDeviceResources();
     }
 
+    protected override void OnAttached()
+    {
+        base.OnAttached();
+        attachedTo = AssociatedService;
+        background = new SceneBackgroundProcessor(this);
+        attachedTo.AttachProcessor(background);
+    }
+
     protected override void OnDetached()
     {
+        attachedTo?.DetachProcessor(background);
+        background = null;
+        attachedTo = null;
         ReleaseDeviceResources();
         base.OnDetached();
     }
@@ -182,9 +241,28 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
 
         var frame = (int)(GraphicsDevice.CurrentFrame % (uint)clusterCounts.Length);
+        // Held for the frame: the shaders were told it here, the draw must not go otherwise.
+        var environment = Scene?.Environment;
+        linearFrame = environment?.HighDynamicRange == true;
+        exposure = environment?.Exposure ?? 0;
+        glow = environment?.Glow ?? 0;
+        sky = environment?.Sky ?? SkyKind.None;
+        skyStrength = environment?.SkyStrength ?? 1;
+        if (sky != SkyKind.None && skyMade != sky)
+        {
+            MakeSky();
+        }
         var directional = CollectLights(camera);
+        if (shadowCaster != null)
+        {
+            EnsureShadowMap(shadowCaster.ShadowMapResolution);
+            PlaceCascades(camera);
+        }
+
         var lights = GraphicsDevice.UploadFrameData<ClusterLight>(frameLights.AsSpan(0, LightCount));
         SetFrameParameters(effect, camera, frame, directional, lights);
+        // Only the scene's own effect draws the sky.
+        effect.Parameters["SkyExposure"].SetValue(MathF.Pow(2f, exposure));
         if (wireEffect != null)
         {
             SetFrameParameters(wireEffect, camera, frame, directional, lights);
@@ -233,12 +311,28 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             var paletteAddress = GraphicsDevice.UploadFrameData<Matrix4x4F>(palettes.AsSpan(0, paletteMatrices));
             DrawCalls = groupsDrawn.Count + wires.Count + wiresOverBlended.Count + colliders.Count;
             UploadInstances(paletteAddress);
-            DrawGroups(groupsDrawn);
-            // The lines go with the opaque surfaces: what is see-through over them dims them as it does those. A
-            // see-through surface's own wire goes over it.
-            DrawLines(paletteAddress);
-            DrawCalls += DrawSeeThrough();
-            DrawWires(wiresOverBlended, paletteAddress);
+            if (shadowCaster != null)
+            {
+                DrawShadow();
+            }
+
+            var frame = linearFrame ? OpenSceneLight() : null;
+            try
+            {
+                DrawGroups(groupsDrawn);
+                // The lines go with the opaque surfaces: what is see-through over them dims them as it does those. A
+                // see-through surface's own wire goes over it.
+                DrawLines(paletteAddress);
+                DrawCalls += DrawSeeThrough();
+                DrawWires(wiresOverBlended, paletteAddress);
+            }
+            finally
+            {
+                if (frame != null)
+                {
+                    CloseSceneLight(frame);
+                }
+            }
         }
         catch (Exception exception)
         {
@@ -252,6 +346,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     private int CollectLights(Camera camera)
     {
+        shadowLight = -1;
+        shadowCaster = null;
         // The lights of the scene the output shows; a scene without them is lit by none.
         if (Scene is not { } scene || !scene.Satellites.TryGet<LightManager>(out var lightManager))
         {
@@ -259,21 +355,28 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             return 0;
         }
 
-        var count = Append(lightManager.DirectionalLights, camera, 0);
+        var count = Append(lightManager.DirectionalLights, camera, 0, castsShadow: true);
         var directional = count;
-        count = Append(lightManager.PointLights, camera, count);
-        count = Append(lightManager.SpotLights, camera, count);
+        count = Append(lightManager.PointLights, camera, count, castsShadow: false);
+        count = Append(lightManager.SpotLights, camera, count, castsShadow: false);
         LightCount = count;
         return directional;
     }
 
-    private int Append(IReadOnlyList<Light> lights, Camera camera, int count)
+    // The first light of a kind that casts shadows, and wants to, is the one whose shadow is drawn.
+    private int Append(IReadOnlyList<Light> lights, Camera camera, int count, bool castsShadow)
     {
         for (int i = 0; i < lights.Count && count < MaxLights; i++)
         {
             var light = lights[i];
             if (light.IsEnabled && light.Owner is { Visible: true })
             {
+                if (castsShadow && shadowLight < 0 && light.IsWithShadows)
+                {
+                    shadowLight = count;
+                    shadowCaster = light;
+                }
+
                 frameLights[count++] = light.ToClusterLight(camera);
             }
         }
@@ -299,6 +402,327 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         parameters["ClusterW"].SetValue(new Vector2F(projection.M34, projection.M44));
         parameters["ViewportRect"].SetValue(new Vector4F(viewport.X, viewport.Y, viewport.Width, viewport.Height));
         parameters["Ambient"].SetValue(Ambient);
+        // Anisotropic, so a surface seen at a slant keeps its detail sharp along it without shimmering across it.
+        parameters["sampleType"].SetResource(SamplerStates.AnisotropicRepeat);
+        parameters["LinearFrame"].SetValue(linearFrame ? 1u : 0u);
+        var shadowed = shadowCaster != null;
+        var descriptors = ((GraphicsDevice)GraphicsDevice).DescriptorManager;
+        var withSky = sky != SkyKind.None && skyMade == sky;
+        parameters["Sky"].SetValue(withSky ? (uint)sky : 0u);
+        parameters["SkyStrength"].SetValue(skyStrength);
+        if (withSky)
+        {
+            parameters["WorldFromView"].SetValue(Matrix4x4F.Invert(camera.ViewMatrix));
+            parameters["SkyIrradiance"].SetValue(descriptors.TextureIndex(skyIrradiance));
+            for (var level = 0; level < SkyReflectionLevels; level++)
+            {
+                parameters[SkyReflectionNames[level]].SetValue(descriptors.TextureIndex(skyReflections[level]));
+            }
+        }
+
+        parameters["ShadowMap"].SetValue(shadowed ? descriptors.TextureIndex(shadowMap) : MeshInstance.NoMap);
+        parameters["ShadowLight"].SetValue(shadowed ? (uint)shadowLight : MeshInstance.NoMap);
+        if (shadowed)
+        {
+            parameters["ShadowCascade0"].SetValue(cascadeLookups[0]);
+            parameters["ShadowCascade1"].SetValue(cascadeLookups[1]);
+            parameters["ShadowCascade2"].SetValue(cascadeLookups[2]);
+            parameters["ShadowCascade3"].SetValue(cascadeLookups[3]);
+            parameters["ShadowSplits"].SetValue(new Vector4F(cascadeEnds[0], cascadeEnds[1], cascadeEnds[2],
+                cascadeEnds[3]));
+            parameters["ShadowTexels"].SetValue(new Vector4F(cascadeTexels[0], cascadeTexels[1], cascadeTexels[2],
+                cascadeTexels[3]));
+            parameters["ShadowStep"].SetValue(1f / shadowMap.Width);
+        }
+    }
+
+    private static readonly string[] SkyReflectionNames =
+        ["SkyReflection0", "SkyReflection1", "SkyReflection2", "SkyReflection3", "SkyReflection4", "SkyReflection5"];
+
+    // The sky's pictures for the physical surfaces, made once for a kind of sky, before the frame's pass: the light a matt
+    // surface gathers round each normal, and the sky mirrored at each roughness.
+    private void MakeSky()
+    {
+        var device = GraphicsDevice;
+        var targets = device.CurrentRenderTarget;
+        var depth = device.CurrentDepthStencilBuffer;
+        var samples = device.MSAALevel;
+        EnsureSkyPictures();
+        effect.Parameters["Sky"].SetValue((uint)sky);
+        device.SetDepthBuffer(null);
+        device.MSAALevel = MSAALevel.None;
+        try
+        {
+            effect.Parameters["SkyStep"].SetValue(new Vector2F(1f / skyIrradiance.Width, 1f / skyIrradiance.Height));
+            DrawPicture(effect.ForwardPlusSkyIrradiancePass, skyIrradiance, ColorBlendEquations.Opaque, adding: false);
+            for (var level = 0; level < SkyReflectionLevels; level++)
+            {
+                var picture = skyReflections[level];
+                effect.Parameters["SkyStep"].SetValue(new Vector2F(1f / picture.Width, 1f / picture.Height));
+                effect.Parameters["SkyRoughness"].SetValue(level / (float)(SkyReflectionLevels - 1));
+                DrawPicture(effect.ForwardPlusSkyReflectionPass, picture, ColorBlendEquations.Opaque, adding: false);
+            }
+
+            skyMade = sky;
+        }
+        finally
+        {
+            device.SetDepthBuffer(depth);
+            device.MSAALevel = samples;
+            frameTargets[0] = targets;
+            device.SetRenderTargets(frameTargets);
+        }
+    }
+
+    private void EnsureSkyPictures()
+    {
+        if (skyIrradiance is { IsDisposed: false })
+        {
+            return;
+        }
+
+        ReleaseSkyPictures();
+        skyIrradiance = GraphicsDevice.CreateRenderTarget(SkyIrradianceWidth, SkyIrradianceWidth / 2, MSAALevel.None,
+            Format.R16G16B16A16_SFLOAT, ImageUsageFlagBits.SampledBit, ImageLayout.ColorAttachmentOptimal, "Sky light");
+        skyReflections = new IRenderTarget[SkyReflectionLevels];
+        for (var level = 0; level < SkyReflectionLevels; level++)
+        {
+            var width = SkyReflectionWidth >> level;
+            skyReflections[level] = GraphicsDevice.CreateRenderTarget(width, width / 2, MSAALevel.None,
+                Format.R16G16B16A16_SFLOAT, ImageUsageFlagBits.SampledBit, ImageLayout.ColorAttachmentOptimal,
+                $"Sky mirrored {level}");
+        }
+    }
+
+    private void ReleaseSkyPictures()
+    {
+        foreach (var picture in (IRenderTarget[])[skyIrradiance, .. skyReflections])
+        {
+            if (picture is IDisposable disposable && !picture.IsDisposed)
+                picture.GraphicsDevice.AddToDeferDisposeQueue(disposable);
+        }
+
+        skyIrradiance = null;
+        skyReflections = [];
+        skyMade = null;
+    }
+
+    /// <summary>The sky over the whole frame, before anything else is drawn in it: its
+    /// <see cref="SceneBackgroundProcessor"/> calls it. In a high dynamic range frame it goes through the same tone curve
+    /// as the scene. Nothing without a sky.</summary>
+    internal void DrawBackground()
+    {
+        // A scene switched off is not prepared anew, so its last frame's sky is not drawn either.
+        if (!IsEnabled || !prepared || Window?.Camera == null || sky == SkyKind.None || skyMade != sky)
+        {
+            return;
+        }
+
+        DrawOverTarget(effect.ForwardPlusSkyBackgroundPass, ColorBlendEquations.Opaque);
+    }
+
+    // A map of four cascades, each the light's resolution square: made anew when that changes.
+    private void EnsureShadowMap(int resolution)
+    {
+        var side = (uint)(resolution > 0 ? Math.Clamp(resolution, 256, LargestCascadeSide) : DefaultCascadeSide);
+        if (shadowMap is { IsDisposed: false } && cascadeSide == side)
+        {
+            return;
+        }
+
+        ReleaseShadowMap();
+        cascadeSide = side;
+        shadowMap = GraphicsDevice.CreateReadableDepthBuffer(side * 2, side * 2, DepthFormat.Depth32, "Shadow map");
+    }
+
+    private void ReleaseShadowMap()
+    {
+        if (shadowMap is IDisposable map && !shadowMap.IsDisposed)
+            shadowMap.GraphicsDevice.AddToDeferDisposeQueue(map);
+        shadowMap = null;
+    }
+
+    // Each cascade a sphere round its slice of the view, the near ones short and the far ones long, seen square along the
+    // light. The sphere stays one size however the camera turns, and its middle moves by whole texels of the world, so
+    // the shadow's edges do not crawl as the camera moves.
+    private void PlaceCascades(Camera camera)
+    {
+        var near = Math.Max(camera.ZNear, 1e-3f);
+        var far = Math.Max(Math.Min(camera.ZFar, ShadowDistance), near * 2);
+        var fromView = Matrix4x4F.Invert(camera.ViewMatrix);
+        var fromClip = Matrix4x4F.Invert(camera.ProjectionMatrix);
+        Span<Vector3F> nearCorners = stackalloc Vector3F[4];
+        Span<Vector3F> farCorners = stackalloc Vector3F[4];
+        for (var i = 0; i < 4; i++)
+        {
+            var x = (i & 1) == 0 ? -1f : 1f;
+            var y = (i & 2) == 0 ? -1f : 1f;
+            nearCorners[i] = Vector3F.TransformCoordinate(new Vector3F(x, y, 0), fromClip);
+            farCorners[i] = Vector3F.TransformCoordinate(new Vector3F(x, y, 1), fromClip);
+        }
+
+        var direction = shadowCaster.Direction;
+        var up = MathF.Abs(direction.Y) > 0.99f ? Vector3F.UnitZ : Vector3F.UnitY;
+        var toLight = Matrix4x4.CreateLookToLH(Vector3F.Zero, direction, up);
+        var eye = camera.WorldPosition.ToVector();
+        // The camera along the light's axes, in double: where whole texels of the world fall.
+        var eyeAcross = eye.X * toLight.M11 + eye.Y * toLight.M21 + eye.Z * toLight.M31;
+        var eyeUp = eye.X * toLight.M12 + eye.Y * toLight.M22 + eye.Z * toLight.M32;
+        var start = near;
+        Span<Vector3F> slice = stackalloc Vector3F[8];
+        for (var cascade = 0; cascade < Cascades; cascade++)
+        {
+            var share = (cascade + 1) / (float)Cascades;
+            var end = CascadeSpacing * near * MathF.Pow(far / near, share) + (1 - CascadeSpacing) * (near + (far - near) * share);
+            var middle = Vector3F.Zero;
+            for (var i = 0; i < 4; i++)
+            {
+                slice[i] = Vector3F.TransformCoordinate(AtDepth(nearCorners[i], farCorners[i], start), fromView);
+                slice[i + 4] = Vector3F.TransformCoordinate(AtDepth(nearCorners[i], farCorners[i], end), fromView);
+            }
+
+            foreach (var corner in slice)
+            {
+                middle += corner;
+            }
+
+            middle /= slice.Length;
+            var radius = 0f;
+            foreach (var corner in slice)
+            {
+                radius = Math.Max(radius, Vector3F.Distance(corner, middle));
+            }
+
+            radius = MathF.Ceiling(radius * 16f) / 16f;
+            var texel = 2f * radius / cascadeSide;
+            var center = Vector3F.TransformCoordinate(middle, toLight);
+            var across = (float)(Math.Floor((center.X + eyeAcross) / texel) * texel - eyeAcross);
+            var upward = (float)(Math.Floor((center.Y + eyeUp) / texel) * texel - eyeUp);
+            // What stands between the light and the slice casts onto it too: the box reaches back towards the light.
+            var square = Matrix4x4.CreateOrthoOffCenterLH(across - radius, across + radius, upward - radius,
+                upward + radius, center.Z - radius - ShadowDistance, center.Z + radius);
+            cascadeViews[cascade] = toLight * square;
+            cascadeReaches[cascade] = new BoundingFrustum<float>(cascadeViews[cascade]);
+            cascadeLookups[cascade] = fromView * cascadeViews[cascade] * QuarterOf(cascade);
+            cascadeEnds[cascade] = end;
+            cascadeTexels[cascade] = texel;
+            start = end;
+        }
+    }
+
+    // The opaque surfaces' depth from the light into each cascade's quarter of the map, beside the frame; the map left to
+    // be read. A see-through surface casts none.
+    private void DrawShadow()
+    {
+        var device = GraphicsDevice;
+        var frame = device.CurrentRenderTarget;
+        var depth = device.CurrentDepthStencilBuffer;
+        var samples = device.MSAALevel;
+        var biased = device.DepthBiasEnabled;
+        var constantBias = device.DepthBiasConstantFactor;
+        var slopeBias = device.DepthBiasSlopeFactor;
+        device.SuspendRendering();
+        try
+        {
+            KeepDepthForNextPass();
+            device.InsertImageMemoryBarrier(device.CurrentCommandBuffer, shadowMap, AccessFlagBits2.ShaderReadBit,
+                AccessFlagBits2.DepthStencilAttachmentWriteBit, ImageLayout.Undefined,
+                ImageLayout.DepthStencilAttachmentOptimal, PipelineStageFlagBits2.FragmentShaderBit,
+                PipelineStageFlagBits2.EarlyFragmentTestsBit | PipelineStageFlagBits2.LateFragmentTestsBit);
+            device.SetRenderTargets(noTargets);
+            device.SetDepthBuffer(shadowMap);
+            device.MSAALevel = MSAALevel.None;
+            // Pushed back a little, more where a surface slopes away from the light, so it does not shadow itself.
+            device.DepthBiasEnabled = true;
+            device.DepthBiasConstantFactor = 1.25f;
+            device.DepthBiasSlopeFactor = 1.75f;
+            device.BeginRendering(device.CurrentCommandBuffer);
+            try
+            {
+                for (var cascade = 0; cascade < Cascades; cascade++)
+                {
+                    DrawCascade(cascade);
+                }
+            }
+            finally
+            {
+                device.SuspendRendering();
+                device.InsertImageMemoryBarrier(device.CurrentCommandBuffer, shadowMap,
+                    AccessFlagBits2.DepthStencilAttachmentWriteBit, AccessFlagBits2.ShaderReadBit,
+                    ImageLayout.DepthStencilAttachmentOptimal, ImageLayout.ShaderReadOnlyOptimal,
+                    PipelineStageFlagBits2.EarlyFragmentTestsBit | PipelineStageFlagBits2.LateFragmentTestsBit,
+                    PipelineStageFlagBits2.FragmentShaderBit);
+            }
+        }
+        finally
+        {
+            device.DepthBiasEnabled = biased;
+            device.DepthBiasConstantFactor = constantBias;
+            device.DepthBiasSlopeFactor = slopeBias;
+            device.MSAALevel = samples;
+            device.SetDepthBuffer(depth);
+            frameTargets[0] = frame;
+            device.SetRenderTargets(frameTargets);
+            device.SetViewports(Window.Viewport);
+            device.SetScissors(Window.Scissor);
+            effect.ViewProjection.SetValue(ActiveCamera.ViewProjectionMatrix);
+            device.ResumeRendering();
+        }
+    }
+
+    private void DrawCascade(int cascade)
+    {
+        var device = GraphicsDevice;
+        var x = (int)cascadeSide * (cascade & 1);
+        var y = (int)cascadeSide * (cascade >> 1);
+        device.SetViewports(new Viewport
+        {
+            X = x, Y = y, Width = cascadeSide, Height = cascadeSide, MinDepth = 0, MaxDepth = 1
+        });
+        device.SetScissors(new Rect2D
+        {
+            Offset = new Offset2D { X = x, Y = y }, Extent = new Extent2D { Width = cascadeSide, Height = cascadeSide }
+        });
+        effect.ViewProjection.SetValue(cascadeViews[cascade]);
+        DrawCasters(groupsDrawn);
+        DrawCasters(casterGroups);
+    }
+
+    private void DrawCasters(List<MeshDrawGroup> casters)
+    {
+        var device = GraphicsDevice;
+        foreach (var group in casters)
+        {
+            var key = group.Key;
+            if (!key.DepthWrite || key.WireFrame)
+            {
+                continue;
+            }
+
+            var skinned = group.Instances[0].PaletteCount > 0;
+            effect.Parameters["InstanceBase"].SetValue(group.First);
+            ShadowPassOf(skinned, group.Masked).Apply();
+            // Both sides cast: a single-sided wall still stops the light.
+            key.Geometry.Draw(device, new RenderState(false, CullModeFlagBits.None, true, true, key.Topology),
+                (uint)group.Instances.Count);
+        }
+    }
+
+    // Where along the view's ray through two corners its depth is the given one.
+    private static Vector3F AtDepth(Vector3F nearCorner, Vector3F farCorner, float depth)
+    {
+        return Vector3F.Lerp(nearCorner, farCorner, (depth - nearCorner.Z) / (farCorner.Z - nearCorner.Z));
+    }
+
+    // From a cascade's clip space to its quarter of the map: the first two across the top, the last two below.
+    private static Matrix4x4F QuarterOf(int cascade)
+    {
+        var quarter = Matrix4x4F.Identity;
+        quarter.M11 = 0.25f;
+        quarter.M22 = 0.25f;
+        quarter.M41 = 0.25f + 0.5f * (cascade & 1);
+        quarter.M42 = 0.25f + 0.5f * (cascade >> 1);
+        return quarter;
     }
 
     private void OnDraw(Entity entity)
@@ -382,6 +806,14 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         trianglesInScene += triangles;
         if (!inView)
         {
+            // Out of view, it may still stand between the light and what is seen: one that would be shaded in view.
+            var unseen = entity.GetComponent<Material>();
+            if (shadowCaster != null && Drawn(Display, shown).Shaded && !IsMaskedOut(unseen)
+                && unseen is not { AlphaMode: AlphaMode.Blend } && InShadowReach(entity))
+            {
+                EnqueueCaster(entity, meshData, unseen);
+            }
+
             return true;
         }
 
@@ -481,14 +913,14 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             basicEffect.View.SetValue(ActiveCamera.ViewMatrix);
             basicEffect.Joints.SetValue(paletteAddress + wire.PaletteFirst * (ulong)Unsafe.SizeOf<Matrix4x4F>());
             basicEffect.JointCount.SetValue(wire.PaletteCount);
-            GizmoInstance[] copy = [new GizmoInstance(wire.World, new Vector4F(WireColor, 1f))];
+            GizmoInstance[] copy = [new GizmoInstance(wire.World, new Vector4F(InFrame(WireColor), 1f))];
             basicEffect.Instances.SetValue(GraphicsDevice.UploadFrameData<GizmoInstance>(copy));
             basicEffect.BasicSkinnedFlatInstancedPass.Apply();
         }
         else
         {
             basicEffect.Wvp.SetValue(wire.World * ActiveCamera.ViewProjectionMatrix);
-            basicEffect.MeshColor.SetValue(WireColor);
+            basicEffect.MeshColor.SetValue(InFrame(WireColor));
             basicEffect.BasicColoredPass.Apply();
         }
 
@@ -529,11 +961,23 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         // it; its wire is drawn as lines.
         var seeThrough = alphaMode == AlphaMode.Blend;
         withWire &= !seeThrough;
-        var pass = PassOf(withWire, skinned, textured, masked: alphaMode == AlphaMode.Mask, seeThrough);
+        var physical = material?.Lighting == LightingModel.Physical;
+        var pass = physical
+            ? PhysicalPassOf(withWire, skinned, masked: alphaMode == AlphaMode.Mask, seeThrough)
+            : PassOf(withWire, skinned, textured, masked: alphaMode == AlphaMode.Mask, seeThrough);
         var geometry = geometryCache.GetOrCreate(meshData.Mesh, meshData.ResolveVertexType());
         var (first, count) = skinned ? PaletteOf(entity.GetComponent<Skin>(), world) : default;
-        var textureIndex = texture != null ? ((GraphicsDevice)GraphicsDevice).DescriptorManager.TextureIndex(texture) : 0;
-        var instance = new MeshInstance(world, albedo, first, count, textureIndex, alphaCutoff);
+        var textureIndex = texture != null ? IndexOf(texture) : physical ? MeshInstance.NoMap : 0;
+        var emissive = IndexOf(LiveTexture(material?.EmissiveTexture));
+        var maps = physical
+            ? new MaterialMaps(IndexOf(LiveTexture(material.MetallicRoughnessTexture)),
+                IndexOf(LiveTexture(material.NormalTexture)), IndexOf(LiveTexture(material.OcclusionTexture)), emissive)
+            : MaterialMaps.None with { Emissive = emissive };
+        var surface = material == null
+            ? default
+            : new Vector4F(material.MetallicFactor, material.RoughnessFactor, material.NormalScale, material.OcclusionStrength);
+        var emission = material == null ? default : material.Emission with { W = 0 };
+        var instance = new MeshInstance(world, albedo, first, count, textureIndex, alphaCutoff, emission, surface, maps);
 
         Effect owner = withWire ? wireEffect : effect;
         var key = new MeshDrawKey(geometry, pass, MeshRenderExtensions.CullModeOf(material, world), meshData.DepthTestEnabled,
@@ -543,11 +987,102 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             group = spareGroups.Count > 0 ? spareGroups.Pop() : new MeshDrawGroup();
             group.Key = key;
             group.Effect = owner;
+            group.Masked = CastsMasked(alphaMode, textured);
             groups.Add(key, group);
             (seeThrough ? weightedGroups : groupsDrawn).Add(group);
         }
 
         group.Instances.Add(instance);
+    }
+
+    // Whether an entity's box in the scene's index lies in any cascade's box, which reaches back towards the light.
+    private bool InShadowReach(Entity entity)
+    {
+        if (sceneIndex == null || !sceneIndex.TryGetBox(entity, out var box))
+        {
+            return false;
+        }
+
+        var near = new BoundingBox<float>((box.Minimum - cameraPosition.ToVector()).As<float>(),
+            (box.Maximum - cameraPosition.ToVector()).As<float>());
+        foreach (var reach in cascadeReaches)
+        {
+            if (reach.Contains(near) != ContainmentType.Disjoint)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // A mesh out of view that only casts: drawn into the shadow map and nowhere else.
+    private void EnqueueCaster(Entity entity, MeshData meshData, Material material)
+    {
+        var transformation = entity.Transform.GetMetadata(ActiveCamera);
+        if (!transformation.Enabled)
+        {
+            return;
+        }
+
+        var world = transformation.WorldMatrixF;
+        var skinned = meshData.RenderMode == MeshRenderMode.Skinned;
+        var (first, count) = skinned ? PaletteOf(entity.GetComponent<Skin>(), world) : default;
+        var alphaMode = material?.AlphaMode ?? AlphaMode.Opaque;
+        var texture = LiveTextureOf(material);
+        var masked = CastsMasked(alphaMode, texture != null);
+        // Only a masked caster reads its color: where it is left out.
+        var instance = masked
+            ? new MeshInstance(world, AlbedoOf(material, alphaMode), first, count, IndexOf(texture), material.AlphaCutoff,
+                default, default, MaterialMaps.None)
+            : new MeshInstance(world, default, first, count, MeshInstance.NoMap, 0f, default, default, MaterialMaps.None);
+        var geometry = geometryCache.GetOrCreate(meshData.Mesh, meshData.ResolveVertexType());
+        var key = new MeshDrawKey(geometry, ShadowPassOf(skinned, masked), CullModeFlagBits.None, true, true, false,
+            meshData.TopologyOverride);
+        if (!groups.TryGetValue(key, out var group))
+        {
+            group = spareGroups.Count > 0 ? spareGroups.Pop() : new MeshDrawGroup();
+            group.Key = key;
+            group.Effect = effect;
+            group.Masked = masked;
+            groups.Add(key, group);
+            casterGroups.Add(group);
+        }
+
+        group.Instances.Add(instance);
+    }
+
+    private uint IndexOf(Texture texture) =>
+        texture == null ? MeshInstance.NoMap : ((GraphicsDevice)GraphicsDevice).DescriptorManager.TextureIndex(texture);
+
+    private static Texture LiveTexture(Texture texture) => texture is { IsDisposed: false } ? texture : null;
+
+    // A masked surface whose alpha changes across it - from its texture - casts a shadow with its holes; one alpha all
+    // over is drawn whole or not at all.
+    private static bool CastsMasked(AlphaMode alphaMode, bool textured) => alphaMode == AlphaMode.Mask && textured;
+
+    private IEffectPass ShadowPassOf(bool skinned, bool masked)
+    {
+        if (masked)
+            return skinned ? effect.ForwardPlusSkinnedMaskedShadowDepthPass : effect.ForwardPlusMaskedShadowDepthPass;
+        return skinned ? effect.ForwardPlusSkinnedShadowDepthPass : effect.ForwardPlusShadowDepthPass;
+    }
+
+    // A physical pass reads a texture when it has one, so one pass serves a surface with or without.
+    private IEffectPass PhysicalPassOf(bool withWire, bool skinned, bool masked, bool seeThrough)
+    {
+        if (seeThrough)
+            return skinned ? effect.ForwardPlusSkinnedWeightedPhysicalPass : effect.ForwardPlusWeightedPhysicalPass;
+        if (withWire)
+        {
+            if (masked)
+                return skinned ? wireEffect.ForwardPlusWireSkinnedMaskedPhysicalPass : wireEffect.ForwardPlusWireMaskedPhysicalPass;
+            return skinned ? wireEffect.ForwardPlusWireSkinnedPhysicalPass : wireEffect.ForwardPlusWirePhysicalPass;
+        }
+
+        if (masked)
+            return skinned ? effect.ForwardPlusSkinnedMaskedPhysicalPass : effect.ForwardPlusMaskedPhysicalPass;
+        return skinned ? effect.ForwardPlusSkinnedPhysicalPass : effect.ForwardPlusPhysicalPass;
     }
 
     // Only a textured surface's alpha changes across it, so only a textured pass is masked: a discard costs the early
@@ -607,6 +1142,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     {
         var count = PlaceGroups(groupsDrawn, 0);
         count = PlaceGroups(weightedGroups, count);
+        count = PlaceGroups(casterGroups, count);
         if (count == 0)
         {
             return;
@@ -619,12 +1155,12 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
         CopyInstances(groupsDrawn);
         CopyInstances(weightedGroups);
+        CopyInstances(casterGroups);
         var instanceAddress = GraphicsDevice.UploadFrameData<MeshInstance>(instances.AsSpan(0, count));
         foreach (var target in (ReadOnlySpan<Effect>)[effect, wireEffect])
         {
             target?.Parameters["Instances"].SetValue(instanceAddress);
             target?.Parameters["Palettes"].SetValue(paletteAddress);
-            target?.Parameters["sampleType"].SetResource(SamplerStates.LinearRepeat);
         }
     }
 
@@ -730,8 +1266,16 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     private void Composite()
     {
+        var descriptors = ((GraphicsDevice)GraphicsDevice).DescriptorManager;
+        effect.Parameters["AccumulatedTexture"].SetValue(descriptors.TextureIndex(weightedSums.ResolveTexture));
+        effect.Parameters["CoverageTexture"].SetValue(descriptors.TextureIndex(weightedCoverage.ResolveTexture));
+        DrawOverTarget(effect.ForwardPlusWeightedCompositePass, ColorBlendEquations.AlphaBlend);
+    }
+
+    // One triangle over the whole target by the pass, blended so, neither tested nor writing depth.
+    private void DrawOverTarget(IEffectPass pass, ColorBlendEquationEXT blendEquation)
+    {
         var device = GraphicsDevice;
-        var descriptors = ((GraphicsDevice)device).DescriptorManager;
         var blend = device.ColorBlendEquation;
         var vertexTypes = device.VertexTypes;
         var topology = device.PrimitiveTopology;
@@ -739,9 +1283,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var cullMode = device.CullMode;
         var depthTest = device.DepthTestEnabled;
         var depthWrite = device.DepthWriteEnable;
-        effect.Parameters["AccumulatedTexture"].SetValue(descriptors.TextureIndex(weightedSums.ResolveTexture));
-        effect.Parameters["CoverageTexture"].SetValue(descriptors.TextureIndex(weightedCoverage.ResolveTexture));
-        device.ColorBlendEquation = ColorBlendEquations.AlphaBlend;
+        device.ColorBlendEquation = blendEquation;
         device.VertexType = null;
         device.PrimitiveTopology = PrimitiveTopology.TriangleList;
         device.PolygonMode = PolygonMode.Fill;
@@ -750,7 +1292,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         device.DepthWriteEnable = false;
         try
         {
-            effect.ForwardPlusWeightedCompositePass.Apply();
+            pass.Apply();
             device.Draw(3, 1);
         }
         finally
@@ -763,6 +1305,217 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             device.DepthTestEnabled = depthTest;
             device.DepthWriteEnable = depthWrite;
         }
+    }
+
+    // Leaves the frame for the linear one beside it, the frame's size and samples and tested against its depth, cleared to
+    // nothing; gives the frame to come back to.
+    private IRenderTarget OpenSceneLight()
+    {
+        var device = GraphicsDevice;
+        var frame = device.CurrentRenderTarget;
+        EnsureSceneLight(frame, device.MSAALevel);
+        frameChannels = device.ColorComponentFlags;
+        frameClearColor = device.ClearColor;
+        device.SuspendRendering();
+        try
+        {
+            KeepDepthForNextPass();
+            PrepareToDraw(sceneLight);
+            sceneLightTargets[0] = sceneLight;
+            device.SetRenderTargets(sceneLightTargets);
+            device.ClearColor = Colors.Transparent;
+            // Its alpha is how much the scene covers, which the tone curve lays it over the frame by.
+            device.ColorComponentFlags = AllChannels;
+            device.BeginRendering(device.CurrentCommandBuffer, keepDepth: true);
+        }
+        catch
+        {
+            ReturnToFrame(frame);
+            throw;
+        }
+
+        return frame;
+    }
+
+    // Closes the linear frame, makes its glow, and lays it over the frame through the tone curve.
+    private void CloseSceneLight(IRenderTarget frame)
+    {
+        var device = GraphicsDevice;
+        device.SuspendRendering();
+        PrepareToRead(sceneLight);
+        var samples = !ReferenceEquals(sceneLight.ResolveTexture, sceneLight);
+        if (samples)
+        {
+            // The tone curve reads each sample of it; the glow, the resolved copy.
+            device.InsertImageMemoryBarrier(device.CurrentCommandBuffer, sceneLight, AccessFlagBits2.ColorAttachmentWriteBit,
+                AccessFlagBits2.ShaderReadBit, ImageLayout.ColorAttachmentOptimal, ImageLayout.ShaderReadOnlyOptimal,
+                PipelineStageFlagBits2.ColorAttachmentOutputBit, PipelineStageFlagBits2.FragmentShaderBit);
+        }
+
+        KeepDepthForNextPass();
+        var glowTexture = MeshInstance.NoMap;
+        try
+        {
+            glowTexture = glow > 0 && glowCopies.Length > 0 ? DrawGlow() : MeshInstance.NoMap;
+        }
+        finally
+        {
+            ReturnToFrame(frame);
+        }
+
+        var descriptors = ((GraphicsDevice)device).DescriptorManager;
+        var parameters = effect.Parameters;
+        parameters["SceneLightTexture"].SetValue(descriptors.TextureIndex(samples ? sceneLight : sceneLight.ResolveTexture));
+        parameters["SceneLightSamples"].SetValue(samples ? (uint)sceneLight.MSAALevel : 1u);
+        parameters["GlowTexture"].SetValue(glowTexture);
+        parameters["ToneMapping"].SetValue(new Vector4F(MathF.Pow(2f, exposure), Math.Clamp(glow, 0f, 1f),
+            Math.Max(1, glowCopies.Length), 0f));
+        parameters["FrameStep"].SetValue(new Vector2F(1f / sceneLight.Width, 1f / sceneLight.Height));
+        DrawOverTarget(effect.ForwardPlusToneMapPass, ColorBlendEquations.Premultiplied);
+    }
+
+    private void ReturnToFrame(IRenderTarget frame)
+    {
+        var device = GraphicsDevice;
+        device.ColorComponentFlags = frameChannels;
+        device.ClearColor = frameClearColor;
+        frameTargets[0] = frame;
+        device.SetRenderTargets(frameTargets);
+        device.ResumeRendering();
+    }
+
+    // The glow: the linear frame copied smaller and smaller, then each copy blurred and added to the one twice its size.
+    // Gives the biggest copy's texture.
+    private uint DrawGlow()
+    {
+        var device = GraphicsDevice;
+        var descriptors = ((GraphicsDevice)device).DescriptorManager;
+        var depth = device.CurrentDepthStencilBuffer;
+        var samples = device.MSAALevel;
+        var clearColor = device.ClearColor;
+        // The copies have neither depth nor samples.
+        device.SetDepthBuffer(null);
+        device.MSAALevel = MSAALevel.None;
+        device.ClearColor = Colors.Transparent;
+        try
+        {
+            ITexture source = sceneLight.ResolveTexture;
+            foreach (var copy in glowCopies)
+            {
+                DrawGlowStep(effect.ForwardPlusGlowDownPass, source, copy, ColorBlendEquations.Opaque, adding: false);
+                source = copy;
+            }
+
+            for (var i = glowCopies.Length - 2; i >= 0; i--)
+            {
+                DrawGlowStep(effect.ForwardPlusGlowUpPass, glowCopies[i + 1], glowCopies[i], ColorBlendEquations.Sum,
+                    adding: true);
+            }
+
+            return descriptors.TextureIndex(glowCopies[0].ResolveTexture);
+        }
+        finally
+        {
+            device.SetDepthBuffer(depth);
+            device.MSAALevel = samples;
+            device.ClearColor = clearColor;
+            device.SetViewports(Window.Viewport);
+            device.SetScissors(Window.Scissor);
+        }
+    }
+
+    // One step of the glow: the source read into the target, which it replaces or is added to.
+    private void DrawGlowStep(IEffectPass pass, ITexture source, IRenderTarget target, ColorBlendEquationEXT blend,
+        bool adding)
+    {
+        var descriptors = ((GraphicsDevice)GraphicsDevice).DescriptorManager;
+        effect.Parameters["GlowSource"].SetValue(descriptors.TextureIndex(source));
+        effect.Parameters["GlowStep"].SetValue(new Vector4F(1f / target.Width, 1f / target.Height, 1f / source.Width,
+            1f / source.Height));
+        DrawPicture(pass, target, blend, adding);
+    }
+
+    // A picture with neither depth nor samples drawn whole by one pass, which replaces or is added to what it holds; left
+    // to be read.
+    private void DrawPicture(IEffectPass pass, IRenderTarget target, ColorBlendEquationEXT blend, bool adding)
+    {
+        var device = GraphicsDevice;
+        if (adding)
+        {
+            PrepareToAddTo(target);
+        }
+        else
+        {
+            PrepareToDraw(target);
+        }
+
+        pictureTargets[0] = target;
+        device.SetRenderTargets(pictureTargets);
+        device.SetViewports(new Viewport { X = 0, Y = 0, Width = target.Width, Height = target.Height, MinDepth = 0, MaxDepth = 1 });
+        device.SetScissors(new Rect2D
+        {
+            Offset = new Offset2D(), Extent = new Extent2D { Width = target.Width, Height = target.Height }
+        });
+        device.BeginRendering(device.CurrentCommandBuffer, continueRendering: adding);
+        try
+        {
+            DrawOverTarget(pass, blend);
+        }
+        finally
+        {
+            device.SuspendRendering();
+            PrepareToRead(target);
+        }
+    }
+
+    // A copy read by the step before, written again over what it holds.
+    private void PrepareToAddTo(IRenderTarget layer)
+    {
+        GraphicsDevice.InsertImageMemoryBarrier(GraphicsDevice.CurrentCommandBuffer, layer, AccessFlagBits2.ShaderReadBit,
+            AccessFlagBits2.ColorAttachmentReadBit | AccessFlagBits2.ColorAttachmentWriteBit,
+            ImageLayout.ShaderReadOnlyOptimal, ImageLayout.ColorAttachmentOptimal, PipelineStageFlagBits2.FragmentShaderBit,
+            PipelineStageFlagBits2.ColorAttachmentOutputBit);
+    }
+
+    // The linear frame the size and samples of the frame, and the glow's copies, each half the one before, from half the
+    // frame's size: made anew when the frame changes, the old ones let go once the frames in flight are done with them.
+    private void EnsureSceneLight(IRenderTarget frame, MSAALevel samples)
+    {
+        if (sceneLight is { IsDisposed: false } && sceneLight.Width == frame.Width
+            && sceneLight.Height == frame.Height && sceneLight.MSAALevel == samples)
+        {
+            return;
+        }
+
+        ReleaseSceneLight();
+        sceneLight = GraphicsDevice.CreateRenderTarget(frame.Width, frame.Height, samples,
+            Format.R16G16B16A16_SFLOAT, ImageUsageFlagBits.SampledBit, ImageLayout.ColorAttachmentOptimal, "Scene light");
+        var copies = new List<IRenderTarget>();
+        var width = frame.Width / 2;
+        var height = frame.Height / 2;
+        while (copies.Count < MostGlowCopies && Math.Min(width, height) >= SmallestGlow)
+        {
+            copies.Add(GraphicsDevice.CreateRenderTarget(width, height, MSAALevel.None, Format.R16G16B16A16_SFLOAT,
+                ImageUsageFlagBits.SampledBit, ImageLayout.ColorAttachmentOptimal, $"Glow {copies.Count + 1}"));
+            width /= 2;
+            height /= 2;
+        }
+
+        glowCopies = copies.ToArray();
+    }
+
+    private void ReleaseSceneLight()
+    {
+        if (sceneLight is IDisposable light && !sceneLight.IsDisposed)
+            sceneLight.GraphicsDevice.AddToDeferDisposeQueue(light);
+        foreach (var copy in glowCopies)
+        {
+            if (copy is IDisposable disposable && !copy.IsDisposed)
+                copy.GraphicsDevice.AddToDeferDisposeQueue(disposable);
+        }
+
+        sceneLight = null;
+        glowCopies = [];
     }
 
     // The layers the size and samples of the frame they go over: made anew when it changes, the old ones let go once the
@@ -842,6 +1595,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     {
         Recycle(groupsDrawn);
         Recycle(weightedGroups);
+        Recycle(casterGroups);
         groups.Clear();
         framePalettes.Clear();
         paletteMatrices = 0;
@@ -867,12 +1621,23 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     {
         var transform = entity.Transform.GetMetadata(ActiveCamera);
         basicEffect.Wvp.SetValue(transform.WorldMatrixF * ActiveCamera.ViewProjectionMatrix);
-        basicEffect.MeshColor.SetValue(ColliderColor);
+        basicEffect.MeshColor.SetValue(InFrame(ColliderColor));
         basicEffect.BasicColoredPass.Apply();
         if (collider.GetVisualRepresentation() is { } outline)
         {
             geometryCache.GetOrCreate(outline, typeof(MeshVertex)).Draw(GraphicsDevice, RenderState.Default);
         }
+    }
+
+    // A color given as the screen shows it, as the frame takes it: decoded from sRGB for a linear frame.
+    private Vector3F InFrame(Vector3F color)
+    {
+        return linearFrame ? new Vector3F(Linear(color.X), Linear(color.Y), Linear(color.Z)) : color;
+    }
+
+    private static float Linear(float srgb)
+    {
+        return srgb <= 0.04045f ? srgb / 12.92f : MathF.Pow((srgb + 0.055f) / 1.055f, 2.4f);
     }
 
     // The diffuse color's alpha counts unless the material is opaque.
@@ -892,6 +1657,9 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private void ReleaseDeviceResources()
     {
         ReleaseWeightedLayers();
+        ReleaseSceneLight();
+        ReleaseShadowMap();
+        ReleaseSkyPictures();
         geometryCache?.Dispose();
         effect?.Dispose();
         wireEffect?.Dispose();

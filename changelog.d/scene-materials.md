@@ -1,0 +1,54 @@
+### Added
+
+- `Material.Lighting`: how a surface is lit, `LightingModel.Simple` (the Blinn-Phong model, as before, and the default)
+  or `LightingModel.Physical` - metalness and roughness by the Cook-Torrance model, its color, metalness, roughness and
+  emission worked in linear light. A simple scene keeps the cheaper model; each material chooses.
+- `Material.MetallicRoughnessTexture`, `NormalTexture`, `OcclusionTexture` and `EmissiveTexture`: the maps of a
+  physical material, loaded from their paths on import. A normal map needs no tangents in the mesh.
+- `Material.Emission` is drawn by both models: a surface gives off its light whatever lights it, an emissive map
+  shaping it.
+- An imported material that knows its metalness, or carries a map only the physical model reads (metalness and
+  roughness, normal, occlusion), is lit physically. After a device change every map is loaded again, as the base
+  texture is.
+- `Scene.Environment` (`SceneEnvironment`): the scene's sky and how its frame is brought to the screen, saved in its file
+  as an `Environment` section (left out while it is as a new scene's):
+  - `Sky` - `SkyKind.None` (as before), `Studio`, `Stars` or `Even` - and `SkyStrength`: a sky made by the engine itself,
+    drawn behind the scene; the starry one has the galaxy across it, its core warm and thick, lanes of dust down its
+    middle and its stars crowding towards it. Physical surfaces take their light and reflections from it: what a matt surface gathers
+    round its normal and what a surface of each roughness mirrors, made once for the sky. The sky is drawn first in the
+    frame by a `SceneBackgroundProcessor` the scene's processor attaches beside itself, so an editor's ground grid lies
+    over it (`ToolsUnderlayProcessor.Order` is now one after it); with a multiple-scattering
+    term, a white surface under an even sky sends back all the light it gets, metal or paint. Simple surfaces keep the
+    ambient light.
+  - `HighDynamicRange`: the scene lit in linear light without a ceiling, into a half-float frame of its own, then brought
+    to the screen by the AgX tone curve - bright colors go to white as on film - with `Exposure` in stops. Its brightest
+    light spreads into a glow, `Glow` its share: the frame copied smaller and smaller and added back up. Off by default,
+    every surface drawn straight into the frame as before.
+- Shadows of a directional light: the first one whose `Light.IsWithShadows` is on casts the opaque surfaces' shadow in
+  four cascades, the near ones fine and the far ones coarse, as far as `ForwardPlusRenderingProcessor.ShadowDistance`;
+  each cascade `Light.ShadowMapResolution` texels square, 1024 when it is not set. The edge is softened over a few texels,
+  and it does not crawl as the camera moves. What stands out of view between the light and what is seen casts too. A
+  surface masked by its texture casts a shadow with its holes. Both lighting models take it.
+- `IGraphicsDevice.CreateReadableDepthBuffer`: a depth buffer a shader can read once it is drawn, as a shadow map is - of
+  depth alone, resting in `ShaderReadOnlyOptimal`. `SurfaceFormat.HasDepthFormat`.
+- A pass may draw depth alone: with no color target, it takes its size from the depth buffer, and a buffer without
+  stencil is attached as depth only.
+
+- `Texture.LoadWithMipmaps`: a picture loaded with its smaller levels made on the GPU, each half the one before, so a
+  surface seen far off or at a slant does not shimmer; a picture with levels of its own, or of a format the device
+  cannot halve, keeps what it has. `TextureAssetReader` - a scene's material maps - loads with it.
+
+### Changed
+
+- The scene's surfaces are sampled anisotropically (`SamplerStates.AnisotropicRepeat`), sharp along a slant.
+
+- An effect may read the shared table of textures - an array of no length - both as plain textures and as
+  multisampled ones, under two names on one binding; any other two resources on one binding are still an error.
+
+### Fixed
+
+- A thin bright line in a high dynamic range frame no longer thickens and thins as it moves across the pixels: each of a
+  pixel's samples is brought through the tone curve before they are averaged, where the average of a bright line and
+  what is round it was brightened whole.
+- `TextureExtensions.RecordLayoutTransition` gave a depth image the color aspect for any layout but
+  `DepthStencilAttachmentOptimal`; it takes the aspect from the image's format.

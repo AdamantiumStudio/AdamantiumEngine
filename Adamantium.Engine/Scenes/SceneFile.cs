@@ -55,6 +55,10 @@ public sealed class SceneFile
     [EditorBrowsable(EditorBrowsableState.Never)]
     public bool ShouldSerializeUidText() => Uid != null;
 
+    /// <summary>The scene's sky and how its frame is brought to the screen; null for the defaults.</summary>
+    [XmlElement("Environment")]
+    public SceneEnvironmentEntry Environment { get; set; }
+
     [XmlArray("Models"), XmlArrayItem("Model")]
     public List<SceneModel> Models { get; set; } = [];
 

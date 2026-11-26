@@ -97,13 +97,34 @@ namespace Adamantium.ECS.Components
       [Bindable]
       public partial Vector4F LightColor { get; set; }
 
-      /// <summary>How metallic the surface is, 0 to 1. Kept for PBR; the forward renderer draws the base color.</summary>
+      /// <summary>How metallic the surface is, 0 to 1, times the blue of <see cref="MetallicRoughnessTexture"/>.</summary>
       [Bindable]
       public partial Single MetallicFactor { get; set; }
 
-      /// <summary>How rough the surface is, 0 to 1. Kept for PBR.</summary>
+      /// <summary>How rough the surface is, 0 to 1, times the green of <see cref="MetallicRoughnessTexture"/>.</summary>
       [Bindable]
       public partial Single RoughnessFactor { get; set; }
+
+      /// <summary>How the surface is lit: the simple model, cheap and needing nothing prepared, or the physical one, with
+      /// metalness, roughness and the maps.</summary>
+      [Bindable]
+      public partial LightingModel Lighting { get; set; }
+
+      /// <summary>The image of roughness (green) and metalness (blue); the physical model only.</summary>
+      [Bindable]
+      public partial Texture MetallicRoughnessTexture { get; set; }
+
+      /// <summary>The normal map, in the surface's tangent space; the physical model only.</summary>
+      [Bindable]
+      public partial Texture NormalTexture { get; set; }
+
+      /// <summary>The ambient occlusion map, in its red; the physical model only.</summary>
+      [Bindable]
+      public partial Texture OcclusionTexture { get; set; }
+
+      /// <summary>The image of the light the surface gives off, times <see cref="Emission"/>.</summary>
+      [Bindable]
+      public partial Texture EmissiveTexture { get; set; }
 
       /// <summary>Where the image of roughness (green) and metalness (blue) came from.</summary>
       [Bindable]

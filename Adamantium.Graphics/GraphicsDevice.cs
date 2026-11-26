@@ -309,6 +309,11 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         return DepthStencilBuffer.New(this, width, height, format, msaa, imageAspect, name);
     }
 
+    public IDepthStencilBuffer CreateReadableDepthBuffer(uint width, uint height, DepthFormat format, string name = "")
+    {
+        return DepthStencilBuffer.NewReadable(this, width, height, format, name);
+    }
+
     public IRenderTarget CreateRenderTarget(
         uint width, 
         uint height, 
@@ -575,14 +580,23 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
         CurrentCommandBuffer.ClearAttachments(1, new[] { attachment }, 1, new[] { clearRect });
     }
 
+    // The size a pass draws over: its first color target's, or its depth buffer's when it draws depth alone.
+    private (uint Width, uint Height) RenderAreaSize()
+    {
+        return renderTargets is { Length: > 0 }
+            ? (renderTargets[0].Width, renderTargets[0].Height)
+            : (depthBuffer.Width, depthBuffer.Height);
+    }
+
     // A clear rect outside the render area is invalid use; callers only know the viewport, so it is cut here. False: nothing
     // is left to clear.
     private bool ClampToRenderArea(ref Rect2D rect)
     {
-        if (renderTargets is not { Length: > 0 }) return false;
+        if (renderTargets is not { Length: > 0 } && depthBuffer == null) return false;
 
-        var limitX = (int)renderTargets[0].Width;
-        var limitY = (int)renderTargets[0].Height;
+        var (width, height) = RenderAreaSize();
+        var limitX = (int)width;
+        var limitY = (int)height;
         var left = Math.Clamp(rect.Offset.X, 0, limitX);
         var top = Math.Clamp(rect.Offset.Y, 0, limitY);
         var right = Math.Clamp(rect.Offset.X + (int)rect.Extent.Width, left, limitX);
@@ -1406,8 +1420,7 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
                 colorAttachments[i] = colorAttachmentInfo;
             }
 
-            var width = renderTargets[0].Width;
-            var height = renderTargets[0].Height;
+            var (width, height) = RenderAreaSize();
 
             var depthAttachmentInfo = new RenderingAttachmentInfo();
             depthAttachmentInfo.ImageView = depthBuffer?.GetImageView();
@@ -1431,7 +1444,11 @@ public partial class GraphicsDevice : DisposableObject, IGraphicsDevice
             if (depthBuffer != null)
             {
                 renderingInfo.PDepthAttachment = depthAttachmentInfo;
-                renderingInfo.PStencilAttachment = depthAttachmentInfo;
+                // A buffer of depth alone, as a readable one is, has no stencil to attach.
+                if (depthBuffer.ImageAspect.HasFlag(ImageAspectFlagBits.StencilBit))
+                {
+                    renderingInfo.PStencilAttachment = depthAttachmentInfo;
+                }
             }
 
             renderingInfo.LayerCount = 1;

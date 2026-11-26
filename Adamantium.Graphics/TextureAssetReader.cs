@@ -7,7 +7,8 @@ namespace Adamantium.Graphics;
 
 /// <summary>
 /// Loads an image file and uploads it to the GPU as a sampleable <see cref="Texture"/> on the shared
-/// resource-loader device. Used for model material maps (EntityImportTemplate -> Assets.Load&lt;Texture&gt;).
+/// resource-loader device, with its mip levels: a scene's material maps (EntityImportTemplate -> Assets.Load&lt;Texture&gt;),
+/// seen far off and at a slant.
 /// </summary>
 public class TextureAssetReader : IAssetReader
 {
@@ -17,9 +18,9 @@ public class TextureAssetReader : IAssetReader
         if (parameters.Data != null)
         {
             using var stream = new MemoryStream(parameters.Data, false);
-            return Task.FromResult((object)Texture.Load(device, stream));
+            return Task.FromResult((object)Texture.LoadWithMipmaps(device, stream));
         }
 
-        return Task.FromResult((object)Texture.Load(device, parameters.AssetPath));
+        return Task.FromResult((object)Texture.LoadWithMipmaps(device, parameters.AssetPath));
     }
 }
