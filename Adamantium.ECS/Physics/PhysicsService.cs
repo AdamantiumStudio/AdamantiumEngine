@@ -67,7 +67,7 @@ public sealed partial class PhysicsService : GameService, IPhysicsService
                 throw new InvalidOperationException("The project's physics is changed only while no game plays.");
 
             if (value?.FindProblem() is { } problem)
-                throw new ArgumentException(problem, nameof(value));
+                throw new ArgumentException(problem.Message, nameof(value));
 
             _project = value;
         }

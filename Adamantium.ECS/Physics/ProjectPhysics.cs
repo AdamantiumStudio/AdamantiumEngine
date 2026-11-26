@@ -113,18 +113,17 @@ public sealed class ProjectPhysics
         return Read(stream);
     }
 
-    /// <summary>The project's physics in <paramref name="stream"/>; throws <see cref="InvalidDataException"/> for a file
+    /// <summary>The project's physics in <paramref name="stream"/>; throws <see cref="PhysicsFileException"/> for a file
     /// that is not one, of a later version, with settings <see cref="PhysicsSettings.FindProblem"/> refuses or a time to
     /// sleep not finite (bodies that never sleep are <see cref="BodiesSleep"/> off).</summary>
     public static ProjectPhysics Read(Stream stream)
     {
         var physics = PhysicsXml.Read<ProjectPhysics>(Serializer, stream, "a project's physics");
         if (physics.Version > CurrentVersion)
-            throw new InvalidDataException($"The project's physics is of version {physics.Version}; this engine reads "
-                                           + $"up to {CurrentVersion}.");
+            throw PhysicsFileException.LaterVersion("The project's physics", physics.Version, CurrentVersion);
 
         if (physics.FindProblem() is { } problem)
-            throw new InvalidDataException(problem);
+            throw problem;
 
         return physics;
     }
@@ -147,7 +146,7 @@ public sealed class ProjectPhysics
     private void ThrowIfUnreadable()
     {
         if (FindProblem() is { } problem)
-            throw new InvalidOperationException(problem);
+            throw new InvalidOperationException(problem.Message);
     }
 
     /// <summary>The settings a game's simulation is made with: these, the gravity among them.</summary>
@@ -168,6 +167,17 @@ public sealed class ProjectPhysics
         MaxStepsPerAdvance = MaxStepsPerAdvance
     };
 
-    /// <summary>What makes the project's physics one a game cannot take; null when there is nothing.</summary>
-    internal string FindProblem() => float.IsFinite(TimeToSleep) ? ToSettings().FindProblem() : "The time to sleep is finite.";
+    /// <summary>What makes the project's physics one a game cannot take, as the exception reading it would throw; null
+    /// when there is nothing.</summary>
+    internal PhysicsFileException FindProblem()
+    {
+        // The time to sleep is kept with sleeping off too, to come back when it is turned on: so it is checked either way.
+        if (!float.IsFinite(TimeToSleep))
+            return PhysicsFileException.Refused(PhysicsFileProblem.TimeToSleepNotFinite);
+        if (TimeToSleep < 0)
+            return PhysicsFileException.SettingsRefused(PhysicsSettingsProblem.TimeToSleepOutOfRange);
+
+        var settings = ToSettings().FindProblem();
+        return settings == PhysicsSettingsProblem.None ? null : PhysicsFileException.SettingsRefused(settings);
+    }
 }

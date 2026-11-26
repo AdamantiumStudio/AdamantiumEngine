@@ -330,10 +330,26 @@ public partial class PhysicsServiceTests
             Assert.That(physics.StepRate, Is.EqualTo(240));
             Assert.That(physics.Layers.ConvertAll(layer => layer.Name), Is.EqualTo((string[])["Debris", "Ghosts"]));
             Assert.That(physics.Apart[0].First + "/" + physics.Apart[0].Second, Is.EqualTo("Ghosts/Default"));
-            Assert.Throws<InvalidDataException>(() => ProjectPhysics.Read(Stream("<ProjectPhysics Version=\"9\" />")));
-            Assert.Throws<InvalidDataException>(() => ProjectPhysics.Read(Stream("<Scene />")));
-            Assert.Throws<InvalidDataException>(() => ProjectPhysics.Read(Stream("<ProjectPhysics StepRate=\"0\" />")));
+            var later = Refusal(() => ProjectPhysics.Read(Stream("<ProjectPhysics Version=\"9\" />")));
+            Assert.That((later.Problem, later.Version, later.ReadsUpTo),
+                Is.EqualTo((PhysicsFileProblem.LaterVersion, 9, ProjectPhysics.CurrentVersion)));
+            Assert.That(Refusal(() => ProjectPhysics.Read(Stream("<Scene />"))).Problem,
+                Is.EqualTo(PhysicsFileProblem.NotThisKind));
+            var noSteps = Refusal(() => ProjectPhysics.Read(Stream("<ProjectPhysics StepRate=\"0\" />")));
+            Assert.That((noSteps.Problem, noSteps.Settings),
+                Is.EqualTo((PhysicsFileProblem.SettingsRefused, PhysicsSettingsProblem.NoSteps)));
         });
+    }
+
+    // Why a physics file is not read, as values a reader says in its own words.
+    private static PhysicsFileException Refusal(Func<object> read) =>
+        Assert.Throws<PhysicsFileException>(() => read());
+
+    private static PhysicsSettingsProblem SettingsRefusal(string file)
+    {
+        var refusal = Refusal(() => ProjectPhysics.Read(Stream(file)));
+        Assert.That(refusal.Problem, Is.EqualTo(PhysicsFileProblem.SettingsRefused));
+        return refusal.Settings;
     }
 
     // The solver's settings come from the file; one that leaves them out steps as a simulation made with none.
@@ -357,11 +373,17 @@ public partial class PhysicsServiceTests
                 MaxLinearSpeed = 300, MaxStepsPerAdvance = 4
             }));
             Assert.That(left, Is.EqualTo(new PhysicsSettings { Gravity = new Vector3F(0, 1, 0) }));
-            Assert.Throws<InvalidDataException>(() => ProjectPhysics.Read(Stream("<ProjectPhysics Substeps=\"0\" />")));
-            Assert.Throws<InvalidDataException>(() =>
-                ProjectPhysics.Read(Stream("<ProjectPhysics MaxContactPointsPerPair=\"99\" />")));
-            Assert.Throws<InvalidDataException>(() => ProjectPhysics.Read(Stream("<ProjectPhysics TimeToSleep=\"INF\" />")));
-            Assert.Throws<InvalidDataException>(() => ProjectPhysics.Read(Stream("<ProjectPhysics MaxStepsPerAdvance=\"0\" />")));
+            Assert.That(SettingsRefusal("<ProjectPhysics Substeps=\"0\" />"), Is.EqualTo(PhysicsSettingsProblem.NoSubsteps));
+            Assert.That(SettingsRefusal("<ProjectPhysics MaxContactPointsPerPair=\"99\" />"),
+                Is.EqualTo(PhysicsSettingsProblem.ContactPointsOutOfRange));
+            Assert.That(Refusal(() => ProjectPhysics.Read(Stream("<ProjectPhysics TimeToSleep=\"INF\" />"))).Problem,
+                Is.EqualTo(PhysicsFileProblem.TimeToSleepNotFinite));
+            Assert.That(SettingsRefusal("<ProjectPhysics MaxStepsPerAdvance=\"0\" />"),
+                Is.EqualTo(PhysicsSettingsProblem.NoStepsPerAdvance));
+            Assert.That(SettingsRefusal("<ProjectPhysics BodiesSleep=\"false\" TimeToSleep=\"-5\" />"),
+                Is.EqualTo(PhysicsSettingsProblem.TimeToSleepOutOfRange), "kept with sleeping off, to come back on");
+            Assert.That(Refusal(() => ProjectPhysics.Read(Stream("<ProjectPhysics StepRate=\"many\" />"))).Problem,
+                Is.EqualTo(PhysicsFileProblem.ValueNotRead), "a project's physics, with a value that is no number");
         });
     }
 
@@ -396,11 +418,14 @@ public partial class PhysicsServiceTests
             Assert.That(material.Restitution, Is.EqualTo(0.3f));
             Assert.That(material.FrictionCombine, Is.EqualTo(CombineRule.Minimum));
             Assert.That(material.RestitutionCombine, Is.EqualTo(PhysicsMaterial.Default.RestitutionCombine));
-            Assert.Throws<InvalidDataException>(() => PhysicsMaterialFile.Read(Stream("<PhysicsMaterial Friction=\"-1\" />")));
-            Assert.Throws<InvalidDataException>(() =>
-                PhysicsMaterialFile.Read(Stream("<PhysicsMaterial RollingResistance=\"-1\" />")));
-            Assert.Throws<InvalidDataException>(() =>
-                PhysicsMaterialFile.Read(Stream("<PhysicsMaterial FrictionCombine=\"Sideways\" />")));
+            Assert.That(Refusal(() => PhysicsMaterialFile.Read(Stream("<PhysicsMaterial Friction=\"-1\" />"))).Problem,
+                Is.EqualTo(PhysicsFileProblem.MaterialAmountRefused));
+            Assert.That(Refusal(() => PhysicsMaterialFile.Read(Stream("<PhysicsMaterial RollingResistance=\"-1\" />")))
+                .Problem, Is.EqualTo(PhysicsFileProblem.MaterialAmountRefused));
+            Assert.That(Refusal(() => PhysicsMaterialFile.Read(Stream("<PhysicsMaterial FrictionCombine=\"Sideways\" />")))
+                .Problem, Is.EqualTo(PhysicsFileProblem.ValueNotRead), "a choice there is none of");
+            Assert.That(Refusal(() => PhysicsMaterialFile.Read(Stream("<PhysicsMaterial"))).Problem,
+                Is.EqualTo(PhysicsFileProblem.NotThisKind), "damaged XML");
         });
     }
 

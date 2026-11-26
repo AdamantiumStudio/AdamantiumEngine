@@ -107,7 +107,7 @@ public sealed class PhysicsMaterialFile
         return Read(stream);
     }
 
-    /// <summary>The material in <paramref name="stream"/>; throws <see cref="InvalidDataException"/> for a file that is
+    /// <summary>The material in <paramref name="stream"/>; throws <see cref="PhysicsFileException"/> for a file that is
     /// not one, of a later version, or with a friction, rolling resistance or restitution below zero or not finite.
     /// </summary>
     public static PhysicsMaterialFile Read(Stream stream)
@@ -123,11 +123,10 @@ public sealed class PhysicsMaterialFile
         }
 
         if (file.Version > CurrentVersion)
-            throw new InvalidDataException($"The physics material is of version {file.Version}; this engine reads up to "
-                                           + $"{CurrentVersion}.");
+            throw PhysicsFileException.LaterVersion("The physics material", file.Version, CurrentVersion);
 
         if (file.FindProblem() is { } problem)
-            throw new InvalidDataException(problem);
+            throw problem;
 
         return file;
     }
@@ -150,13 +149,14 @@ public sealed class PhysicsMaterialFile
     private void ThrowIfUnreadable()
     {
         if (FindProblem() is { } problem)
-            throw new InvalidOperationException(problem);
+            throw new InvalidOperationException(problem.Message);
     }
 
-    private string FindProblem() =>
+    // What makes the material one a game cannot take, as the exception reading it would throw; null when nothing.
+    private PhysicsFileException FindProblem() =>
         IsAmount(StaticFriction) && IsAmount(DynamicFriction) && IsAmount(RollingResistance) && IsAmount(Restitution)
             ? null
-            : "A physics material's friction, rolling resistance and restitution are finite, not below zero.";
+            : PhysicsFileException.Refused(PhysicsFileProblem.MaterialAmountRefused);
 
     private static bool IsAmount(float value) => float.IsFinite(value) && value >= 0;
 }
