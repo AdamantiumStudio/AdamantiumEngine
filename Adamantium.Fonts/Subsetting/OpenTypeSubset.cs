@@ -25,10 +25,10 @@ public static class OpenTypeSubset
         ArgumentNullException.ThrowIfNull(indices);
         ArgumentException.ThrowIfNullOrEmpty(name);
         var laid = CffSubset.IndicesOf(font, indices);
-        return Write(font, laid, name, new Metrics(font, laid));
+        return Write(font, laid, name, new OpenTypeSubsetMetrics(font, laid));
     }
 
-    private static byte[] Write(IFont font, IReadOnlyList<uint> indices, string name, Metrics metrics)
+    private static byte[] Write(IFont font, IReadOnlyList<uint> indices, string name, OpenTypeSubsetMetrics metrics)
     {
         var tables = new SortedDictionary<string, byte[]>(StringComparer.Ordinal)
         {
@@ -43,89 +43,6 @@ public static class OpenTypeSubset
             ["post"] = Post(metrics),
         };
         return File(tables);
-    }
-
-    // The widths and boxes of the glyphs written, and the font's lines, at the subset's units.
-    private sealed class Metrics
-    {
-        public Metrics(IFont font, IReadOnlyList<uint> indices)
-        {
-            Font = font;
-            Scale = (double)CffSubset.UnitsPerEm / font.UnitsPerEm;
-            Advances = new ushort[indices.Count];
-            Bearings = new short[indices.Count];
-            short xMin = short.MaxValue, yMin = short.MaxValue, xMax = short.MinValue, yMax = short.MinValue;
-            var minRight = int.MaxValue;
-            for (var i = 0; i < indices.Count; i++)
-            {
-                var glyph = font.GetGlyphByIndex(indices[i]);
-                Advances[i] = (ushort)Math.Clamp(Math.Round(font.GetAdvanceWidth(indices[i]) * Scale), 0, ushort.MaxValue);
-                var box = glyph.BoundingRectangle;
-                if (!glyph.HasOutlines || !(box.Width > 0) || !(box.Height > 0))
-                {
-                    continue;
-                }
-
-                var left = Em(box.X);
-                var right = Em(box.X + box.Width);
-                Bearings[i] = left;
-                xMin = Math.Min(xMin, left);
-                yMin = Math.Min(yMin, Em(box.Y));
-                xMax = Math.Max(xMax, right);
-                yMax = Math.Max(yMax, Em(box.Y + box.Height));
-                minRight = Math.Min(minRight, Advances[i] - right);
-                MaxExtent = Math.Max(MaxExtent, right);
-                MinLeft = Math.Min(MinLeft, left);
-                Inked = true;
-            }
-
-            if (Inked)
-            {
-                (XMin, YMin, XMax, YMax, MinRight) = (xMin, yMin, xMax, yMax, minRight);
-            }
-            else
-            {
-                MinLeft = 0;
-            }
-
-            // A font without 'OS/2' has the line's alone.
-            var typo = font.Ascender != 0 || font.Descender != 0;
-            Ascender = Em(typo ? font.Ascender : font.LineAscent);
-            Descender = Em(typo ? font.Descender : -font.LineDescent);
-            LineGap = Em(font.LineGap);
-        }
-
-        public IFont Font { get; }
-
-        public double Scale { get; }
-
-        public ushort[] Advances { get; }
-
-        public short[] Bearings { get; }
-
-        public bool Inked { get; }
-
-        public short XMin { get; }
-
-        public short YMin { get; }
-
-        public short XMax { get; }
-
-        public short YMax { get; }
-
-        public int MinRight { get; }
-
-        public short MinLeft { get; } = short.MaxValue;
-
-        public short MaxExtent { get; }
-
-        public short Ascender { get; }
-
-        public short Descender { get; }
-
-        public short LineGap { get; }
-
-        public short Em(double units) => (short)Math.Clamp(Math.Round(units * Scale), short.MinValue, short.MaxValue);
     }
 
     // The table directory, each table padded to four bytes, and the whole file's checksum made the magic number.
@@ -197,7 +114,7 @@ public static class OpenTypeSubset
         return sum;
     }
 
-    private static byte[] Head(Metrics metrics)
+    private static byte[] Head(OpenTypeSubsetMetrics metrics)
     {
         var data = new byte[54];
         var span = data.AsSpan();
@@ -221,7 +138,7 @@ public static class OpenTypeSubset
 
     private static bool IsItalic(IFont font) => font.Style != FontStyle.Normal;
 
-    private static byte[] Hhea(Metrics metrics)
+    private static byte[] Hhea(OpenTypeSubsetMetrics metrics)
     {
         var data = new byte[36];
         var span = data.AsSpan();
@@ -238,7 +155,7 @@ public static class OpenTypeSubset
         return data;
     }
 
-    private static byte[] Hmtx(Metrics metrics)
+    private static byte[] Hmtx(OpenTypeSubsetMetrics metrics)
     {
         var data = new byte[metrics.Advances.Length * 4];
         for (var i = 0; i < metrics.Advances.Length; i++)
@@ -259,7 +176,7 @@ public static class OpenTypeSubset
         return data;
     }
 
-    private static byte[] Os2(Metrics metrics)
+    private static byte[] Os2(OpenTypeSubsetMetrics metrics)
     {
         var font = metrics.Font;
         var data = new byte[96];
@@ -295,9 +212,6 @@ public static class OpenTypeSubset
         BinaryPrimitives.WriteUInt16BigEndian(span[92..], 0x0020);              // the break character
         return data;
     }
-
-    // A run of characters standing for a run of glyphs, one after the other.
-    private readonly record struct CharacterRun(int First, int Last, int Glyph);
 
     // The characters the glyphs written stand for alone, each to its glyph of the subset, on the Windows platform: all of
     // them in format 12, those of the Basic Multilingual Plane in format 4 as well - where they fit its 16-bit length.
@@ -448,7 +362,7 @@ public static class OpenTypeSubset
     }
 
     // Version 3: no glyph names, as a font of CFF outlines keeps them in its program.
-    private static byte[] Post(Metrics metrics)
+    private static byte[] Post(OpenTypeSubsetMetrics metrics)
     {
         var data = new byte[32];
         var span = data.AsSpan();
