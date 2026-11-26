@@ -53,27 +53,29 @@ public sealed record PhysicsSettings
     /// slows down instead of stepping ever more to catch up.</summary>
     public int MaxStepsPerAdvance { get; init; } = 8;
 
-    /// <summary>What makes these settings ones no simulation takes; null when there is nothing.</summary>
-    public string FindProblem()
+    /// <summary>What makes these settings ones no simulation takes; <see cref="PhysicsSettingsProblem.None"/> when there
+    /// is nothing.</summary>
+    public PhysicsSettingsProblem FindProblem()
     {
         if (StepRate <= 0)
-            return "The physics takes at least one step a second.";
+            return PhysicsSettingsProblem.NoSteps;
         if (Substeps <= 0)
-            return "Each step solves the contacts at least once.";
+            return PhysicsSettingsProblem.NoSubsteps;
         if (MaxContactPointsPerPair <= 0 || MaxContactPointsPerPair > ManifoldBuffer.Capacity)
-            return $"A contact keeps from 1 to {ManifoldBuffer.Capacity} points.";
+            return PhysicsSettingsProblem.ContactPointsOutOfRange;
         if (MaxStepsPerAdvance <= 0)
-            return "An advance takes at least one step.";
+            return PhysicsSettingsProblem.NoStepsPerAdvance;
         if (!float.IsFinite(Gravity.X) || !float.IsFinite(Gravity.Y) || !float.IsFinite(Gravity.Z))
-            return "The gravity is finite.";
+            return PhysicsSettingsProblem.GravityNotFinite;
         if (!(MaxLinearSpeed > 0) || !float.IsFinite(MaxLinearSpeed * MaxLinearSpeed))
-            return "The speed limit is above zero and not too large.";
+            return PhysicsSettingsProblem.SpeedLimitOutOfRange;
         if (!IsFiniteNotNegative(SpeculativeDistance) || !IsFiniteNotNegative(ContactHertz)
             || !IsFiniteNotNegative(ContactDampingRatio) || !IsFiniteNotNegative(MaxPushOutSpeed)
             || !IsFiniteNotNegative(RestitutionThreshold) || !IsFiniteNotNegative(SleepSpeed))
-            return "Contact and sleep settings are finite and not negative.";
+            return PhysicsSettingsProblem.ContactOrSleepOutOfRange;
 
-        return TimeToSleep >= 0 ? null : "The time to sleep is not negative.";
+        // NaN fails the comparison, so it is refused here too.
+        return TimeToSleep >= 0 ? PhysicsSettingsProblem.None : PhysicsSettingsProblem.TimeToSleepOutOfRange;
     }
 
     private static bool IsFiniteNotNegative(float value) => float.IsFinite(value) && value >= 0;

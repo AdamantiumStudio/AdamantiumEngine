@@ -8,6 +8,8 @@ public sealed class StreamedSound : Sound
         : base(decoder.Format, decoder.Frames, decoder.Loop)
     {
         Storage = storage;
+        Codec = decoder.Codec;
+        Tags = decoder.Tags;
     }
 
     internal ISoundStorage Storage { get; }

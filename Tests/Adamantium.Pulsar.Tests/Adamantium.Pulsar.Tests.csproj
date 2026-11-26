@@ -32,6 +32,7 @@
       <EmbeddedResource Include="Mp3\*" LogicalName="mp3.%(Filename)%(Extension)" />
       <EmbeddedResource Include="Ogg\*" LogicalName="ogg.%(Filename)%(Extension)" />
       <EmbeddedResource Include="Opus\*" LogicalName="opus.%(Filename)%(Extension)" />
+      <EmbeddedResource Include="Tags\*" LogicalName="tags.%(Filename)%(Extension)" />
     </ItemGroup>
 
 </Project>

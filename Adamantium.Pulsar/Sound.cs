@@ -43,4 +43,11 @@ public abstract class Sound
 
     /// <summary>What repeats where it is looped; the whole of it if not said.</summary>
     public SoundLoop Loop { get; }
+
+    /// <summary>Of the file it was read from, its codec (<see cref="ISoundDecoder.Codec"/>); null for samples made
+    /// otherwise.</summary>
+    public string Codec { get; internal init; }
+
+    /// <summary>What the file it was read from says of it.</summary>
+    public SoundTags Tags { get; internal init; }
 }
