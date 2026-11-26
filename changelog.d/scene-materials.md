@@ -11,7 +11,8 @@
 - `Scene.Environment` (`SceneEnvironment`): the scene's sky and how its frame is brought to the screen, saved in its file
   as an `Environment` section (left out while it is as a new scene's):
   - `Sky` - `SkyKind.None` (as before), `Studio`, `Stars` or `Even` - and `SkyStrength`: a sky made by the engine itself,
-    drawn behind the scene. Physical surfaces take their light and reflections from it: what a matt surface gathers
+    drawn behind the scene; the starry one has the galaxy across it, its core warm and thick, lanes of dust down its
+    middle and its stars crowding towards it. Physical surfaces take their light and reflections from it: what a matt surface gathers
     round its normal and what a surface of each roughness mirrors, made once for the sky. The sky is drawn first in the
     frame by a `SceneBackgroundProcessor` the scene's processor attaches beside itself, so an editor's ground grid lies
     over it (`ToolsUnderlayProcessor.Order` is now one after it); with a multiple-scattering

@@ -376,6 +376,73 @@ float StarsOf(float3 direction, float cells, float share, float size)
     return (0.15f + 0.85f * brightness) * exp(-apart * apart / (size * size));
 }
 
+// Smooth noise 0 to 1 over space: the hashes of a cell's corners blended across it.
+float SkyNoise(float3 place, uint salt)
+{
+    int3 cell = int3(floor(place));
+    float3 f = frac(place);
+    f = f * f * (3.0f - 2.0f * f);
+    float x00 = lerp(SkyHash(cell, salt), SkyHash(cell + int3(1, 0, 0), salt), f.x);
+    float x10 = lerp(SkyHash(cell + int3(0, 1, 0), salt), SkyHash(cell + int3(1, 1, 0), salt), f.x);
+    float x01 = lerp(SkyHash(cell + int3(0, 0, 1), salt), SkyHash(cell + int3(1, 0, 1), salt), f.x);
+    float x11 = lerp(SkyHash(cell + int3(0, 1, 1), salt), SkyHash(cell + int3(1, 1, 1), salt), f.x);
+    return lerp(lerp(x00, x10, f.y), lerp(x01, x11, f.y), f.z);
+}
+
+// Noise of several sizes, each half the one before and half as strong: clouds with smaller clouds in them.
+float SkyClouds(float3 place, uint octaves, uint salt)
+{
+    float sum = 0.0f;
+    float strength = 0.5f;
+    for (uint i = 0; i < octaves; i++)
+    {
+        sum += SkyNoise(place, salt + i) * strength;
+        place *= 2.03f;
+        strength *= 0.5f;
+    }
+
+    return sum / (1.0f - strength * 2.0f);
+}
+
+// The galaxy's plane, seen from inside it: its pole, and the way to its core within it.
+static const float3 GalaxyPole = float3(0.2982f, 0.2485f, 0.9216f);
+static const float3 GalaxyCore = float3(0.9545f, -0.0795f, -0.2873f);
+
+// How near the galaxy's band a direction lies, 0 to 1, for the stars to crowd towards it.
+float GalaxyNearness(float3 direction)
+{
+    float latitude = dot(direction, GalaxyPole);
+    float towardsCore = dot(direction, GalaxyCore);
+    float width = 0.09f + 0.07f * saturate(towardsCore);
+    return exp(-latitude * latitude / (width * width));
+}
+
+// The galaxy's light along a direction: a band along its plane, thicker and warmer towards the core, made of clouds of
+// stars too far apart to see one by one, and a lane of dust down its middle that wanders and frays.
+float3 GalaxyLight(float3 direction)
+{
+    float latitude = dot(direction, GalaxyPole);
+    float towardsCore = dot(direction, GalaxyCore);
+    float core = saturate(towardsCore);
+    float width = 0.06f + 0.06f * core;
+    float band = exp(-latitude * latitude / (width * width));
+    float bulge = pow(core, 24.0f) * exp(-latitude * latitude / 0.006f);
+    float clouds = SkyClouds(direction * 6.0f, 5u, 11u);
+    float fine = SkyClouds(direction * 30.0f, 3u, 23u);
+    float lumps = 0.35f + 1.3f * pow(clouds, 1.5f);
+    float stars = band * (0.12f + 2.4f * pow(clouds, 2.5f)) * (0.55f + 0.9f * fine);
+    // The dust: a narrow lane down the middle, its line wandering and its edge torn, splitting the core, and thin dark
+    // threads across the band - where smaller clouds come to an edge.
+    float lane = latitude - 0.02f * (SkyNoise(direction * 4.0f, 37u) - 0.5f) * 2.0f;
+    float laneWidth = 0.011f + 0.016f * core;
+    float dust = exp(-lane * lane / (laneWidth * laneWidth)) * smoothstep(0.2f, 0.5f, SkyClouds(direction * 16.0f, 4u, 41u));
+    float threads = 1.0f - abs(2.0f * SkyClouds(direction * 12.0f, 4u, 53u) - 1.0f);
+    dust = saturate(dust + 0.8f * band * smoothstep(0.82f, 0.97f, threads));
+    float3 disc = float3(0.028f, 0.032f, 0.044f);
+    float3 warm = float3(0.10f, 0.07f, 0.04f);
+    return (disc * stars + warm * bulge * lumps * (0.55f + 0.9f * fine)) * (1.0f - 0.9f * dust);
+}
+
 // The sky's light along a direction, before its strength. Smooth leaves the stars out but keeps their sum, for what
 // gathers light from many directions at once.
 float3 SkyLight(float3 direction, bool smooth)
@@ -393,16 +460,18 @@ float3 SkyLight(float3 direction, bool smooth)
 
     if (Sky == 2)
     {
-        // A faint band of the galaxy along a great circle, a little blue.
-        float band = exp(-pow(dot(direction, normalize(float3(0.3f, 0.25f, 0.92f))) / 0.18f, 2.0f));
-        float3 light = float3(0.010f, 0.011f, 0.016f) * band + 0.0008f;
+        float3 light = GalaxyLight(direction) + 0.0008f;
+        float near = GalaxyNearness(direction);
         if (smooth)
         {
-            return light + 0.002f;
+            return light + 0.002f * (1.0f + 2.0f * near);
         }
 
-        // A few thousand bright stars and more faint ones, as a night sky away from towns.
-        float stars = StarsOf(direction, 160.0f, 0.012f, 0.0006f) * 4.0f + StarsOf(direction, 420.0f, 0.004f, 0.0004f);
+        // A few thousand bright stars and more faint ones, as a night sky away from towns, the faint ones crowding
+        // towards the galaxy's band, where more still sparkle out of its glow.
+        float stars = StarsOf(direction, 160.0f, 0.012f, 0.0006f) * 4.0f
+                      + StarsOf(direction, 420.0f, 0.004f + 0.02f * near, 0.0004f)
+                      + StarsOf(direction, 900.0f, 0.03f * near, 0.0003f) * 0.5f;
         return light + stars * float3(0.95f, 0.97f, 1.0f);
     }
 
