@@ -44,6 +44,7 @@ public class ReopenedFileStreamTests
         }
     }
 
+    // What was read ahead is of the old one; the next part read is refused.
     [Test]
     public void AFileWrittenAnew_IsReadNoMore()
     {
@@ -51,8 +52,12 @@ public class ReopenedFileStreamTests
         stream.ReadExactly(new byte[10]);
 
         File.WriteAllBytes(_path, new byte[100]);
+        var ahead = new byte[10];
+        stream.Position = 100;
+        stream.ReadExactly(ahead);
         stream.Position = 200_000;
 
+        Assert.That(ahead, Is.EqualTo(_file.AsSpan(100, 10).ToArray()));
         Assert.Throws<IOException>(() => stream.ReadExactly(new byte[10]));
     }
 }

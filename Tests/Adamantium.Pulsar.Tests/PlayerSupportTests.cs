@@ -27,7 +27,7 @@ public class PlayerSupportTests
     [TestCase("tagged.ogg", "Vorbis")]
     [TestCase("tagged.opus", "Opus")]
     [TestCase("tagged24.mp3", "MP3")]
-    public void TheInfoOfAFile_IsReadOfItsBeginning(string name, string codec)
+    public void TheInfoOfAFile_IsReadWithoutItsSamples(string name, string codec)
     {
         var file = Read(name);
         var path = Path.Combine(Path.GetTempPath(), $"pulsar-{Guid.NewGuid():N}-{name}");

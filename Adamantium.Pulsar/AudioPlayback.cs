@@ -137,22 +137,11 @@ public sealed class AudioPlayback : IDisposable
     {
         ArgumentNullException.ThrowIfNull(storage);
         Close();
-        var info = SoundInfo.Read(storage);
-        Sound sound;
-        if (info.Duration > TimeSpan.Zero)
-        {
-            sound = StreamedSound.Open(storage);
-        }
-        else
-        {
-            // As long as what is read of it.
-            sound = SoundFile.Read(storage.Open());
-            using var stream = storage.Open();
-            info = info with
-            {
-                Duration = sound.Duration, Bitrate = SoundInfo.BitrateOf(stream.Length - stream.Position, sound.Duration),
-            };
-        }
+        // Said of the sound that plays: the file may be written anew between the two reads.
+        var said = SoundInfo.Read(storage, out var length);
+        Sound sound = said.Duration > TimeSpan.Zero ? StreamedSound.Open(storage) : SoundFile.Read(storage.Open());
+        var info = new SoundInfo(sound.Codec, sound.Format, sound.Duration, SoundInfo.BitrateOf(length, sound.Duration),
+            sound.Tags);
         bool ended;
         bool changed;
         lock (_lock)

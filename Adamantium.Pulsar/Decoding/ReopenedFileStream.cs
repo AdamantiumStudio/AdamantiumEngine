@@ -1,8 +1,8 @@
 namespace Adamantium.Pulsar.Decoding;
 
 /// <summary>A part of a file, open only while it is read: Windows lets no one replace an open file, and music plays for
-/// minutes. One replaced meanwhile is read no more. Small reads come of a part read ahead: a decoder looking through
-/// frame headers would open the file for each of them.</summary>
+/// minutes. One replaced meanwhile is read no more, from the next part read of it. Small reads come of a part read
+/// ahead: a decoder looking through frame headers would open the file for each of them.</summary>
 internal sealed class ReopenedFileStream : Stream
 {
     private const int AheadLength = 1 << 16;
@@ -60,7 +60,8 @@ internal sealed class ReopenedFileStream : Stream
             return 0;
         }
 
-        if (buffer.Length >= AheadLength)
+        // A large one would read ahead much it is not asked for.
+        if (buffer.Length >= AheadLength / 2)
         {
             var direct = ReadFile(_position, buffer);
             _position += direct;
