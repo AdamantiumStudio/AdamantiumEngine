@@ -39,7 +39,8 @@ public class NativeLibraryLoader
         get
         {
             var os = IsWindows ? "win" : IsMac ? "osx" : "linux";
-            var arch = RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "arm64" : "x64";
+            // The process's: an x64 one on an Arm machine (Windows on Arm) loads only x64 libraries.
+            var arch = RuntimeInformation.ProcessArchitecture == Architecture.Arm64 ? "arm64" : "x64";
             return $"{os}-{arch}";
         }
     }
