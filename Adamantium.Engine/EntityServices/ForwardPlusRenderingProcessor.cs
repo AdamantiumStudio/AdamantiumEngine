@@ -261,6 +261,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
         var lights = GraphicsDevice.UploadFrameData<ClusterLight>(frameLights.AsSpan(0, LightCount));
         SetFrameParameters(effect, camera, frame, directional, lights);
+        // Only the scene's own effect draws the sky.
+        effect.Parameters["SkyExposure"].SetValue(MathF.Pow(2f, exposure));
         if (wireEffect != null)
         {
             SetFrameParameters(wireEffect, camera, frame, directional, lights);
@@ -408,7 +410,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var withSky = sky != SkyKind.None && skyMade == sky;
         parameters["Sky"].SetValue(withSky ? (uint)sky : 0u);
         parameters["SkyStrength"].SetValue(skyStrength);
-        parameters["SkyExposure"].SetValue(MathF.Pow(2f, exposure));
         if (withSky)
         {
             parameters["WorldFromView"].SetValue(Matrix4x4F.Invert(camera.ViewMatrix));
@@ -511,7 +512,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     /// as the scene. Nothing without a sky.</summary>
     internal void DrawBackground()
     {
-        if (!prepared || Window?.Camera == null || sky == SkyKind.None || skyMade != sky)
+        // A scene switched off is not prepared anew, so its last frame's sky is not drawn either.
+        if (!IsEnabled || !prepared || Window?.Camera == null || sky == SkyKind.None || skyMade != sky)
         {
             return;
         }
@@ -699,7 +701,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
             var skinned = group.Instances[0].PaletteCount > 0;
             effect.Parameters["InstanceBase"].SetValue(group.First);
-            (skinned ? effect.ForwardPlusSkinnedShadowDepthPass : effect.ForwardPlusShadowDepthPass).Apply();
+            ShadowPassOf(skinned, group.Masked).Apply();
             // Both sides cast: a single-sided wall still stops the light.
             key.Geometry.Draw(device, new RenderState(false, CullModeFlagBits.None, true, true, key.Topology),
                 (uint)group.Instances.Count);
@@ -804,11 +806,12 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         trianglesInScene += triangles;
         if (!inView)
         {
-            // Out of view, it may still stand between the light and what is seen.
-            if (shadowCaster != null && shown is not (EntityDisplay.Wireframe or EntityDisplay.Collider)
-                && entity.GetComponent<Material>() is not { AlphaMode: AlphaMode.Blend } && InShadowReach(entity))
+            // Out of view, it may still stand between the light and what is seen: one that would be shaded in view.
+            var unseen = entity.GetComponent<Material>();
+            if (shadowCaster != null && Drawn(Display, shown).Shaded && !IsMaskedOut(unseen)
+                && unseen is not { AlphaMode: AlphaMode.Blend } && InShadowReach(entity))
             {
-                EnqueueCaster(entity, meshData);
+                EnqueueCaster(entity, meshData, unseen);
             }
 
             return true;
@@ -984,6 +987,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             group = spareGroups.Count > 0 ? spareGroups.Pop() : new MeshDrawGroup();
             group.Key = key;
             group.Effect = owner;
+            group.Masked = CastsMasked(alphaMode, textured);
             groups.Add(key, group);
             (seeThrough ? weightedGroups : groupsDrawn).Add(group);
         }
@@ -1013,7 +1017,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     }
 
     // A mesh out of view that only casts: drawn into the shadow map and nowhere else.
-    private void EnqueueCaster(Entity entity, MeshData meshData)
+    private void EnqueueCaster(Entity entity, MeshData meshData, Material material)
     {
         var transformation = entity.Transform.GetMetadata(ActiveCamera);
         if (!transformation.Enabled)
@@ -1024,16 +1028,23 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var world = transformation.WorldMatrixF;
         var skinned = meshData.RenderMode == MeshRenderMode.Skinned;
         var (first, count) = skinned ? PaletteOf(entity.GetComponent<Skin>(), world) : default;
-        var instance = new MeshInstance(world, default, first, count, MeshInstance.NoMap, 0f, default, default,
-            MaterialMaps.None);
+        var alphaMode = material?.AlphaMode ?? AlphaMode.Opaque;
+        var texture = LiveTextureOf(material);
+        var masked = CastsMasked(alphaMode, texture != null);
+        // Only a masked caster reads its color: where it is left out.
+        var instance = masked
+            ? new MeshInstance(world, AlbedoOf(material, alphaMode), first, count, IndexOf(texture), material.AlphaCutoff,
+                default, default, MaterialMaps.None)
+            : new MeshInstance(world, default, first, count, MeshInstance.NoMap, 0f, default, default, MaterialMaps.None);
         var geometry = geometryCache.GetOrCreate(meshData.Mesh, meshData.ResolveVertexType());
-        var pass = skinned ? effect.ForwardPlusSkinnedShadowDepthPass : effect.ForwardPlusShadowDepthPass;
-        var key = new MeshDrawKey(geometry, pass, CullModeFlagBits.None, true, true, false, meshData.TopologyOverride);
+        var key = new MeshDrawKey(geometry, ShadowPassOf(skinned, masked), CullModeFlagBits.None, true, true, false,
+            meshData.TopologyOverride);
         if (!groups.TryGetValue(key, out var group))
         {
             group = spareGroups.Count > 0 ? spareGroups.Pop() : new MeshDrawGroup();
             group.Key = key;
             group.Effect = effect;
+            group.Masked = masked;
             groups.Add(key, group);
             casterGroups.Add(group);
         }
@@ -1045,6 +1056,17 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         texture == null ? MeshInstance.NoMap : ((GraphicsDevice)GraphicsDevice).DescriptorManager.TextureIndex(texture);
 
     private static Texture LiveTexture(Texture texture) => texture is { IsDisposed: false } ? texture : null;
+
+    // A masked surface whose alpha changes across it - from its texture - casts a shadow with its holes; one alpha all
+    // over is drawn whole or not at all.
+    private static bool CastsMasked(AlphaMode alphaMode, bool textured) => alphaMode == AlphaMode.Mask && textured;
+
+    private IEffectPass ShadowPassOf(bool skinned, bool masked)
+    {
+        if (masked)
+            return skinned ? effect.ForwardPlusSkinnedMaskedShadowDepthPass : effect.ForwardPlusMaskedShadowDepthPass;
+        return skinned ? effect.ForwardPlusSkinnedShadowDepthPass : effect.ForwardPlusShadowDepthPass;
+    }
 
     // A physical pass reads a texture when it has one, so one pass serves a surface with or without.
     private IEffectPass PhysicalPassOf(bool withWire, bool skinned, bool masked, bool seeThrough)

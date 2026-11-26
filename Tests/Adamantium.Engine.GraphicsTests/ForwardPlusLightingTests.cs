@@ -7,6 +7,7 @@ using Adamantium.Core;
 using Adamantium.Core.DependencyInjection;
 using Adamantium.ECS;
 using Adamantium.ECS.Components;
+using Adamantium.Graphics;
 using Adamantium.Graphics.Core.Models;
 using Adamantium.Imaging;
 using Adamantium.Mathematics;
@@ -35,6 +36,7 @@ public class ForwardPlusLightingTests
     private Universe _universe;
     private OffscreenOutput _output;
     private RenderingService _rendering;
+    private Texture _texture;
 
     [SetUp]
     public void MakeUniverse()
@@ -60,6 +62,7 @@ public class ForwardPlusLightingTests
     public void ShutDown()
     {
         _universe.ShutDown();
+        _texture?.Dispose();
         GpuFixture.ReleaseRenderDevices();
     }
 
@@ -270,6 +273,67 @@ public class ForwardPlusLightingTests
         {
             Assert.That(sideways, Is.GreaterThan(120), "the floor beside the shadow, in the sun");
             Assert.That(inShadow, Is.LessThan(sideways / 3), "the floor in the shadow of the cube out of view");
+        });
+    }
+
+    // A cube masked by its texture casts a shadow only where it is drawn, in view or out of it: none where its texture
+    // is below the cutoff all over.
+    [TestCase(false, (byte)255)]
+    [TestCase(false, (byte)70)]
+    [TestCase(true, (byte)255)]
+    [TestCase(true, (byte)70)]
+    public void AMaskedCube_CastsAShadow_OnlyWhereItsTextureIsDrawn(bool outOfView, byte texelAlpha)
+    {
+        var eye = _output.Camera;
+        eye.Owner.Transform.Position = outOfView ? new WorldPosition(0, -3, -8) : new WorldPosition(0, -12, -16);
+        eye.SetFreeLookAt(outOfView ? new WorldPosition(0, 0.5, -6.3) : WorldPosition.Zero);
+        var scene = _universe.EntityWorld.MainScene;
+        var lights = new LightManager(_universe, scene);
+        scene.Satellites.Add(lights);
+        var sun = new LightTemplate().BuildEntity(null, "Sun", LightType.Directional);
+        sun.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(150));
+        sun.GetComponent<Light>().IsWithShadows = true;
+        lights.AddLight(sun);
+        _texture = RedTexture.Create(_rendering.GraphicsDevice, texelAlpha);
+        var cube = new ShapeTemplate(new CubeShape()).Build(new Entity(null, "Cube"));
+        cube.Transform.Position = outOfView ? new WorldPosition(0, -10, 0) : WorldPosition.Zero;
+        cube.AddComponent(new Material { AlphaMode = AlphaMode.Mask, Texture = _texture });
+        _universe.EntityWorld.EntityManager.AddEntity(cube, scene);
+        var floor = new ShapeTemplate(new CubeShape()).Build(new Entity(null, "Floor"));
+        floor.Transform.Position = new WorldPosition(0, 0.55, 0);
+        floor.Transform.ScaleFactor = new Vector3F(20, 0.1f, 20);
+        floor.AddComponent(new Material());
+        _universe.EntityWorld.EntityManager.AddEntity(floor, scene);
+        for (var frame = 0; frame < Frames; frame++)
+        {
+            RunFrame();
+        }
+
+        var pixels = Pixels(_output.ReadFrame(), $"forward-plus-masked-shadow-{outOfView}-{texelAlpha}.png");
+        var camera = _output.Camera;
+        int BrightnessAt(WorldPosition point)
+        {
+            var start = PixelStart(camera, point);
+            return (pixels[start] + pixels[start + 1] + pixels[start + 2]) / 3;
+        }
+
+        // Where the two cube tests above find the shadow, and the floor beside it.
+        var depth = outOfView ? -6.1 : -0.8;
+        var inShadow = BrightnessAt(new WorldPosition(0, 0.5, depth));
+        var sideways = BrightnessAt(new WorldPosition(1.6, 0.5, depth));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sideways, Is.GreaterThan(120), "the floor beside the shadow, in the sun");
+            if (texelAlpha == 255)
+            {
+                Assert.That(inShadow, Is.LessThan(sideways / 3), "the floor in the shadow of the drawn cube");
+            }
+            else
+            {
+                // The floor's highlight moves across it, so only far from the shadow's darkness, not equal.
+                Assert.That(inShadow, Is.GreaterThan(sideways * 2 / 3), "no shadow of a cube left out");
+            }
         });
     }
 

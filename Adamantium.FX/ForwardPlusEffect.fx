@@ -203,6 +203,13 @@ void ShadowDepth_PS()
 {
 }
 
+// A masked surface's depth, left out where its color is, so its shadow has the holes it has.
+[shader("fragment")]
+void MaskedShadowDepth_PS(LIT_PIXEL input)
+{
+    clip(BaseColorOf(input).a - input.alphaCutoff);
+}
+
 // The see-through layers' textures in meshTextures, resolved: the weighted sums and the coverage.
 uint AccumulatedTexture;
 uint CoverageTexture;
@@ -343,8 +350,12 @@ float4 ToneMap_PS(float4 position : SV_POSITION) : SV_TARGET
     float share = 0.0f;
     if (GlowTexture != NoMap)
     {
-        glow = meshTextures[NonUniformResourceIndex(GlowTexture)].Sample(sampleType, position.xy * FrameStep).rgb
-               / ToneMapping.z;
+        // Kept half a pixel of the glow inside its edges: the sampler repeats and would bring in the opposite edge.
+        float glowWidth, glowHeight;
+        meshTextures[NonUniformResourceIndex(GlowTexture)].GetDimensions(glowWidth, glowHeight);
+        float2 margin = 0.5f / float2(glowWidth, glowHeight);
+        float2 inside = clamp(position.xy * FrameStep, margin, 1.0f - margin);
+        glow = meshTextures[NonUniformResourceIndex(GlowTexture)].Sample(sampleType, inside).rgb / ToneMapping.z;
         share = ToneMapping.y;
     }
 
@@ -516,6 +527,18 @@ technique ForwardPlus
     {
         VertexShader = LitSkinned_VS;
         PixelShader = ShadowDepth_PS;
+    }
+
+    pass MaskedShadowDepth
+    {
+        VertexShader = Lit_VS;
+        PixelShader = MaskedShadowDepth_PS;
+    }
+
+    pass SkinnedMaskedShadowDepth
+    {
+        VertexShader = LitSkinned_VS;
+        PixelShader = MaskedShadowDepth_PS;
     }
 
     pass GlowDown

@@ -491,17 +491,25 @@ uint SkyReflectionAt(uint level)
     }
 }
 
+// A picture of the whole sky read at a direction. The sampler repeats, which wraps round the vertical as it should but
+// would blend straight up with straight down, so the place is kept half a row inside the top and the bottom.
+float3 SkyPictureAt(uint map, float3 direction)
+{
+    float width, height;
+    meshTextures[NonUniformResourceIndex(map)].GetDimensions(width, height);
+    float2 place = SkyPlaceOf(direction);
+    place.y = clamp(place.y, 0.5f / height, 1.0f - 0.5f / height);
+    return meshTextures[NonUniformResourceIndex(map)].SampleLevel(sampleType, place, 0).rgb;
+}
+
 // The sky's light reflected at a roughness, from the two pictures of the nearest roughnesses.
 float3 SkyReflected(float3 direction, float rough)
 {
     float level = saturate(rough) * (SkyReflectionLevels - 1);
     uint low = (uint)floor(level);
     uint high = min(low + 1, SkyReflectionLevels - 1);
-    float2 place = SkyPlaceOf(direction);
-    uint lowMap = SkyReflectionAt(low);
-    uint highMap = SkyReflectionAt(high);
-    float3 a = meshTextures[NonUniformResourceIndex(lowMap)].SampleLevel(sampleType, place, 0).rgb;
-    float3 b = meshTextures[NonUniformResourceIndex(highMap)].SampleLevel(sampleType, place, 0).rgb;
+    float3 a = SkyPictureAt(SkyReflectionAt(low), direction);
+    float3 b = SkyPictureAt(SkyReflectionAt(high), direction);
     return lerp(a, b, level - low);
 }
 
@@ -556,8 +564,7 @@ float3 ShadePhysical(float3 base, float metal, float rough, float occlusion, flo
         // From the sky: what a matt surface gathers round its normal, and what it mirrors along its reflection.
         float3 normal = mul(float4(n, 0.0f), WorldFromView).xyz;
         float3 reflection = mul(float4(reflect(-toEye, n), 0.0f), WorldFromView).xyz;
-        float3 gathered = meshTextures[NonUniformResourceIndex(SkyIrradiance)].SampleLevel(sampleType,
-            SkyPlaceOf(normalize(normal)), 0).rgb;
+        float3 gathered = SkyPictureAt(SkyIrradiance, normalize(normal));
         // What one bounce mirrors, and what the rough surface's further bounces give back of what it misses (Fdez-Aguera,
         // "A Multiple-Scattering Microfacet Model for Real-Time Image-based Lighting", 2019): a white surface sends
         // back all it gets, the rest of the light left to the diffuse part.

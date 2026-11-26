@@ -37,16 +37,6 @@ public sealed partial class SceneEnvironment
     /// <summary>The share of the light that spreads into the glow, 0 to 1, in a high dynamic range frame.</summary>
     [Bindable]
     public partial float Glow { get; set; }
-
-    /// <summary>Takes every setting of <paramref name="source"/>.</summary>
-    public void CopyFrom(SceneEnvironment source)
-    {
-        Sky = source.Sky;
-        SkyStrength = source.SkyStrength;
-        HighDynamicRange = source.HighDynamicRange;
-        Exposure = source.Exposure;
-        Glow = source.Glow;
-    }
 }
 
 /// <summary>A sky a scene can have, made by the engine itself.</summary>

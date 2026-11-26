@@ -7,7 +7,9 @@
   physical material, loaded from their paths on import. A normal map needs no tangents in the mesh.
 - `Material.Emission` is drawn by both models: a surface gives off its light whatever lights it, an emissive map
   shaping it.
-- An imported material that knows its metalness, or carries the map of it, is lit physically.
+- An imported material that knows its metalness, or carries a map only the physical model reads (metalness and
+  roughness, normal, occlusion), is lit physically. After a device change every map is loaded again, as the base
+  texture is.
 - `Scene.Environment` (`SceneEnvironment`): the scene's sky and how its frame is brought to the screen, saved in its file
   as an `Environment` section (left out while it is as a new scene's):
   - `Sky` - `SkyKind.None` (as before), `Studio`, `Stars` or `Even` - and `SkyStrength`: a sky made by the engine itself,
@@ -25,8 +27,8 @@
 - Shadows of a directional light: the first one whose `Light.IsWithShadows` is on casts the opaque surfaces' shadow in
   four cascades, the near ones fine and the far ones coarse, as far as `ForwardPlusRenderingProcessor.ShadowDistance`;
   each cascade `Light.ShadowMapResolution` texels square, 1024 when it is not set. The edge is softened over a few texels,
-  and it does not crawl as the camera moves. What stands out of view between the light and what is seen casts too.
-  Both lighting models take it.
+  and it does not crawl as the camera moves. What stands out of view between the light and what is seen casts too. A
+  surface masked by its texture casts a shadow with its holes. Both lighting models take it.
 - `IGraphicsDevice.CreateReadableDepthBuffer`: a depth buffer a shader can read once it is drawn, as a shadow map is - of
   depth alone, resting in `ShaderReadOnlyOptimal`. `SurfaceFormat.HasDepthFormat`.
 - A pass may draw depth alone: with no color target, it takes its size from the depth buffer, and a buffer without

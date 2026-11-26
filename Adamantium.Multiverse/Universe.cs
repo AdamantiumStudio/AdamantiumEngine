@@ -1053,15 +1053,25 @@ public class Universe : IUniverse
             {
                 roots[i].TraverseByLayer(entity =>
                 {
-                    var material = entity.GetComponent<Material>();
-                    if (material?.Texture is { IsDisposed: true } && !string.IsNullOrEmpty(material.TexturePath))
+                    if (entity.GetComponent<Material>() is not { } material)
                     {
-                        material.Texture = Assets.Load<Texture>(material.TexturePath, options);
+                        return;
                     }
+
+                    material.Texture = Reloaded(material.Texture, material.TexturePath, options);
+                    material.MetallicRoughnessTexture = Reloaded(material.MetallicRoughnessTexture,
+                        material.MetallicRoughnessPath, options);
+                    material.NormalTexture = Reloaded(material.NormalTexture, material.NormalMapPath, options);
+                    material.OcclusionTexture = Reloaded(material.OcclusionTexture, material.OcclusionMapPath, options);
+                    material.EmissiveTexture = Reloaded(material.EmissiveTexture, material.EmissiveMapPath, options);
                 });
             }
         }
     }
+
+    // A texture the old device took with it, loaded again from where it came from; any other kept as it is.
+    private Texture Reloaded(Texture texture, string path, AssetLoadOptions options) =>
+        texture is { IsDisposed: true } && !string.IsNullOrEmpty(path) ? Assets.Load<Texture>(path, options) : texture;
 
     private void LoadContentCore()
     {

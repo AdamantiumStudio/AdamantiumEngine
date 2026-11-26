@@ -368,12 +368,13 @@ public class EntityImportTemplate : IEntityTemplate
                     material.Texture = LoadTexture(image, material.TexturePath);
                 }
 
-                // A model that knows its metalness or carries the map of it is lit physically, its maps loaded.
+                // A model that knows its metalness or carries a map only the physical model reads is lit physically.
                 material.MetallicRoughnessTexture = LoadMap(materialData.MetallicRoughnessMap, material.MetallicRoughnessPath);
                 material.NormalTexture = LoadMap(materialData.NormalMap, material.NormalMapPath);
                 material.OcclusionTexture = LoadMap(materialData.OcclusionMap, material.OcclusionMapPath);
                 material.EmissiveTexture = LoadMap(materialData.EmissiveMap, material.EmissiveMapPath);
-                if (materialData.MetallicFactor > 0 || material.MetallicRoughnessTexture != null)
+                if (materialData.MetallicFactor > 0 || material.MetallicRoughnessTexture != null
+                    || material.NormalTexture != null || material.OcclusionTexture != null)
                 {
                     material.Lighting = LightingModel.Physical;
                 }

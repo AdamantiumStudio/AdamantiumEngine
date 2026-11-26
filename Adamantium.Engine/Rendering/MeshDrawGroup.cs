@@ -13,6 +13,9 @@ public sealed class MeshDrawGroup
     /// <summary>The effect <see cref="MeshDrawKey.Pass"/> belongs to, whose parameters the call sets.</summary>
     public Effect Effect { get; set; }
 
+    /// <summary>Whether its copies leave out what is below their alpha cutoff, so their shadow must too.</summary>
+    public bool Masked { get; set; }
+
     /// <summary>The copies, in the order they were met.</summary>
     public List<MeshInstance> Instances { get; } = [];
 

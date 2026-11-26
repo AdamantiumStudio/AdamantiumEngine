@@ -30,7 +30,6 @@ public class ForwardPlusTransparencyTests
     private const int Frames = 4;
     // How far a channel may be from the one blending gives, in 8-bit levels.
     private const int Within = 6;
-    private const uint TexelsSide = 4;
 
     private Universe _universe;
     private OffscreenOutput _output;
@@ -90,7 +89,7 @@ public class ForwardPlusTransparencyTests
     {
         AddCube("Behind", new WorldPosition(0, 0, 2), new Vector4F(0, 0, 1, 1), AlphaMode.Opaque);
         var glass = AddCube("Glass", WorldPosition.Zero, new Vector4F(1, 1, 1, 0.5f), AlphaMode.Blend);
-        _texture = Texture.CreateFrom(_rendering.GraphicsDevice, TexelsDescription(), RedTexels(255));
+        _texture = RedTexture.Create(_rendering.GraphicsDevice, 255);
         glass.GetComponent<Material>().Texture = _texture;
 
         var center = CenterPixel("forward-plus-textured-glass.png");
@@ -144,7 +143,7 @@ public class ForwardPlusTransparencyTests
     public void AMaskedTexturedCube_IsLeftOutWhereItsTextureIsBelowTheCutoff(byte texelAlpha, int red)
     {
         var cube = AddCube("Masked", WorldPosition.Zero, Vector4F.One, AlphaMode.Mask);
-        _texture = Texture.CreateFrom(_rendering.GraphicsDevice, TexelsDescription(), RedTexels(texelAlpha));
+        _texture = RedTexture.Create(_rendering.GraphicsDevice, texelAlpha);
         cube.GetComponent<Material>().Texture = _texture;
 
         var center = CenterPixel("forward-plus-masked-texture.png");
@@ -187,36 +186,6 @@ public class ForwardPlusTransparencyTests
         cube.AddComponent(new Material { DiffuseColor = color, AlphaMode = alphaMode });
         _universe.EntityWorld.EntityManager.AddEntity(cube, _universe.EntityWorld.MainScene);
         return cube;
-    }
-
-    private static TextureDescription TexelsDescription() => new()
-    {
-        Width = TexelsSide,
-        Height = TexelsSide,
-        Depth = 1,
-        ArrayLayers = 1,
-        MipLevels = 1,
-        Samples = MSAALevel.None,
-        Format = Format.R8G8B8A8_UNORM,
-        InitialLayout = ImageLayout.Undefined,
-        DesiredImageLayout = ImageLayout.ShaderReadOnlyOptimal,
-        ImageType = ImageType._2d,
-        ImageAspect = ImageAspectFlagBits.ColorBit,
-        ImageTiling = ImageTiling.Optimal,
-        Usage = ImageUsageFlagBits.SampledBit | ImageUsageFlagBits.TransferDstBit,
-        Dimension = TextureDimension.Texture2D
-    };
-
-    private static byte[] RedTexels(byte alpha)
-    {
-        var texels = new byte[TexelsSide * TexelsSide * 4];
-        for (var start = 0; start < texels.Length; start += 4)
-        {
-            texels[start] = 255;
-            texels[start + 3] = alpha;
-        }
-
-        return texels;
     }
 
     private ColorAt CenterPixel(string savedAs)
