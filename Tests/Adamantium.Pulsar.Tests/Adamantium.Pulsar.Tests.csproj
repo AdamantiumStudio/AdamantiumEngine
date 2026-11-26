@@ -29,6 +29,7 @@
 
     <ItemGroup>
       <EmbeddedResource Include="Flac\*.flac" LogicalName="%(Filename)%(Extension)" />
+      <EmbeddedResource Include="Mp3\*" LogicalName="mp3.%(Filename)%(Extension)" />
     </ItemGroup>
 
 </Project>

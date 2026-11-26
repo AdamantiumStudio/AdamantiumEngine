@@ -4,8 +4,8 @@ using Adamantium.Pulsar;
 
 namespace Adamantium.Content.Pipeline.Importers;
 
-/// <summary>Imports a WAV or FLAC file: the whole of it is decoded to see that it can be, and it is kept as it is.</summary>
-[ContentImporter("Sound", ".wav", ".flac")]
+/// <summary>Imports a WAV, FLAC or MP3 file: the whole of it is decoded to see that it can be, and it is kept as it is.</summary>
+[ContentImporter("Sound", ".wav", ".flac", ".mp3")]
 public sealed class SoundImporter : IContentImporter
 {
     /// <summary>Whether the sound is read while it plays: <see cref="WhenLong"/>, <see cref="Always"/> or
