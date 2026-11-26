@@ -21,6 +21,38 @@ public class PlayerSupportTests
         Assert.That(decoder.Tags, Is.EqualTo(new SoundTags("Утро в лесу", "Pulsar Tests", "Звуки")));
     }
 
+    // Of a list of files: what each is, its samples not read.
+    [TestCase("tagged.wav", "WAV")]
+    [TestCase("tagged.flac", "FLAC")]
+    [TestCase("tagged.ogg", "Vorbis")]
+    [TestCase("tagged.opus", "Opus")]
+    [TestCase("tagged24.mp3", "MP3")]
+    public void TheInfoOfAFile_IsReadOfItsBeginning(string name, string codec)
+    {
+        var file = Read(name);
+        var path = Path.Combine(Path.GetTempPath(), $"pulsar-{Guid.NewGuid():N}-{name}");
+        File.WriteAllBytes(path, file);
+        try
+        {
+            var info = SoundInfo.Read(path);
+
+            Assert.That(info.Codec, Is.EqualTo(codec));
+            Assert.That(info.Tags, Is.EqualTo(new SoundTags("Утро в лесу", "Pulsar Tests", "Звуки")));
+            Assert.That(info.Duration.TotalMilliseconds, Is.EqualTo(100).Within(30));
+            Assert.That(info.Bitrate, Is.EqualTo((int)Math.Round(file.Length * 8 / info.Duration.TotalSeconds)));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Test]
+    public void TheInfoOfNoSoundFile_IsNotRead()
+    {
+        Assert.Throws<InvalidDataException>(() => SoundInfo.Read(new SoundMemoryStorage([1, 2, 3, 4, 5, 6, 7, 8])));
+    }
+
     [Test]
     public void AStreamedSound_SaysItsCodecAndTags()
     {
