@@ -107,6 +107,12 @@ WEIGHTED_PIXEL LitWeightedPhysical_PS(LIT_PIXEL input)
     return Weighted(PhysicalInFrame(lit.rgb), lit.a, input.viewPosition.z);
 }
 
+// A surface's depth from the light, into the shadow map: the lit vertex shaders seen through a cascade's view, no color.
+[shader("fragment")]
+void ShadowDepth_PS()
+{
+}
+
 // The see-through layers' textures in meshTextures, resolved: the weighted sums and the coverage.
 uint AccumulatedTexture;
 uint CoverageTexture;
@@ -344,6 +350,18 @@ technique ForwardPlus
     {
         VertexShader = Fullscreen_VS;
         PixelShader = WeightedComposite_PS;
+    }
+
+    pass ShadowDepth
+    {
+        VertexShader = Lit_VS;
+        PixelShader = ShadowDepth_PS;
+    }
+
+    pass SkinnedShadowDepth
+    {
+        VertexShader = LitSkinned_VS;
+        PixelShader = ShadowDepth_PS;
     }
 
     pass GlowDown

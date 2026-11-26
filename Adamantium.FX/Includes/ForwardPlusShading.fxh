@@ -208,6 +208,63 @@ uint ClusterAt(float2 pixel, float depth)
     return x + y * ClusterX + z * ClusterX * ClusterY;
 }
 
+// --- The shadow of one directional light, its four cascades side by side in one depth map, each a quarter of it: the map
+// in meshTextures, NoMap for none, and the light's place in Lights.
+uint ShadowMap;
+uint ShadowLight;
+// From view space into each cascade's quarter of the map: x and y where on the map, z the depth from the light.
+float4x4 ShadowCascade0;
+float4x4 ShadowCascade1;
+float4x4 ShadowCascade2;
+float4x4 ShadowCascade3;
+// Where each cascade ends, in view depth.
+float4 ShadowSplits;
+// How far apart two texels of each cascade lie, in the world.
+float4 ShadowTexels;
+// One over the map's side.
+float ShadowStep;
+
+// How much of the shadowing light reaches a point seen in view space, 0 to 1: nine bilinear comparisons around it, so the
+// edge is soft over a few texels. The point is moved off its surface along its normal by a texel and a half, so a surface
+// does not shadow itself.
+float ShadowAt(float3 position, float3 n)
+{
+    if (ShadowMap == NoMap || position.z > ShadowSplits.w)
+    {
+        return 1.0f;
+    }
+
+    uint cascade = position.z > ShadowSplits.x ? (position.z > ShadowSplits.y ? (position.z > ShadowSplits.z ? 3 : 2) : 1) : 0;
+    float4x4 toMap = cascade == 0 ? ShadowCascade0 : cascade == 1 ? ShadowCascade1 : cascade == 2 ? ShadowCascade2
+                                                                                                 : ShadowCascade3;
+    float4 at = mul(float4(position + n * ShadowTexels[cascade] * 1.5f, 1.0f), toMap);
+    float2 corner = float2(cascade & 1, cascade >> 1) * 0.5f;
+    if (any(at.xy < corner) || any(at.xy > corner + 0.5f) || at.z >= 1.0f)
+    {
+        return 1.0f;
+    }
+
+    // Kept two texels inside its quarter, so no tap reads the next cascade.
+    float2 uv = clamp(at.xy, corner + ShadowStep * 2.0f, corner + 0.5f - ShadowStep * 2.0f);
+    float2 texel = uv / ShadowStep - 0.5f;
+    float2 f = frac(texel);
+    float2 center = (floor(texel) + 1.0f) * ShadowStep;
+    float lit = 0.0f;
+    for (int y = -1; y <= 1; y++)
+    {
+        for (int x = -1; x <= 1; x++)
+        {
+            // The four texels around the tap: x (0, 1), y (1, 1), z (1, 0), w (0, 0).
+            float4 depths = meshTextures[NonUniformResourceIndex(ShadowMap)].Gather(sampleType,
+                center + float2(x, y) * ShadowStep);
+            float4 reached = step(at.z, depths);
+            lit += lerp(lerp(reached.w, reached.z, f.x), lerp(reached.x, reached.y, f.x), f.y);
+        }
+    }
+
+    return lit / 9.0f;
+}
+
 float3 Shade(float3 surface, float3 position, float3 normal, float2 pixel)
 {
     float3 toEye = normalize(-position);
@@ -218,9 +275,10 @@ float3 Shade(float3 surface, float3 position, float3 normal, float2 pixel)
     }
 
     float3 lit = surface * Ambient;
+    float shadow = ShadowAt(position, n);
     for (uint i = 0; i < DirectionalCount; i++)
     {
-        lit += Lights[i].Shine(surface, n, toEye);
+        lit += Lights[i].Shine(surface, n, toEye) * (i == ShadowLight ? shadow : 1.0f);
     }
 
     uint cluster = ClusterAt(pixel, position.z);
@@ -295,9 +353,11 @@ float3 ShadePhysical(float3 base, float metal, float rough, float occlusion, flo
     // The ambient light comes from all round: the diffuse part, and the share a rough or a grazing surface mirrors.
     float3 mirrored = f0 + (max(1.0f - rough, f0) - f0) * pow(1.0f - nv, 5.0f);
     float3 lit = (base * (1.0f - metal) * (1.0f - mirrored) + mirrored) * Ambient * occlusion;
+    float shadow = ShadowAt(position, n);
     for (uint i = 0; i < DirectionalCount; i++)
     {
-        lit += Reflected(base, metal, rough, n, toEye, -Lights[i].directionCosInner.xyz, Lights[i].colorCosOuter.rgb);
+        lit += Reflected(base, metal, rough, n, toEye, -Lights[i].directionCosInner.xyz, Lights[i].colorCosOuter.rgb)
+               * (i == ShadowLight ? shadow : 1.0f);
     }
 
     uint cluster = ClusterAt(pixel, position.z);

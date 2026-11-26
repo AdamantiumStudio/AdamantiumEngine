@@ -58,6 +58,21 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private readonly IRenderTarget[] sceneLightTargets = new IRenderTarget[1];
     private readonly IRenderTarget[] glowTargets = new IRenderTarget[1];
     private bool linearFrame;
+    private IDepthStencilBuffer shadowMap;
+    private Light shadowCaster;
+    private int shadowLight = -1;
+    private readonly Matrix4x4F[] cascadeViews = new Matrix4x4F[Cascades];
+    private readonly Matrix4x4F[] cascadeLookups = new Matrix4x4F[Cascades];
+    private readonly IRenderTarget[] noTargets = [];
+    private uint cascadeSide;
+    private readonly float[] cascadeEnds = new float[Cascades];
+    private readonly float[] cascadeTexels = new float[Cascades];
+
+    // The shadow's cascades, each a quarter of its map; how much of a cascade's reach follows the near ones' spacing.
+    private const int Cascades = 4;
+    private const float CascadeSpacing = 0.75f;
+    private const int DefaultCascadeSide = 1024;
+    private const int LargestCascadeSide = 4096;
     private ColorComponentFlagBits frameChannels;
     private Color frameClearColor;
 
@@ -102,6 +117,11 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     /// <summary>The share of the light that spreads into the glow, 0 to 1.</summary>
     public float Glow { get; set; } = 0.04f;
+
+    /// <summary>How far from the camera the shadow of a directional light reaches. The first directional light whose
+    /// <see cref="Light.IsWithShadows"/> is on casts it, in four cascades, each <see cref="Light.ShadowMapResolution"/>
+    /// texels square (1024 when it is not set).</summary>
+    public float ShadowDistance { get; set; } = 100f;
 
     /// <summary>The color of a surface that has neither a texture nor a diffuse color.</summary>
     public Vector3F UntexturedColor { get; set; } = new(0.75f, 0.75f, 0.75f);
@@ -207,6 +227,12 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         // Held for the frame: the shaders were told it here, the draw must not go otherwise.
         linearFrame = HighDynamicRange;
         var directional = CollectLights(camera);
+        if (shadowCaster != null)
+        {
+            EnsureShadowMap(shadowCaster.ShadowMapResolution);
+            PlaceCascades(camera);
+        }
+
         var lights = GraphicsDevice.UploadFrameData<ClusterLight>(frameLights.AsSpan(0, LightCount));
         SetFrameParameters(effect, camera, frame, directional, lights);
         if (wireEffect != null)
@@ -257,6 +283,11 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             var paletteAddress = GraphicsDevice.UploadFrameData<Matrix4x4F>(palettes.AsSpan(0, paletteMatrices));
             DrawCalls = groupsDrawn.Count + wires.Count + wiresOverBlended.Count + colliders.Count;
             UploadInstances(paletteAddress);
+            if (shadowCaster != null)
+            {
+                DrawShadow();
+            }
+
             var frame = linearFrame ? OpenSceneLight() : null;
             try
             {
@@ -287,6 +318,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     private int CollectLights(Camera camera)
     {
+        shadowLight = -1;
+        shadowCaster = null;
         // The lights of the scene the output shows; a scene without them is lit by none.
         if (Scene is not { } scene || !scene.Satellites.TryGet<LightManager>(out var lightManager))
         {
@@ -294,21 +327,28 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             return 0;
         }
 
-        var count = Append(lightManager.DirectionalLights, camera, 0);
+        var count = Append(lightManager.DirectionalLights, camera, 0, castsShadow: true);
         var directional = count;
-        count = Append(lightManager.PointLights, camera, count);
-        count = Append(lightManager.SpotLights, camera, count);
+        count = Append(lightManager.PointLights, camera, count, castsShadow: false);
+        count = Append(lightManager.SpotLights, camera, count, castsShadow: false);
         LightCount = count;
         return directional;
     }
 
-    private int Append(IReadOnlyList<Light> lights, Camera camera, int count)
+    // The first light of a kind that casts shadows, and wants to, is the one whose shadow is drawn.
+    private int Append(IReadOnlyList<Light> lights, Camera camera, int count, bool castsShadow)
     {
         for (int i = 0; i < lights.Count && count < MaxLights; i++)
         {
             var light = lights[i];
             if (light.IsEnabled && light.Owner is { Visible: true })
             {
+                if (castsShadow && shadowLight < 0 && light.IsWithShadows)
+                {
+                    shadowLight = count;
+                    shadowCaster = light;
+                }
+
                 frameLights[count++] = light.ToClusterLight(camera);
             }
         }
@@ -335,6 +375,218 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         parameters["ViewportRect"].SetValue(new Vector4F(viewport.X, viewport.Y, viewport.Width, viewport.Height));
         parameters["Ambient"].SetValue(Ambient);
         parameters["LinearFrame"].SetValue(linearFrame ? 1u : 0u);
+        var shadowed = shadowCaster != null;
+        var descriptors = ((GraphicsDevice)GraphicsDevice).DescriptorManager;
+        parameters["ShadowMap"].SetValue(shadowed ? descriptors.TextureIndex(shadowMap) : MeshInstance.NoMap);
+        parameters["ShadowLight"].SetValue(shadowed ? (uint)shadowLight : MeshInstance.NoMap);
+        if (shadowed)
+        {
+            parameters["ShadowCascade0"].SetValue(cascadeLookups[0]);
+            parameters["ShadowCascade1"].SetValue(cascadeLookups[1]);
+            parameters["ShadowCascade2"].SetValue(cascadeLookups[2]);
+            parameters["ShadowCascade3"].SetValue(cascadeLookups[3]);
+            parameters["ShadowSplits"].SetValue(new Vector4F(cascadeEnds[0], cascadeEnds[1], cascadeEnds[2],
+                cascadeEnds[3]));
+            parameters["ShadowTexels"].SetValue(new Vector4F(cascadeTexels[0], cascadeTexels[1], cascadeTexels[2],
+                cascadeTexels[3]));
+            parameters["ShadowStep"].SetValue(1f / shadowMap.Width);
+        }
+    }
+
+    // A map of four cascades, each the light's resolution square: made anew when that changes.
+    private void EnsureShadowMap(int resolution)
+    {
+        var side = (uint)(resolution > 0 ? Math.Clamp(resolution, 256, LargestCascadeSide) : DefaultCascadeSide);
+        if (shadowMap is { IsDisposed: false } && cascadeSide == side)
+        {
+            return;
+        }
+
+        ReleaseShadowMap();
+        cascadeSide = side;
+        shadowMap = GraphicsDevice.CreateReadableDepthBuffer(side * 2, side * 2, DepthFormat.Depth32, "Shadow map");
+    }
+
+    private void ReleaseShadowMap()
+    {
+        if (shadowMap is IDisposable map && !shadowMap.IsDisposed)
+            shadowMap.GraphicsDevice.AddToDeferDisposeQueue(map);
+        shadowMap = null;
+    }
+
+    // Each cascade a sphere round its slice of the view, the near ones short and the far ones long, seen square along the
+    // light. The sphere stays one size however the camera turns, and its middle moves by whole texels of the world, so
+    // the shadow's edges do not crawl as the camera moves.
+    private void PlaceCascades(Camera camera)
+    {
+        var near = Math.Max(camera.ZNear, 1e-3f);
+        var far = Math.Max(Math.Min(camera.ZFar, ShadowDistance), near * 2);
+        var fromView = Matrix4x4F.Invert(camera.ViewMatrix);
+        var fromClip = Matrix4x4F.Invert(camera.ProjectionMatrix);
+        Span<Vector3F> nearCorners = stackalloc Vector3F[4];
+        Span<Vector3F> farCorners = stackalloc Vector3F[4];
+        for (var i = 0; i < 4; i++)
+        {
+            var x = (i & 1) == 0 ? -1f : 1f;
+            var y = (i & 2) == 0 ? -1f : 1f;
+            nearCorners[i] = Vector3F.TransformCoordinate(new Vector3F(x, y, 0), fromClip);
+            farCorners[i] = Vector3F.TransformCoordinate(new Vector3F(x, y, 1), fromClip);
+        }
+
+        var direction = shadowCaster.Direction;
+        var up = MathF.Abs(direction.Y) > 0.99f ? Vector3F.UnitZ : Vector3F.UnitY;
+        var toLight = Matrix4x4.CreateLookToLH(Vector3F.Zero, direction, up);
+        var eye = camera.WorldPosition.ToVector();
+        // The camera along the light's axes, in double: where whole texels of the world fall.
+        var eyeAcross = eye.X * toLight.M11 + eye.Y * toLight.M21 + eye.Z * toLight.M31;
+        var eyeUp = eye.X * toLight.M12 + eye.Y * toLight.M22 + eye.Z * toLight.M32;
+        var start = near;
+        Span<Vector3F> slice = stackalloc Vector3F[8];
+        for (var cascade = 0; cascade < Cascades; cascade++)
+        {
+            var share = (cascade + 1) / (float)Cascades;
+            var end = CascadeSpacing * near * MathF.Pow(far / near, share) + (1 - CascadeSpacing) * (near + (far - near) * share);
+            var middle = Vector3F.Zero;
+            for (var i = 0; i < 4; i++)
+            {
+                slice[i] = Vector3F.TransformCoordinate(AtDepth(nearCorners[i], farCorners[i], start), fromView);
+                slice[i + 4] = Vector3F.TransformCoordinate(AtDepth(nearCorners[i], farCorners[i], end), fromView);
+            }
+
+            foreach (var corner in slice)
+            {
+                middle += corner;
+            }
+
+            middle /= slice.Length;
+            var radius = 0f;
+            foreach (var corner in slice)
+            {
+                radius = Math.Max(radius, Vector3F.Distance(corner, middle));
+            }
+
+            radius = MathF.Ceiling(radius * 16f) / 16f;
+            var texel = 2f * radius / cascadeSide;
+            var center = Vector3F.TransformCoordinate(middle, toLight);
+            var across = (float)(Math.Floor((center.X + eyeAcross) / texel) * texel - eyeAcross);
+            var upward = (float)(Math.Floor((center.Y + eyeUp) / texel) * texel - eyeUp);
+            // What stands between the light and the slice casts onto it too: the box reaches back towards the light.
+            var square = Matrix4x4.CreateOrthoOffCenterLH(across - radius, across + radius, upward - radius,
+                upward + radius, center.Z - radius - ShadowDistance, center.Z + radius);
+            cascadeViews[cascade] = toLight * square;
+            cascadeLookups[cascade] = fromView * cascadeViews[cascade] * QuarterOf(cascade);
+            cascadeEnds[cascade] = end;
+            cascadeTexels[cascade] = texel;
+            start = end;
+        }
+    }
+
+    // The opaque surfaces' depth from the light into each cascade's quarter of the map, beside the frame; the map left to
+    // be read. A see-through surface casts none.
+    private void DrawShadow()
+    {
+        var device = GraphicsDevice;
+        var frame = device.CurrentRenderTarget;
+        var depth = device.CurrentDepthStencilBuffer;
+        var samples = device.MSAALevel;
+        var biased = device.DepthBiasEnabled;
+        var constantBias = device.DepthBiasConstantFactor;
+        var slopeBias = device.DepthBiasSlopeFactor;
+        device.SuspendRendering();
+        try
+        {
+            KeepDepthForNextPass();
+            device.InsertImageMemoryBarrier(device.CurrentCommandBuffer, shadowMap, AccessFlagBits2.ShaderReadBit,
+                AccessFlagBits2.DepthStencilAttachmentWriteBit, ImageLayout.Undefined,
+                ImageLayout.DepthStencilAttachmentOptimal, PipelineStageFlagBits2.FragmentShaderBit,
+                PipelineStageFlagBits2.EarlyFragmentTestsBit | PipelineStageFlagBits2.LateFragmentTestsBit);
+            device.SetRenderTargets(noTargets);
+            device.SetDepthBuffer(shadowMap);
+            device.MSAALevel = MSAALevel.None;
+            // Pushed back a little, more where a surface slopes away from the light, so it does not shadow itself.
+            device.DepthBiasEnabled = true;
+            device.DepthBiasConstantFactor = 1.25f;
+            device.DepthBiasSlopeFactor = 1.75f;
+            device.BeginRendering(device.CurrentCommandBuffer);
+            try
+            {
+                for (var cascade = 0; cascade < Cascades; cascade++)
+                {
+                    DrawCascade(cascade);
+                }
+            }
+            finally
+            {
+                device.SuspendRendering();
+                device.InsertImageMemoryBarrier(device.CurrentCommandBuffer, shadowMap,
+                    AccessFlagBits2.DepthStencilAttachmentWriteBit, AccessFlagBits2.ShaderReadBit,
+                    ImageLayout.DepthStencilAttachmentOptimal, ImageLayout.ShaderReadOnlyOptimal,
+                    PipelineStageFlagBits2.EarlyFragmentTestsBit | PipelineStageFlagBits2.LateFragmentTestsBit,
+                    PipelineStageFlagBits2.FragmentShaderBit);
+            }
+        }
+        finally
+        {
+            device.DepthBiasEnabled = biased;
+            device.DepthBiasConstantFactor = constantBias;
+            device.DepthBiasSlopeFactor = slopeBias;
+            device.MSAALevel = samples;
+            device.SetDepthBuffer(depth);
+            frameTargets[0] = frame;
+            device.SetRenderTargets(frameTargets);
+            device.SetViewports(Window.Viewport);
+            device.SetScissors(Window.Scissor);
+            effect.ViewProjection.SetValue(ActiveCamera.ViewProjectionMatrix);
+            device.ResumeRendering();
+        }
+    }
+
+    private void DrawCascade(int cascade)
+    {
+        var device = GraphicsDevice;
+        var x = (int)cascadeSide * (cascade & 1);
+        var y = (int)cascadeSide * (cascade >> 1);
+        device.SetViewports(new Viewport
+        {
+            X = x, Y = y, Width = cascadeSide, Height = cascadeSide, MinDepth = 0, MaxDepth = 1
+        });
+        device.SetScissors(new Rect2D
+        {
+            Offset = new Offset2D { X = x, Y = y }, Extent = new Extent2D { Width = cascadeSide, Height = cascadeSide }
+        });
+        effect.ViewProjection.SetValue(cascadeViews[cascade]);
+        foreach (var group in groupsDrawn)
+        {
+            var key = group.Key;
+            if (!key.DepthWrite || key.WireFrame)
+            {
+                continue;
+            }
+
+            var skinned = group.Instances[0].PaletteCount > 0;
+            effect.Parameters["InstanceBase"].SetValue(group.First);
+            (skinned ? effect.ForwardPlusSkinnedShadowDepthPass : effect.ForwardPlusShadowDepthPass).Apply();
+            // Both sides cast: a single-sided wall still stops the light.
+            key.Geometry.Draw(device, new RenderState(false, CullModeFlagBits.None, true, true, key.Topology),
+                (uint)group.Instances.Count);
+        }
+    }
+
+    // Where along the view's ray through two corners its depth is the given one.
+    private static Vector3F AtDepth(Vector3F nearCorner, Vector3F farCorner, float depth)
+    {
+        return Vector3F.Lerp(nearCorner, farCorner, (depth - nearCorner.Z) / (farCorner.Z - nearCorner.Z));
+    }
+
+    // From a cascade's clip space to its quarter of the map: the first two across the top, the last two below.
+    private static Matrix4x4F QuarterOf(int cascade)
+    {
+        var quarter = Matrix4x4F.Identity;
+        quarter.M11 = 0.25f;
+        quarter.M22 = 0.25f;
+        quarter.M41 = 0.25f + 0.5f * (cascade & 1);
+        quarter.M42 = 0.25f + 0.5f * (cascade >> 1);
+        return quarter;
     }
 
     private void OnDraw(Entity entity)
@@ -1174,6 +1426,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     {
         ReleaseWeightedLayers();
         ReleaseSceneLight();
+        ReleaseShadowMap();
         geometryCache?.Dispose();
         effect?.Dispose();
         wireEffect?.Dispose();
