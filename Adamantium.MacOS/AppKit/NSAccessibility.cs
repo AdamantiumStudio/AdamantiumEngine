@@ -41,6 +41,22 @@ public static class NSAccessibility
     /// <summary>An element went.</summary>
     public const string ElementDestroyed = "AXUIElementDestroyed";
 
+    private static readonly IntPtr AppKit = NativeLibrary.Load("/System/Library/Frameworks/AppKit.framework/AppKit");
+    private static readonly IntPtr WorkspaceClass = GetWorkspaceClass();
+    private static readonly IntPtr SharedWorkspaceSelector = ObjectiveC.ObjCRuntime.RegisterSelector("sharedWorkspace");
+    private static readonly IntPtr VoiceOverEnabledSelector = ObjectiveC.ObjCRuntime.RegisterSelector("isVoiceOverEnabled");
+
+    /// <summary>Whether VoiceOver is on now. Any thread.</summary>
+    public static bool IsVoiceOverOn =>
+        WorkspaceClass != IntPtr.Zero &&
+        NSObject.SendForBoolean(NSObject.Send(WorkspaceClass, SharedWorkspaceSelector), VoiceOverEnabledSelector);
+
+    private static IntPtr GetWorkspaceClass()
+    {
+        GC.KeepAlive(AppKit);
+        return ObjectiveC.ObjCRuntime.GetClass("NSWorkspace");
+    }
+
     /// <summary>Tells the Mac's accessibility <paramref name="notification"/> of <paramref name="element"/>.</summary>
     public static void PostNotification(IntPtr element, string notification)
     {
