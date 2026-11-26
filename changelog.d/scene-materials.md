@@ -8,10 +8,17 @@
 - `Material.Emission` is drawn by both models: a surface gives off its light whatever lights it, an emissive map
   shaping it.
 - An imported material that knows its metalness, or carries the map of it, is lit physically.
-- `ForwardPlusRenderingProcessor.HighDynamicRange`: the scene lit in linear light without a ceiling, into a half-float
-  frame of its own, then brought to the screen by the AgX tone curve - bright colors go to white as on film - with
-  `Exposure` in stops. Its brightest light spreads into a glow, `Glow` its share: the frame copied smaller and smaller
-  and added back up. Off by default, every surface drawn straight into the frame as before.
+- `Scene.Environment` (`SceneEnvironment`): the scene's sky and how its frame is brought to the screen, saved in its file
+  as an `Environment` section (left out while it is as a new scene's):
+  - `Sky` - `SkyKind.None` (as before), `Studio`, `Stars` or `Even` - and `SkyStrength`: a sky made by the engine itself,
+    drawn behind the scene. Physical surfaces take their light and reflections from it: what a matt surface gathers
+    round its normal and what a surface of each roughness mirrors, made once for the sky; with a multiple-scattering
+    term, a white surface under an even sky sends back all the light it gets, metal or paint. Simple surfaces keep the
+    ambient light.
+  - `HighDynamicRange`: the scene lit in linear light without a ceiling, into a half-float frame of its own, then brought
+    to the screen by the AgX tone curve - bright colors go to white as on film - with `Exposure` in stops. Its brightest
+    light spreads into a glow, `Glow` its share: the frame copied smaller and smaller and added back up. Off by default,
+    every surface drawn straight into the frame as before.
 - Shadows of a directional light: the first one whose `Light.IsWithShadows` is on casts the opaque surfaces' shadow in
   four cascades, the near ones fine and the far ones coarse, as far as `ForwardPlusRenderingProcessor.ShadowDistance`;
   each cascade `Light.ShadowMapResolution` texels square, 1024 when it is not set. The edge is softened over a few texels,

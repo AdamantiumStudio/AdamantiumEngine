@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using Adamantium.ECS;
 using Adamantium.ECS.Components;
 using Adamantium.Engine.Scenes;
 using Adamantium.Graphics.Core.Models;
@@ -73,6 +74,21 @@ public class SceneFileTests
         using var stream = new MemoryStream();
         scene.Write(stream);
         return Encoding.UTF8.GetString(stream.ToArray());
+    }
+
+    // The environment is read back as written.
+    [Test]
+    public void TheEnvironment_IsReadBack()
+    {
+        var scene = new SceneFile
+        {
+            Environment = new SceneEnvironmentEntry { Sky = SkyKind.Studio, SkyStrength = 0.5f, HighDynamicRange = true }
+        };
+
+        var back = WriteAndRead(scene).Environment;
+
+        Assert.That((back.Sky, back.SkyStrength, back.HighDynamicRange, back.Glow),
+            Is.EqualTo((SkyKind.Studio, 0.5f, true, Adamantium.ECS.SceneEnvironment.DefaultGlow)));
     }
 
     // A see-through shape keeps how its alpha counts; an opaque one, the default, writes nothing of it.

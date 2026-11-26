@@ -107,6 +107,107 @@ WEIGHTED_PIXEL LitWeightedPhysical_PS(LIT_PIXEL input)
     return Weighted(PhysicalInFrame(lit.rgb), lit.a, input.viewPosition.z);
 }
 
+// --- The sky: behind the scene, and made into the pictures the physical surfaces take their light from.
+
+// From the frame's clip space to the world's turn, for the direction a pixel of the background looks along.
+float4x4 SkyFromClip;
+// One over the size of the sky picture drawn, and the roughness it mirrors at.
+float2 SkyStep;
+float SkyRoughness;
+
+struct SKY_PIXEL
+{
+    float4 position : SV_POSITION;
+    float2 clip : TEXCOORD0;
+};
+
+// One triangle over the whole frame at the far end of its depth: only where nothing was drawn passes.
+[shader("vertex")]
+SKY_PIXEL Sky_VS(uint vertexId : SV_VertexID)
+{
+    float2 corner = float2((vertexId << 1) & 2, vertexId & 2) * 2.0f - 1.0f;
+    SKY_PIXEL output;
+    output.position = float4(corner, 1.0f, 1.0f);
+    output.clip = corner;
+    return output;
+}
+
+[shader("fragment")]
+float4 SkyBackground_PS(SKY_PIXEL input) : SV_TARGET
+{
+    float4 far = mul(float4(input.clip, 1.0f, 1.0f), SkyFromClip);
+    float4 near = mul(float4(input.clip, 0.0f, 1.0f), SkyFromClip);
+    float3 direction = normalize(far.xyz / far.w - near.xyz / near.w);
+    return float4(PhysicalInFrame(SkyLight(direction, false) * SkyStrength), 1.0f);
+}
+
+float2 Hammersley(uint i, uint count)
+{
+    return float2(i / (float)count, reversebits(i) * 2.3283064365386963e-10f);
+}
+
+// A direction given round +Z, turned to stand round the normal.
+float3 AroundNormal(float3 local, float3 normal)
+{
+    float3 up = abs(normal.y) < 0.999f ? float3(0.0f, 1.0f, 0.0f) : float3(1.0f, 0.0f, 0.0f);
+    float3 tangent = normalize(cross(up, normal));
+    float3 bitangent = cross(normal, tangent);
+    return tangent * local.x + bitangent * local.y + normal * local.z;
+}
+
+static const uint SkySamples = 256;
+
+// The sky's light round a normal, weighted by how square it falls: what a matt white surface sends back.
+[shader("fragment")]
+float4 SkyIrradiance_PS(float4 position : SV_POSITION) : SV_TARGET
+{
+    float3 normal = SkyDirectionOf(position.xy * SkyStep);
+    float3 sum = 0.0f;
+    for (uint i = 0; i < SkySamples; i++)
+    {
+        float2 h = Hammersley(i, SkySamples);
+        float radius = sqrt(h.y);
+        float around = 2.0f * Pi * h.x;
+        float3 local = float3(radius * cos(around), radius * sin(around), sqrt(1.0f - h.y));
+        sum += SkyLight(AroundNormal(local, normal), true);
+    }
+
+    return float4(sum / SkySamples, 1.0f);
+}
+
+// The sky as a surface of the roughness mirrors it, looked at straight along its normal: the directions round the
+// reflection the GGX distribution favours (Karis, "Real Shading in Unreal Engine 4", 2013).
+[shader("fragment")]
+float4 SkyReflection_PS(float4 position : SV_POSITION) : SV_TARGET
+{
+    float3 direction = SkyDirectionOf(position.xy * SkyStep);
+    if (SkyRoughness <= 0.0f)
+    {
+        return float4(SkyLight(direction, false), 1.0f);
+    }
+
+    float a = SkyRoughness * SkyRoughness;
+    float3 sum = 0.0f;
+    float weight = 0.0f;
+    for (uint i = 0; i < SkySamples; i++)
+    {
+        float2 h = Hammersley(i, SkySamples);
+        float around = 2.0f * Pi * h.x;
+        float cosTheta = sqrt((1.0f - h.y) / (1.0f + (a * a - 1.0f) * h.y));
+        float sinTheta = sqrt(1.0f - cosTheta * cosTheta);
+        float3 between = AroundNormal(float3(sinTheta * cos(around), sinTheta * sin(around), cosTheta), direction);
+        float3 toLight = 2.0f * dot(direction, between) * between - direction;
+        float nl = dot(direction, toLight);
+        if (nl > 0.0f)
+        {
+            sum += SkyLight(toLight, true) * nl;
+            weight += nl;
+        }
+    }
+
+    return float4(sum / max(weight, 1e-4f), 1.0f);
+}
+
 // A surface's depth from the light, into the shadow map: the lit vertex shaders seen through a cascade's view, no color.
 [shader("fragment")]
 void ShadowDepth_PS()
@@ -350,6 +451,24 @@ technique ForwardPlus
     {
         VertexShader = Fullscreen_VS;
         PixelShader = WeightedComposite_PS;
+    }
+
+    pass SkyBackground
+    {
+        VertexShader = Sky_VS;
+        PixelShader = SkyBackground_PS;
+    }
+
+    pass SkyIrradiance
+    {
+        VertexShader = Fullscreen_VS;
+        PixelShader = SkyIrradiance_PS;
+    }
+
+    pass SkyReflection
+    {
+        VertexShader = Fullscreen_VS;
+        PixelShader = SkyReflection_PS;
     }
 
     pass ShadowDepth

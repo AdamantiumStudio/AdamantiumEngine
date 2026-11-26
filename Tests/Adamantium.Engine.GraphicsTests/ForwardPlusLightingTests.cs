@@ -31,7 +31,6 @@ public class ForwardPlusLightingTests
 
     private Universe _universe;
     private OffscreenOutput _output;
-    private ForwardPlusRenderingProcessor _processor;
 
     [SetUp]
     public void MakeUniverse()
@@ -49,8 +48,7 @@ public class ForwardPlusLightingTests
         _universe.AddOutput(_output);
         RunFrame();
         var rendering = _universe.CreateRenderService<RenderingService>(_output);
-        _processor = new ForwardPlusRenderingProcessor();
-        rendering.AttachProcessor(_processor);
+        rendering.AttachProcessor(new ForwardPlusRenderingProcessor());
     }
 
     [TearDown]
@@ -133,7 +131,7 @@ public class ForwardPlusLightingTests
     [TestCase(true)]
     public void ABrightCube_GlowsPastItsEdges_OnlyInAHighDynamicRangeFrame(bool highDynamicRange)
     {
-        _processor.HighDynamicRange = highDynamicRange;
+        _universe.EntityWorld.MainScene.Environment.HighDynamicRange = highDynamicRange;
         var eye = _output.Camera;
         eye.Owner.Transform.Position = new WorldPosition(0, 0, -4);
         eye.SetFreeLookAt(WorldPosition.Zero);
@@ -267,6 +265,69 @@ public class ForwardPlusLightingTests
         {
             Assert.That(sideways, Is.GreaterThan(120), "the floor beside the shadow, in the sun");
             Assert.That(inShadow, Is.LessThan(sideways / 3), "the floor in the shadow of the cube out of view");
+        });
+    }
+
+    // The furnace: under the same light from every side and no other, a white surface sends back what it gets - neither
+    // brighter nor darker than the light - whether it is a rough paint or a metal.
+    [TestCase(0f, 1f)]
+    [TestCase(1f, 0.5f)]
+    public void AWhiteCube_UnderAnEvenSky_SendsBackTheLightItGets(float metal, float rough)
+    {
+        var eye = _output.Camera;
+        eye.Owner.Transform.Position = new WorldPosition(0, 0, -4);
+        eye.SetFreeLookAt(WorldPosition.Zero);
+        var scene = _universe.EntityWorld.MainScene;
+        scene.Environment.Sky = SkyKind.Even;
+        scene.Environment.SkyStrength = 0.8f;
+        var cube = new ShapeTemplate(new CubeShape()).Build(new Entity(null, "Cube"));
+        cube.AddComponent(new Material
+        {
+            Lighting = LightingModel.Physical, DiffuseColor = Vector4F.One, MetallicFactor = metal, RoughnessFactor = rough
+        });
+        _universe.EntityWorld.EntityManager.AddEntity(cube, scene);
+        for (var frame = 0; frame < Frames; frame++)
+        {
+            RunFrame();
+        }
+
+        var pixels = Pixels(_output.ReadFrame(), $"forward-plus-furnace-{metal}-{rough}.png");
+        var start = PixelStart(_output.Camera, new WorldPosition(0, 0, -0.5));
+        var face = (pixels[start] + pixels[start + 1] + pixels[start + 2]) / 3;
+        // The sky's 0.8 as the screen shows it.
+        var expected = (int)(255 * (1.055 * Math.Pow(0.8, 1 / 2.4) - 0.055));
+
+        Assert.That(face, Is.InRange(expected - 12, expected + 12), $"the face sends back the sky's {expected}");
+    }
+
+    // A studio sky behind a scene with nothing in it: light overhead, darker below.
+    [Test]
+    public void AStudioSky_IsDrawnBehindTheScene_LightAboveAndDarkBelow()
+    {
+        var eye = _output.Camera;
+        eye.Owner.Transform.Position = WorldPosition.Zero;
+        eye.SetFreeLookAt(new WorldPosition(0, 0, 10));
+        var scene = _universe.EntityWorld.MainScene;
+        scene.Environment.Sky = SkyKind.Studio;
+        for (var frame = 0; frame < Frames; frame++)
+        {
+            RunFrame();
+        }
+
+        var pixels = Pixels(_output.ReadFrame(), "forward-plus-studio-sky.png");
+        int BrightnessAt(int x, int y)
+        {
+            var start = (y * (int)Size + x) * 4;
+            return (pixels[start] + pixels[start + 1] + pixels[start + 2]) / 3;
+        }
+
+        var top = BrightnessAt((int)Size / 2, 2);
+        var bottom = BrightnessAt((int)Size / 2, (int)Size - 3);
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(top, Is.GreaterThan(150), "the sky above");
+            Assert.That(bottom, Is.LessThan(top - 40), "the floor below, darker");
         });
     }
 

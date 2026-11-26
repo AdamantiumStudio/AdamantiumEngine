@@ -318,6 +318,127 @@ float3 PhysicalInFrame(float3 lit)
     return LinearFrame != 0 ? lit : Srgb(lit);
 }
 
+// --- The sky round the scene, made here rather than read from a picture: its kind (0 none, 1 studio, 2 stars, 3 even)
+// and strength. Up is -Y.
+uint Sky;
+float SkyStrength;
+// From view space to the world's turn, for looking the sky up along a normal or a reflection.
+float4x4 WorldFromView;
+// The sky's light round a normal, in meshTextures: what a matt surface gets from it.
+uint SkyIrradiance;
+// The sky mirrored by ever rougher surfaces, roughness 0, 0.2 ... 1, in meshTextures.
+uint SkyReflection0;
+uint SkyReflection1;
+uint SkyReflection2;
+uint SkyReflection3;
+uint SkyReflection4;
+uint SkyReflection5;
+
+static const uint SkyReflectionLevels = 6;
+
+// Where a direction falls on a picture of the whole sky: across, round the vertical; down, from straight up.
+float2 SkyPlaceOf(float3 direction)
+{
+    return float2(atan2(direction.z, direction.x) / (2.0f * Pi) + 0.5f, acos(clamp(-direction.y, -1.0f, 1.0f)) / Pi);
+}
+
+float3 SkyDirectionOf(float2 place)
+{
+    float around = (place.x - 0.5f) * 2.0f * Pi;
+    float down = place.y * Pi;
+    return float3(cos(around) * sin(down), -cos(down), sin(around) * sin(down));
+}
+
+float SkyHash(float3 cell)
+{
+    return frac(sin(dot(cell, float3(127.1f, 311.7f, 74.7f))) * 43758.5453f);
+}
+
+// The stars of one layer: the sphere cut into cells, some holding one star somewhere inside.
+float StarsOf(float3 direction, float cells, float share, float size)
+{
+    float3 at = direction * cells;
+    float3 cell = floor(at);
+    if (SkyHash(cell) > share)
+    {
+        return 0.0f;
+    }
+
+    float3 star = cell + 0.25f + 0.5f * float3(SkyHash(cell + 1.7f), SkyHash(cell + 3.1f), SkyHash(cell + 5.3f));
+    float apart = acos(saturate(dot(direction, normalize(star))));
+    return (0.4f + 0.6f * SkyHash(cell + 9.2f)) * exp(-apart * apart / (size * size));
+}
+
+// The sky's light along a direction, before its strength. Smooth leaves the stars out but keeps their sum, for what
+// gathers light from many directions at once.
+float3 SkyLight(float3 direction, bool smooth)
+{
+    float up = -direction.y;
+    if (Sky == 1)
+    {
+        float3 zenith = float3(0.85f, 0.88f, 0.95f);
+        float3 horizon = float3(0.62f, 0.62f, 0.64f);
+        float3 ground = float3(0.18f, 0.17f, 0.16f);
+        float3 light = up >= 0.0f ? lerp(horizon, zenith, pow(up, 0.6f)) : lerp(horizon, ground, pow(-up, 0.4f));
+        // A broad panel high on one side, as a studio's key light.
+        return light + float3(1.6f, 1.55f, 1.5f) * pow(saturate(dot(direction, normalize(float3(0.4f, -0.8f, 0.3f)))), 24.0f);
+    }
+
+    if (Sky == 2)
+    {
+        // A faint band of the galaxy along a great circle, a little blue.
+        float band = exp(-pow(dot(direction, normalize(float3(0.3f, 0.25f, 0.92f))) / 0.18f, 2.0f));
+        float3 light = float3(0.010f, 0.011f, 0.016f) * band + 0.0008f;
+        if (smooth)
+        {
+            return light + 0.002f;
+        }
+
+        float stars = StarsOf(direction, 160.0f, 0.12f, 0.0016f) * 1.5f + StarsOf(direction, 420.0f, 0.2f, 0.0009f) * 0.5f;
+        return light + stars * float3(0.95f, 0.97f, 1.0f);
+    }
+
+    return Sky == 3 ? 1.0f : 0.0f;
+}
+
+uint SkyReflectionAt(uint level)
+{
+    switch (level)
+    {
+        case 0: return SkyReflection0;
+        case 1: return SkyReflection1;
+        case 2: return SkyReflection2;
+        case 3: return SkyReflection3;
+        case 4: return SkyReflection4;
+        default: return SkyReflection5;
+    }
+}
+
+// The sky's light reflected at a roughness, from the two pictures of the nearest roughnesses.
+float3 SkyReflected(float3 direction, float rough)
+{
+    float level = saturate(rough) * (SkyReflectionLevels - 1);
+    uint low = (uint)floor(level);
+    uint high = min(low + 1, SkyReflectionLevels - 1);
+    float2 place = SkyPlaceOf(direction);
+    uint lowMap = SkyReflectionAt(low);
+    uint highMap = SkyReflectionAt(high);
+    float3 a = meshTextures[NonUniformResourceIndex(lowMap)].SampleLevel(sampleType, place, 0).rgb;
+    float3 b = meshTextures[NonUniformResourceIndex(highMap)].SampleLevel(sampleType, place, 0).rgb;
+    return lerp(a, b, level - low);
+}
+
+// The share of the light a surface mirrors from all round at a roughness and a view, as fitted by Karis ("Physically
+// Based Shading on Mobile", 2014): x times its Fresnel at head-on, plus y.
+float2 SkyMirrored(float rough, float nv)
+{
+    const float4 c0 = float4(-1.0f, -0.0275f, -0.572f, 0.022f);
+    const float4 c1 = float4(1.0f, 0.0425f, 1.04f, -0.04f);
+    float4 r = rough * c0 + c1;
+    float a004 = min(r.x * r.x, exp2(-9.28f * nv)) * r.x + r.y;
+    return float2(-1.04f, 1.04f) * a004 + r.zw;
+}
+
 // What one light gives a physical surface, its direction and strength at the point already found.
 float3 Reflected(float3 base, float metal, float rough, float3 n, float3 toEye, float3 toLight, float3 radiance)
 {
@@ -352,7 +473,29 @@ float3 ShadePhysical(float3 base, float metal, float rough, float occlusion, flo
     float3 f0 = lerp(0.04f, base, metal);
     // The ambient light comes from all round: the diffuse part, and the share a rough or a grazing surface mirrors.
     float3 mirrored = f0 + (max(1.0f - rough, f0) - f0) * pow(1.0f - nv, 5.0f);
-    float3 lit = (base * (1.0f - metal) * (1.0f - mirrored) + mirrored) * Ambient * occlusion;
+    float3 lit;
+    if (Sky != 0)
+    {
+        // From the sky: what a matt surface gathers round its normal, and what it mirrors along its reflection.
+        float3 normal = mul(float4(n, 0.0f), WorldFromView).xyz;
+        float3 reflection = mul(float4(reflect(-toEye, n), 0.0f), WorldFromView).xyz;
+        float3 gathered = meshTextures[NonUniformResourceIndex(SkyIrradiance)].SampleLevel(sampleType,
+            SkyPlaceOf(normalize(normal)), 0).rgb;
+        // What one bounce mirrors, and what the rough surface's further bounces give back of what it misses (Fdez-Aguera,
+        // "A Multiple-Scattering Microfacet Model for Real-Time Image-based Lighting", 2019): a white surface sends
+        // back all it gets, the rest of the light left to the diffuse part.
+        float2 share = SkyMirrored(rough, nv);
+        float3 once = f0 * share.x + share.y;
+        float missed = 1.0f - (share.x + share.y);
+        float3 average = f0 + (1.0f - f0) / 21.0f;
+        float3 mirroredAll = once + once * average / (1.0f - missed * average) * missed;
+        float3 specular = SkyReflected(normalize(reflection), rough) * mirroredAll;
+        lit = (base * (1.0f - metal) * (1.0f - mirroredAll) * gathered + specular) * SkyStrength * occlusion;
+    }
+    else
+    {
+        lit = (base * (1.0f - metal) * (1.0f - mirrored) + mirrored) * Ambient * occlusion;
+    }
     float shadow = ShadowAt(position, n);
     for (uint i = 0; i < DirectionalCount; i++)
     {

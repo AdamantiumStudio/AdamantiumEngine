@@ -95,6 +95,7 @@ public sealed class SceneBuilder
         var inWorld = WorldIds();
         var problems = new List<GameComponentProblem>();
         Problems = problems;
+        (scene.Environment ?? new SceneEnvironmentEntry()).ApplyTo(target.Environment);
 
         foreach (var model in Admitted(scene.Models, byId, inWorld)) Keep(model, MakeModel(model, models), byId, made);
         foreach (var light in Admitted(scene.Lights, byId, inWorld)) Keep(light, MakeLight(light), byId, made);

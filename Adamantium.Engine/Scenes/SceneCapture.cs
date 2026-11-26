@@ -46,7 +46,7 @@ public static class SceneCapture
             }
         }
 
-        var scene = new SceneFile { Uid = source.Uid };
+        var scene = new SceneFile { Uid = source.Uid, Environment = SceneEnvironmentEntry.Of(source.Environment) };
         var stack = new Stack<Visit>();
         var roots = source.RootEntities;
         for (var i = roots.Count - 1; i >= 0; i--)

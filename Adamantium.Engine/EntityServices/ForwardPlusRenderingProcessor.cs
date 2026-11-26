@@ -56,8 +56,21 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private IRenderTarget sceneLight;
     private IRenderTarget[] glowCopies = [];
     private readonly IRenderTarget[] sceneLightTargets = new IRenderTarget[1];
-    private readonly IRenderTarget[] glowTargets = new IRenderTarget[1];
+    private readonly IRenderTarget[] pictureTargets = new IRenderTarget[1];
+    private IRenderTarget skyIrradiance;
+    private IRenderTarget[] skyReflections = [];
+    private SkyKind? skyMade;
+    private SkyKind sky;
+    private float skyStrength;
+
+    // The sky's pictures: the light round a normal small, the mirrored sky from this wide, each rougher one half the one
+    // before.
+    private const uint SkyIrradianceWidth = 64;
+    private const uint SkyReflectionWidth = 256;
+    private const int SkyReflectionLevels = 6;
     private bool linearFrame;
+    private float exposure;
+    private float glow;
     private IDepthStencilBuffer shadowMap;
     private Light shadowCaster;
     private int shadowLight = -1;
@@ -108,17 +121,6 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     /// <summary>The light every surface gets whatever the lights in the scene.</summary>
     public Vector3F Ambient { get; set; } = new(0.08f, 0.08f, 0.1f);
-
-    /// <summary>Whether the scene is lit in linear light without a ceiling, then brought to the screen by the AgX tone
-    /// curve - bright colors go to white as on film - its brightest light spreading into a glow. Off, every surface is
-    /// drawn straight into the frame, as the screen shows it.</summary>
-    public bool HighDynamicRange { get; set; }
-
-    /// <summary>How many stops brighter the light is taken before the tone curve; 0 takes it as it is.</summary>
-    public float Exposure { get; set; }
-
-    /// <summary>The share of the light that spreads into the glow, 0 to 1.</summary>
-    public float Glow { get; set; } = 0.04f;
 
     /// <summary>How far from the camera the shadow of a directional light reaches. The first directional light whose
     /// <see cref="Light.IsWithShadows"/> is on casts it, in four cascades, each <see cref="Light.ShadowMapResolution"/>
@@ -227,7 +229,16 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
         var frame = (int)(GraphicsDevice.CurrentFrame % (uint)clusterCounts.Length);
         // Held for the frame: the shaders were told it here, the draw must not go otherwise.
-        linearFrame = HighDynamicRange;
+        var environment = Scene?.Environment;
+        linearFrame = environment?.HighDynamicRange == true;
+        exposure = environment?.Exposure ?? 0;
+        glow = environment?.Glow ?? 0;
+        sky = environment?.Sky ?? SkyKind.None;
+        skyStrength = environment?.SkyStrength ?? 1;
+        if (sky != SkyKind.None && skyMade != sky)
+        {
+            MakeSky();
+        }
         var directional = CollectLights(camera);
         if (shadowCaster != null)
         {
@@ -294,6 +305,11 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             try
             {
                 DrawGroups(groupsDrawn);
+                if (sky != SkyKind.None && skyMade == sky)
+                {
+                    DrawSkyBackground();
+                }
+
                 // The lines go with the opaque surfaces: what is see-through over them dims them as it does those. A
                 // see-through surface's own wire goes over it.
                 DrawLines(paletteAddress);
@@ -379,6 +395,19 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         parameters["LinearFrame"].SetValue(linearFrame ? 1u : 0u);
         var shadowed = shadowCaster != null;
         var descriptors = ((GraphicsDevice)GraphicsDevice).DescriptorManager;
+        var withSky = sky != SkyKind.None && skyMade == sky;
+        parameters["Sky"].SetValue(withSky ? (uint)sky : 0u);
+        parameters["SkyStrength"].SetValue(skyStrength);
+        if (withSky)
+        {
+            parameters["WorldFromView"].SetValue(Matrix4x4F.Invert(camera.ViewMatrix));
+            parameters["SkyIrradiance"].SetValue(descriptors.TextureIndex(skyIrradiance));
+            for (var level = 0; level < SkyReflectionLevels; level++)
+            {
+                parameters[SkyReflectionNames[level]].SetValue(descriptors.TextureIndex(skyReflections[level]));
+            }
+        }
+
         parameters["ShadowMap"].SetValue(shadowed ? descriptors.TextureIndex(shadowMap) : MeshInstance.NoMap);
         parameters["ShadowLight"].SetValue(shadowed ? (uint)shadowLight : MeshInstance.NoMap);
         if (shadowed)
@@ -393,6 +422,85 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
                 cascadeTexels[3]));
             parameters["ShadowStep"].SetValue(1f / shadowMap.Width);
         }
+    }
+
+    private static readonly string[] SkyReflectionNames =
+        ["SkyReflection0", "SkyReflection1", "SkyReflection2", "SkyReflection3", "SkyReflection4", "SkyReflection5"];
+
+    // The sky's pictures for the physical surfaces, made once for a kind of sky, before the frame's pass: the light a matt
+    // surface gathers round each normal, and the sky mirrored at each roughness.
+    private void MakeSky()
+    {
+        var device = GraphicsDevice;
+        var targets = device.CurrentRenderTarget;
+        var depth = device.CurrentDepthStencilBuffer;
+        var samples = device.MSAALevel;
+        EnsureSkyPictures();
+        effect.Parameters["Sky"].SetValue((uint)sky);
+        device.SetDepthBuffer(null);
+        device.MSAALevel = MSAALevel.None;
+        try
+        {
+            effect.Parameters["SkyStep"].SetValue(new Vector2F(1f / skyIrradiance.Width, 1f / skyIrradiance.Height));
+            DrawPicture(effect.ForwardPlusSkyIrradiancePass, skyIrradiance, ColorBlendEquations.Opaque, adding: false);
+            for (var level = 0; level < SkyReflectionLevels; level++)
+            {
+                var picture = skyReflections[level];
+                effect.Parameters["SkyStep"].SetValue(new Vector2F(1f / picture.Width, 1f / picture.Height));
+                effect.Parameters["SkyRoughness"].SetValue(level / (float)(SkyReflectionLevels - 1));
+                DrawPicture(effect.ForwardPlusSkyReflectionPass, picture, ColorBlendEquations.Opaque, adding: false);
+            }
+
+            skyMade = sky;
+        }
+        finally
+        {
+            device.SetDepthBuffer(depth);
+            device.MSAALevel = samples;
+            frameTargets[0] = targets;
+            device.SetRenderTargets(frameTargets);
+        }
+    }
+
+    private void EnsureSkyPictures()
+    {
+        if (skyIrradiance is { IsDisposed: false })
+        {
+            return;
+        }
+
+        ReleaseSkyPictures();
+        skyIrradiance = GraphicsDevice.CreateRenderTarget(SkyIrradianceWidth, SkyIrradianceWidth / 2, MSAALevel.None,
+            Format.R16G16B16A16_SFLOAT, ImageUsageFlagBits.SampledBit, ImageLayout.ColorAttachmentOptimal, "Sky light");
+        skyReflections = new IRenderTarget[SkyReflectionLevels];
+        for (var level = 0; level < SkyReflectionLevels; level++)
+        {
+            var width = SkyReflectionWidth >> level;
+            skyReflections[level] = GraphicsDevice.CreateRenderTarget(width, width / 2, MSAALevel.None,
+                Format.R16G16B16A16_SFLOAT, ImageUsageFlagBits.SampledBit, ImageLayout.ColorAttachmentOptimal,
+                $"Sky mirrored {level}");
+        }
+    }
+
+    private void ReleaseSkyPictures()
+    {
+        foreach (var picture in (IRenderTarget[])[skyIrradiance, .. skyReflections])
+        {
+            if (picture is IDisposable disposable && !picture.IsDisposed)
+                picture.GraphicsDevice.AddToDeferDisposeQueue(disposable);
+        }
+
+        skyIrradiance = null;
+        skyReflections = [];
+        skyMade = null;
+    }
+
+    // The sky behind the scene, where nothing was drawn: at the far end of the depth, neither writing it nor blended.
+    private void DrawSkyBackground()
+    {
+        var device = GraphicsDevice;
+        effect.Parameters["SkyFromClip"].SetValue(Matrix4x4F.Invert(ActiveCamera.ViewProjectionMatrix));
+        DrawOverTarget(effect.ForwardPlusSkyBackgroundPass, ColorBlendEquations.Opaque, testsDepth: true);
     }
 
     // A map of four cascades, each the light's resolution square: made anew when that changes.
@@ -1127,8 +1235,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         DrawOverTarget(effect.ForwardPlusWeightedCompositePass, ColorBlendEquations.AlphaBlend);
     }
 
-    // One triangle over the whole target by the pass, blended so, neither tested nor writing depth.
-    private void DrawOverTarget(IEffectPass pass, ColorBlendEquationEXT blendEquation)
+    // One triangle over the whole target by the pass, blended so, never writing depth; tested against it when asked.
+    private void DrawOverTarget(IEffectPass pass, ColorBlendEquationEXT blendEquation, bool testsDepth = false)
     {
         var device = GraphicsDevice;
         var blend = device.ColorBlendEquation;
@@ -1143,7 +1251,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         device.PrimitiveTopology = PrimitiveTopology.TriangleList;
         device.PolygonMode = PolygonMode.Fill;
         device.CullMode = CullModeFlagBits.None;
-        device.DepthTestEnabled = false;
+        device.DepthTestEnabled = testsDepth;
         device.DepthWriteEnable = false;
         try
         {
@@ -1199,10 +1307,10 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         device.SuspendRendering();
         PrepareToRead(sceneLight);
         KeepDepthForNextPass();
-        var glow = MeshInstance.NoMap;
+        var glowTexture = MeshInstance.NoMap;
         try
         {
-            glow = Glow > 0 && glowCopies.Length > 0 ? DrawGlow() : MeshInstance.NoMap;
+            glowTexture = glow > 0 && glowCopies.Length > 0 ? DrawGlow() : MeshInstance.NoMap;
         }
         finally
         {
@@ -1212,8 +1320,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var descriptors = ((GraphicsDevice)device).DescriptorManager;
         var parameters = effect.Parameters;
         parameters["SceneLightTexture"].SetValue(descriptors.TextureIndex(sceneLight.ResolveTexture));
-        parameters["GlowTexture"].SetValue(glow);
-        parameters["ToneMapping"].SetValue(new Vector4F(MathF.Pow(2f, Exposure), Math.Clamp(Glow, 0f, 1f),
+        parameters["GlowTexture"].SetValue(glowTexture);
+        parameters["ToneMapping"].SetValue(new Vector4F(MathF.Pow(2f, exposure), Math.Clamp(glow, 0f, 1f),
             Math.Max(1, glowCopies.Length), 0f));
         parameters["FrameStep"].SetValue(new Vector2F(1f / sceneLight.Width, 1f / sceneLight.Height));
         DrawOverTarget(effect.ForwardPlusToneMapPass, ColorBlendEquations.Premultiplied);
@@ -1273,8 +1381,18 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private void DrawGlowStep(IEffectPass pass, ITexture source, IRenderTarget target, ColorBlendEquationEXT blend,
         bool adding)
     {
+        var descriptors = ((GraphicsDevice)GraphicsDevice).DescriptorManager;
+        effect.Parameters["GlowSource"].SetValue(descriptors.TextureIndex(source));
+        effect.Parameters["GlowStep"].SetValue(new Vector4F(1f / target.Width, 1f / target.Height, 1f / source.Width,
+            1f / source.Height));
+        DrawPicture(pass, target, blend, adding);
+    }
+
+    // A picture with neither depth nor samples drawn whole by one pass, which replaces or is added to what it holds; left
+    // to be read.
+    private void DrawPicture(IEffectPass pass, IRenderTarget target, ColorBlendEquationEXT blend, bool adding)
+    {
         var device = GraphicsDevice;
-        var descriptors = ((GraphicsDevice)device).DescriptorManager;
         if (adding)
         {
             PrepareToAddTo(target);
@@ -1284,16 +1402,13 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             PrepareToDraw(target);
         }
 
-        glowTargets[0] = target;
-        device.SetRenderTargets(glowTargets);
+        pictureTargets[0] = target;
+        device.SetRenderTargets(pictureTargets);
         device.SetViewports(new Viewport { X = 0, Y = 0, Width = target.Width, Height = target.Height, MinDepth = 0, MaxDepth = 1 });
         device.SetScissors(new Rect2D
         {
             Offset = new Offset2D(), Extent = new Extent2D { Width = target.Width, Height = target.Height }
         });
-        effect.Parameters["GlowSource"].SetValue(descriptors.TextureIndex(source));
-        effect.Parameters["GlowStep"].SetValue(new Vector4F(1f / target.Width, 1f / target.Height, 1f / source.Width,
-            1f / source.Height));
         device.BeginRendering(device.CurrentCommandBuffer, continueRendering: adding);
         try
         {
@@ -1497,6 +1612,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         ReleaseWeightedLayers();
         ReleaseSceneLight();
         ReleaseShadowMap();
+        ReleaseSkyPictures();
         geometryCache?.Dispose();
         effect?.Dispose();
         wireEffect?.Dispose();
