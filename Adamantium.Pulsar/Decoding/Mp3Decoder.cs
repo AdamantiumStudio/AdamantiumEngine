@@ -43,7 +43,9 @@ internal sealed class Mp3Decoder : ISoundDecoder
     public Mp3Decoder(Stream stream)
     {
         _stream = stream;
+        var tagsAt = stream.Position;
         var start = SkipTags(stream);
+        Tags = Id3Tags.Read(stream, tagsAt, start);
         _end = EndOfFrames(stream);
         var first = FindFrame(stream, start, start + LongestSearch) ??
             throw new InvalidDataException("It is no MP3 file.");
@@ -77,6 +79,10 @@ internal sealed class Mp3Decoder : ISoundDecoder
     public long Frames { get; }
 
     public SoundLoop? Loop => null;
+
+    public string Codec => "MP3";
+
+    public SoundTags Tags { get; }
 
     public int Read(Span<float> samples)
     {

@@ -78,6 +78,7 @@ internal sealed class OggOpusDecoder : ISoundDecoder
             _start = _first + preSkip;
             Frames = Math.Max(0, LastGranule() - _start);
             Loop = comments.LoopWithin(Frames);
+            Tags = comments.Tags;
             _ready = new DecodedSamples(_channels, LongestPacket);
             Restart(_audioPage, _first);
             _position = _start;
@@ -94,6 +95,10 @@ internal sealed class OggOpusDecoder : ISoundDecoder
     public long Frames { get; }
 
     public SoundLoop? Loop { get; }
+
+    public string Codec => "Opus";
+
+    public SoundTags Tags { get; }
 
     /// <summary>Whether <paramref name="packet"/>, a first one, is Opus's identification header.</summary>
     public static bool IsOpus(ReadOnlySpan<byte> packet) => packet.StartsWith("OpusHead"u8);

@@ -107,7 +107,11 @@ public static class SoundFile
 
         Array.Resize(ref samples, read * channels);
         // One of unknown length may say a loop past its end.
-        return new SoundData(decoder.Format, samples, decoder.Loop is { } loop && loop.End <= read ? loop : null);
+        return new SoundData(decoder.Format, samples, decoder.Loop is { } loop && loop.End <= read ? loop : null)
+        {
+            Codec = decoder.Codec,
+            Tags = decoder.Tags,
+        };
     }
 
     private static MemoryStream CopyOf(Stream stream)

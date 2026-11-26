@@ -11,6 +11,13 @@ public interface ISoundDecoder : IDisposable
     /// <summary>What repeats where it is looped; null where the file does not say.</summary>
     SoundLoop? Loop { get; }
 
+    /// <summary>What the samples are coded by, as people name it: "WAV", "FLAC", "MP3", "Vorbis" or "Opus";
+    /// null of one that does not say.</summary>
+    string Codec => null;
+
+    /// <summary>Its title, artist and album, where the file says them.</summary>
+    SoundTags Tags => default;
+
     /// <summary>Fills <paramref name="samples"/>, whole frames, and returns how many frames there were: fewer at the end
     /// alone.</summary>
     /// <exception cref="InvalidDataException">The file is damaged.</exception>

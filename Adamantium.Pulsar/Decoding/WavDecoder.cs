@@ -11,6 +11,8 @@ internal sealed class WavDecoder : ISoundDecoder
     private const int FormatLength = 26;
     private const int SamplerLength = 60;
     private const int BufferFrames = 4096;
+    // Of a LIST chunk, more than its text ever is.
+    private const int LongestList = 1 << 16;
 
     private readonly Stream _stream;
     private readonly byte[] _buffer;
@@ -48,6 +50,15 @@ internal sealed class WavDecoder : ISoundDecoder
             {
                 samplerLength = ReadChunk(stream, at, length, sampler);
             }
+            else if (header.StartsWith("LIST"u8) && length >= 4 && length <= LongestList)
+            {
+                var list = new byte[length];
+                ReadChunk(stream, at, length, list);
+                if (list.AsSpan().StartsWith("INFO"u8))
+                {
+                    Tags = ReadInfo(list.AsSpan(4));
+                }
+            }
             else if (header.StartsWith("data"u8) && dataLength == 0)
             {
                 _start = at;
@@ -80,6 +91,10 @@ internal sealed class WavDecoder : ISoundDecoder
     public long Frames { get; }
 
     public SoundLoop? Loop { get; }
+
+    public string Codec => "WAV";
+
+    public SoundTags Tags { get; }
 
     public int Read(Span<float> samples)
     {
@@ -120,6 +135,46 @@ internal sealed class WavDecoder : ISoundDecoder
     }
 
     public void Dispose() => _stream.Dispose();
+
+    // UTF-8 where it is that; else, as most tools of Windows write it, Latin-1.
+    private static string TextOf(ReadOnlySpan<byte> text) =>
+        (System.Text.Unicode.Utf8.IsValid(text)
+            ? System.Text.Encoding.UTF8.GetString(text)
+            : System.Text.Encoding.Latin1.GetString(text)).Trim();
+
+    // LIST INFO's chunks: INAM the title, IART the artist, IPRD the album; text ending by a zero, padded to even.
+    private static SoundTags ReadInfo(ReadOnlySpan<byte> info)
+    {
+        string title = null;
+        string artist = null;
+        string album = null;
+        while (info.Length >= 8)
+        {
+            var length = (int)Math.Min(BinaryPrimitives.ReadUInt32LittleEndian(info[4..]), info.Length - 8);
+            var text = info.Slice(8, length);
+            var end = text.IndexOf((byte)0);
+            var value = TextOf(end >= 0 ? text[..end] : text);
+            if (value.Length > 0)
+            {
+                if (info.StartsWith("INAM"u8))
+                {
+                    title ??= value;
+                }
+                else if (info.StartsWith("IART"u8))
+                {
+                    artist ??= value;
+                }
+                else if (info.StartsWith("IPRD"u8))
+                {
+                    album ??= value;
+                }
+            }
+
+            info = info[Math.Min(info.Length, 8 + length + (length & 1))..];
+        }
+
+        return new SoundTags(title, artist, album);
+    }
 
     private static int ReadChunk(Stream stream, long at, long length, Span<byte> chunk)
     {
