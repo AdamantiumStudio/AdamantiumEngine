@@ -6,8 +6,8 @@ using Adamantium.Multiverse;
 
 namespace Adamantium.Engine.EntityServices;
 
-/// <summary>Plays a <see cref="GamepadVibration"/> on the gamepads, in the editor as in a game; ask it on the universe's
-/// thread.</summary>
+/// <summary>Plays a <see cref="GamepadVibration"/> on the gamepads, in a world that has it - the editor's; ask it on the
+/// universe's thread.</summary>
 public class GamepadVibrationService : EntityService
 {
     private GamepadVibrationPlayer player;

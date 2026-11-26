@@ -3,7 +3,7 @@ using Adamantium.MVVM;
 namespace Adamantium.ECS.Components;
 
 /// <summary>A vibration of the gamepads: how strong and how fine each motor buzzes, and for how long. Played by the
-/// engine's gamepad vibration service, the editor's play button among those who ask it.</summary>
+/// engine's gamepad vibration service where a world has one - the editor's, asked by its play button.</summary>
 [ViewModel]
 [InspectorComponent(ComponentGroups.Input, Icon = "GamepadIcon")]
 public partial class GamepadVibration : Component
