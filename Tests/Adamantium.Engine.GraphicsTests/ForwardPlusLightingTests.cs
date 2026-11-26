@@ -305,13 +305,20 @@ public class ForwardPlusLightingTests
         Assert.That(face, Is.InRange(expected - 12, expected + 12), $"the face sends back the sky's {expected}");
     }
 
-    // A studio sky behind a scene with nothing in it: light overhead, darker below.
-    [Test]
-    public void AStudioSky_IsDrawnBehindTheScene_LightAboveAndDarkBelow()
+    // A studio sky behind a scene with nothing in it: light overhead, darker below - whichever way the camera turns, its
+    // far plane as far as an editor's.
+    [TestCase(0.0, 1000f)]
+    [TestCase(0.0, 1e9f)]
+    [TestCase(37.0, 1e9f)]
+    [TestCase(133.0, 1e9f)]
+    [TestCase(251.0, 1e9f)]
+    public void AStudioSky_IsDrawnBehindTheScene_LightAboveAndDarkBelow(double yawDegrees, float far)
     {
         var eye = _output.Camera;
+        eye.ZFar = far;
         eye.Owner.Transform.Position = WorldPosition.Zero;
-        eye.SetFreeLookAt(new WorldPosition(0, 0, 10));
+        var yaw = double.DegreesToRadians(yawDegrees);
+        eye.SetFreeLookAt(new WorldPosition(10 * Math.Sin(yaw), 0, 10 * Math.Cos(yaw)));
         var scene = _universe.EntityWorld.MainScene;
         scene.Environment.Sky = SkyKind.Studio;
         for (var frame = 0; frame < Frames; frame++)
@@ -319,7 +326,7 @@ public class ForwardPlusLightingTests
             RunFrame();
         }
 
-        var pixels = Pixels(_output.ReadFrame(), "forward-plus-studio-sky.png");
+        var pixels = Pixels(_output.ReadFrame(), $"forward-plus-studio-sky-{yawDegrees}-{far}.png");
         int BrightnessAt(int x, int y)
         {
             var start = (y * (int)Size + x) * 4;

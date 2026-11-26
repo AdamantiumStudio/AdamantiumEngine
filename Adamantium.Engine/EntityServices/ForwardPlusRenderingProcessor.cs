@@ -509,13 +509,11 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     /// as the scene. Nothing without a sky.</summary>
     internal void DrawBackground()
     {
-        var camera = Window?.Camera;
-        if (!prepared || camera == null || sky == SkyKind.None || skyMade != sky)
+        if (!prepared || Window?.Camera == null || sky == SkyKind.None || skyMade != sky)
         {
             return;
         }
 
-        effect.Parameters["SkyFromClip"].SetValue(Matrix4x4F.Invert(camera.ViewProjectionMatrix));
         DrawOverTarget(effect.ForwardPlusSkyBackgroundPass, ColorBlendEquations.Opaque);
     }
 

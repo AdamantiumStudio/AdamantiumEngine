@@ -109,8 +109,6 @@ WEIGHTED_PIXEL LitWeightedPhysical_PS(LIT_PIXEL input)
 
 // --- The sky: behind the scene, and made into the pictures the physical surfaces take their light from.
 
-// From the frame's clip space to the world's turn, for the direction a pixel of the background looks along.
-float4x4 SkyFromClip;
 // One over the size of the sky picture drawn, and the roughness it mirrors at.
 float2 SkyStep;
 float SkyRoughness;
@@ -343,9 +341,10 @@ float SkyExposure;
 [shader("fragment")]
 float4 SkyBackground_PS(SKY_PIXEL input) : SV_TARGET
 {
-    float4 far = mul(float4(input.clip, 1.0f, 1.0f), SkyFromClip);
-    float4 near = mul(float4(input.clip, 0.0f, 1.0f), SkyFromClip);
-    float3 direction = normalize(far.xyz / far.w - near.xyz / near.w);
+    // The pixel's ray in view space from the projection's scale alone - no far plane, which may lie all but at infinity -
+    // straight ahead for a flat view; then turned to the world.
+    float3 ray = ClusterW.y > 0.0f ? float3(0.0f, 0.0f, 1.0f) : float3(input.clip * InverseScale, 1.0f);
+    float3 direction = normalize(mul(float4(ray, 0.0f), WorldFromView).xyz);
     float3 light = SkyLight(direction, false) * SkyStrength;
     return float4(LinearFrame != 0 ? Srgb(Agx(light * SkyExposure)) : Srgb(light), 1.0f);
 }
