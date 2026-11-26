@@ -2,7 +2,7 @@ using Adamantium.Pulsar.Decoding;
 
 namespace Adamantium.Pulsar;
 
-/// <summary>Sound files: WAV, FLAC, MP3, and Ogg of Vorbis or FLAC, told apart by how they begin.</summary>
+/// <summary>Sound files: WAV, FLAC, MP3, and Ogg of Vorbis, Opus or FLAC, told apart by how they begin.</summary>
 public static class SoundFile
 {
     private const int FirstRead = 1 << 16;

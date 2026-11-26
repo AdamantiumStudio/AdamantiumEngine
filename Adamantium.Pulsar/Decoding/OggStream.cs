@@ -17,6 +17,8 @@ internal sealed class OggStream : IDisposable
     private readonly Stream _stream;
     private readonly OggPage[] _pages;
     private readonly byte[] _page = new byte[LongestPage];
+    // For pages checked apart from the one being read; made when one first is.
+    private byte[] _check;
     private byte[] _packet = new byte[1 << 16];
     private int _packetLength;
     private int _next;
@@ -25,6 +27,8 @@ internal sealed class OggStream : IDisposable
     private int _bodyAt;
     private bool _isSkipping;
     private bool _isLost;
+    // Of the page read last, its number; -1 where none was, or it was damaged.
+    private long _sequence = -1;
 
     private OggStream(Stream stream, OggPage[] pages, uint serial)
     {
@@ -49,11 +53,6 @@ internal sealed class OggStream : IDisposable
             ? new OggStream(stream, pages, serial)
             : throw new InvalidDataException("The Ogg file has no stream of a sound it can read.");
 
-    /// <summary>Whether <paramref name="stream"/>, from its position, has a logical stream whose first packet
-    /// <paramref name="isKnown"/> takes.</summary>
-    public static bool Has(Stream stream, Func<ReadOnlySpan<byte>, bool> isKnown) =>
-        TryIndex(stream, isKnown, out _, out _);
-
     private static bool TryIndex(Stream stream, Func<ReadOnlySpan<byte>, bool> isKnown, out OggPage[] found,
         out uint chosen)
     {
@@ -61,9 +60,13 @@ internal sealed class OggStream : IDisposable
         var pages = new List<OggPage>();
         uint? serial = null;
         var at = stream.Position;
+        var previous = at - 1;
+        // Where a page's end is no page, its header may be damaged, its length too: the next is looked for from just
+        // after where it began.
         while (TryHeaderAt(stream, at, header, out var page, out var pageSerial) ||
-            FindPage(stream, at + 1, header, out at, out page, out pageSerial))
+            FindPage(stream, previous + 1, header, out at, out page, out pageSerial))
         {
+            previous = page.At;
             if (serial == null && page.IsFirst && IsKnownStream(stream, page, isKnown))
             {
                 serial = pageSerial;
@@ -99,6 +102,8 @@ internal sealed class OggStream : IDisposable
         _packetLength = 0;
         _isSkipping = false;
         _isLost = false;
+        // Pages missing between it and the one before are a loss as any.
+        _sequence = page > 0 && page <= _pages.Length ? _pages[page - 1].Sequence : -1;
     }
 
     /// <summary>The next whole packet, with the granule its page says where it is the last to end on it, -1 otherwise;
@@ -145,13 +150,15 @@ internal sealed class OggStream : IDisposable
 
     /// <summary>Whether page <paramref name="page"/> is as its checksum says; the packet being read is left as it is,
     /// the stream's position not.</summary>
-    public bool IsWhole(int page)
+    public bool IsWhole(int page) => IsWholeAt(_stream, _pages[page], _check ??= new byte[LongestPage]);
+
+    private static bool IsWholeAt(Stream stream, OggPage page, byte[] buffer = null)
     {
-        var info = _pages[page];
-        var bytes = new byte[info.HeaderLength + info.BodyLength];
-        _stream.Position = info.At;
-        return _stream.ReadAtLeast(bytes, bytes.Length, throwOnEndOfStream: false) == bytes.Length &&
-            BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(22)) == ChecksumOf(bytes);
+        var length = page.HeaderLength + page.BodyLength;
+        var bytes = (buffer ?? new byte[length]).AsSpan(0, length);
+        stream.Position = page.At;
+        return stream.ReadAtLeast(bytes, bytes.Length, throwOnEndOfStream: false) == bytes.Length &&
+            BinaryPrimitives.ReadUInt32LittleEndian(bytes[22..]) == ChecksumOf(bytes);
     }
 
     /// <summary>Of page <paramref name="page"/>'s body, from <paramref name="from"/>, as much as there is of
@@ -180,8 +187,20 @@ internal sealed class OggStream : IDisposable
                 _packetLength = 0;
                 _isSkipping = false;
                 _isLost = true;
+                _sequence = -1;
                 continue;
             }
+
+            // Pages between it and the one before that are not here at all - their headers too damaged to be found -
+            // are lost as the damaged ones are.
+            if (_sequence >= 0 && page.Sequence != (uint)(_sequence + 1))
+            {
+                _packetLength = 0;
+                _isSkipping = false;
+                _isLost = true;
+            }
+
+            _sequence = page.Sequence;
 
             // A packet it goes on with that was not begun - a seek's first page, or one after a page lost - is passed
             // by; one left unended by a page that went on to no other is lost.
@@ -268,11 +287,12 @@ internal sealed class OggStream : IDisposable
 
         serial = BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(14));
         page = new OggPage(at, HeaderLength + segments, body, BinaryPrimitives.ReadInt64LittleEndian(header.AsSpan(6)),
-            header[5]);
+            header[5], BinaryPrimitives.ReadUInt32LittleEndian(header.AsSpan(18)));
         return true;
     }
 
-    // The next page after bytes that are none: damage, or what a stream ends by.
+    // The next page after bytes that are none: damage, or what a stream ends by. Found by its capture pattern, it is
+    // taken where it is whole, as its pattern may be in what is no page.
     private static bool FindPage(Stream stream, long from, byte[] header, out long at, out OggPage page, out uint serial)
     {
         var buffer = new byte[4096];
@@ -283,7 +303,7 @@ internal sealed class OggStream : IDisposable
             var found = buffer.AsSpan(0, read).IndexOf("OggS"u8);
             if (found >= 0)
             {
-                if (TryHeaderAt(stream, at + found, header, out page, out serial))
+                if (TryHeaderAt(stream, at + found, header, out page, out serial) && IsWholeAt(stream, page))
                 {
                     at += found;
                     return true;

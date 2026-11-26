@@ -12,13 +12,6 @@ internal sealed class VorbisDecoder : ISoundDecoder
     // A seek begins decoding this far back, so that its first sample is before the one sought.
     private const int SeekMargin = 2;
 
-    // By Vorbis's channel, 4.3.9, where it is in the speakers' order.
-    private static readonly int[][] SpeakerOrders =
-    [
-        [], [0], [0, 1], [0, 2, 1], [0, 1, 2, 3], [0, 2, 1, 3, 4], [0, 2, 1, 4, 5, 3], [0, 2, 1, 5, 6, 4, 3],
-        [0, 2, 1, 6, 7, 4, 5, 3],
-    ];
-
     private readonly OggStream _ogg;
     private readonly int _channels;
     private readonly int _shortBlock;
@@ -45,12 +38,7 @@ internal sealed class VorbisDecoder : ISoundDecoder
     private int _previousBlock;
     // Decoded from the first audio packet on, none lost.
     private bool _isFromStart;
-    // Decoded samples not yet read, from where they begin in the stream when known.
-    private float[] _ready;
-    private int _readyFrom;
-    private int _readyFrames;
-    private long _readyAt;
-    private bool _isPlaced;
+    private readonly DecodedSamples _ready;
     // Of the stream, the next sample read.
     private long _position;
 
@@ -156,13 +144,13 @@ internal sealed class VorbisDecoder : ISoundDecoder
             _longTransform = _shortBlock == _longBlock ? _shortTransform : new VorbisTransform(_longBlock);
             _shortSlope = SlopeOf(_shortBlock / 2);
             _longSlope = SlopeOf(_longBlock / 2);
-            _speakerOrder = SpeakerOrders[_channels];
+            _speakerOrder = VorbisChannels.SpeakerIndices(_channels);
             _spectra = NewChannels(_longBlock / 2);
             _previous = NewChannels(_longBlock);
             _current = NewChannels(_longBlock);
             _floorUsed = new bool[_channels];
             _noResidue = new bool[_channels];
-            _ready = new float[_longBlock * _channels];
+            _ready = new DecodedSamples(_channels, _longBlock);
 
             // The first sample's place in the stream: what comes before 0 is not the sound's; a stream that begins
             // later begins there.
@@ -172,7 +160,7 @@ internal sealed class VorbisDecoder : ISoundDecoder
                 throw Damaged("it has no audio its pages place");
             }
 
-            _start = Math.Max(0, _readyAt);
+            _start = Math.Max(0, _ready.At);
             var last = LastGranule();
             Frames = Math.Max(0, last - _start);
             Loop = comments.LoopWithin(Frames);
@@ -200,7 +188,7 @@ internal sealed class VorbisDecoder : ISoundDecoder
         var done = 0;
         while (done < wanted)
         {
-            if (_readyFrames == 0 || !_isPlaced)
+            if (_ready.Count == 0 || !_ready.IsPlaced)
             {
                 if (!DecodeNext())
                 {
@@ -210,28 +198,7 @@ internal sealed class VorbisDecoder : ISoundDecoder
                 continue;
             }
 
-            // After a loss, until those ready: silence.
-            var lost = (int)Math.Min(wanted - done, Math.Max(0, _readyAt - _position));
-            if (lost > 0)
-            {
-                samples.Slice(done * _channels, lost * _channels).Clear();
-                _position += lost;
-                done += lost;
-                continue;
-            }
-
-            // Before the one wanted: passed by.
-            var before = (int)Math.Min(_readyFrames, Math.Max(0, _position - _readyAt));
-            _readyFrom += before;
-            _readyFrames -= before;
-            _readyAt += before;
-            var taken = Math.Min(wanted - done, _readyFrames);
-            _ready.AsSpan(_readyFrom * _channels, taken * _channels).CopyTo(samples[(done * _channels)..]);
-            _readyFrom += taken;
-            _readyFrames -= taken;
-            _readyAt += taken;
-            _position += taken;
-            done += taken;
+            done += _ready.Take(samples[(done * _channels)..], ref _position, wanted - done);
         }
 
         return done;
@@ -360,15 +327,14 @@ internal sealed class VorbisDecoder : ISoundDecoder
     {
         _ogg.SeekToPage(page);
         _previousBlock = 0;
-        _readyFrom = _readyFrames = 0;
-        _isPlaced = false;
+        _ready.Clear();
         _isFromStart = page == _audioPage;
     }
 
     // Decodes until the samples decoded are placed by a granule; false at the end.
     private bool PlaceReady()
     {
-        while (!_isPlaced)
+        while (!_ready.IsPlaced)
         {
             if (!DecodeNext())
             {
@@ -391,14 +357,14 @@ internal sealed class VorbisDecoder : ISoundDecoder
         {
             // Read up to the loss, none are ready; those after it are placed again by the next granule.
             _previousBlock = 0;
-            _readyFrom = _readyFrames = 0;
-            _isPlaced = _isFromStart = false;
+            _ready.Clear();
+            _isFromStart = false;
         }
 
         DecodePacket(packet);
         var page = _ogg.NextPage - 1;
         var isLast = _ogg.Pages[page].IsLast;
-        if (granule < 0 || _isPlaced && isLast)
+        if (granule < 0 || _ready.IsPlaced && isLast)
         {
             return true;
         }
@@ -407,8 +373,7 @@ internal sealed class VorbisDecoder : ISoundDecoder
         // than its packets have, which cuts the stream's end (A.2); read from the stream's start with none placed
         // before, they begin at 0. After a page lost just before it, they are placed as if none were cut: up to what
         // was, early.
-        _readyAt = isLast && _isFromStart && granule < _readyFrames ? 0 : granule - _readyFrames;
-        _isPlaced = true;
+        _ready.Place(isLast && _isFromStart && granule < _ready.Count ? 0 : granule - _ready.Count);
         return true;
     }
 
@@ -554,24 +519,9 @@ internal sealed class VorbisDecoder : ISoundDecoder
     // added; after those ready, in the speakers' order.
     private void Overlap(int block, int count)
     {
-        var needed = (_readyFrom + _readyFrames + count) * _channels;
-        if (needed > _ready.Length)
-        {
-            if ((_readyFrames + count) * _channels <= _ready.Length)
-            {
-                _ready.AsSpan(_readyFrom * _channels, _readyFrames * _channels).CopyTo(_ready);
-                _readyFrom = 0;
-            }
-            else
-            {
-                // Waiting for a granule to place them, more than a block's are kept.
-                Array.Resize(ref _ready, Math.Max(_ready.Length * 2, needed));
-            }
-        }
-
         var previousBlock = _previousBlock;
         var shift = previousBlock / 4 - block / 4;
-        var target = _ready.AsSpan((_readyFrom + _readyFrames) * _channels, count * _channels);
+        var target = _ready.Reserve(count);
         for (var channel = 0; channel < _channels; channel++)
         {
             var previous = _previous[channel];
@@ -586,7 +536,7 @@ internal sealed class VorbisDecoder : ISoundDecoder
             }
         }
 
-        _readyFrames += count;
+        _ready.Add(count);
     }
 
     // Of the last page whole: a damaged one's could say any length.
