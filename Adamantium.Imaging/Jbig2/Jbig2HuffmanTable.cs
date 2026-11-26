@@ -1,81 +1,57 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Adamantium.Core.Compression;
 
 namespace Adamantium.Imaging.Jbig2;
 
 /// <summary>A Huffman table of JBIG2 with its prefix codes assigned (ITU-T T.88, B.3): shorter prefixes first, lines of
-/// one length in their order.</summary>
+/// one length in their order - the canonical codes of a <see cref="PrefixCode"/>, a line's index its symbol. A line of
+/// no prefix has no code.</summary>
 internal sealed class Jbig2HuffmanTable
 {
-    private const int MaxPrefixLength = 32;
-
-    private readonly long[] _firstCode = new long[MaxPrefixLength + 1];
-    private readonly int[] _count = new int[MaxPrefixLength + 1];
-    private readonly int[] _start = new int[MaxPrefixLength + 1];
-    private readonly Jbig2HuffmanLine[] _byCode;
-    private readonly int _longest;
+    private readonly Jbig2HuffmanLine[] _lines;
+    private readonly PrefixCode _code;
 
     public Jbig2HuffmanTable(IReadOnlyList<Jbig2HuffmanLine> lines)
     {
-        foreach (var line in lines)
+        var lengths = new int[lines.Count];
+        for (var index = 0; index < lengths.Length; index++)
         {
-            if (line.PrefixLength is < 0 or > MaxPrefixLength || line.RangeLength is < 0 or > 32)
+            var line = lines[index];
+            if (line.PrefixLength is < 0 or > PrefixCode.LongestCode || line.RangeLength is < 0 or > 32)
             {
                 throw new InvalidDataException("A JBIG2 Huffman table has a line it cannot have.");
             }
 
-            _count[line.PrefixLength]++;
-            _longest = Math.Max(_longest, line.PrefixLength);
+            lengths[index] = line.PrefixLength;
         }
 
-        _count[0] = 0;
-        long code = 0;
-        var placed = 0;
-        for (var length = 1; length <= _longest; length++)
+        if (!PrefixCode.TryCanonical(lengths, out var words) ||
+            !PrefixCode.TryCreate(words, PrefixBitOrder.HighFirst, out _code))
         {
-            code = (code + _count[length - 1]) << 1;
-            if (code + _count[length] > 1L << length)
-            {
-                throw new InvalidDataException("A JBIG2 Huffman table has more codes than its prefixes allow.");
-            }
-
-            _firstCode[length] = code;
-            _start[length] = placed;
-            placed += _count[length];
+            throw new InvalidDataException("A JBIG2 Huffman table has more codes than its prefixes allow.");
         }
 
-        IsComplete = _longest > 0 && code + _count[_longest] == 1L << _longest;
-
-        _byCode = new Jbig2HuffmanLine[placed];
-        var filled = new int[MaxPrefixLength + 1];
-        foreach (var line in lines)
-        {
-            if (line.PrefixLength > 0)
-            {
-                _byCode[_start[line.PrefixLength] + filled[line.PrefixLength]++] = line;
-            }
-        }
+        _lines = [.. lines];
     }
 
     /// <summary>Whether every bit string starts with one of the table's codes.</summary>
-    public bool IsComplete { get; }
+    public bool IsComplete => _code.IsComplete;
+
+    public IReadOnlyList<Jbig2HuffmanLine> Lines => _lines;
 
     /// <summary>The next value, or null for out-of-band.</summary>
     public int? Decode(Jbig2BitReader reader)
     {
-        long code = 0;
-        for (var length = 1; length <= _longest; length++)
+        var line = _code.Decode(reader.Peek(), out var length);
+        if (line < 0)
         {
-            code = (code << 1) | (uint)reader.ReadBit();
-            var index = code - _firstCode[length];
-            if (index >= 0 && index < _count[length])
-            {
-                return Value(_byCode[_start[length] + (int)index], reader);
-            }
+            throw new InvalidDataException("JBIG2 data has a code its Huffman table does not.");
         }
 
-        throw new InvalidDataException("JBIG2 data has a code its Huffman table does not.");
+        reader.Skip(length);
+        return Value(_lines[line], reader);
     }
 
     private static int? Value(Jbig2HuffmanLine line, Jbig2BitReader reader)

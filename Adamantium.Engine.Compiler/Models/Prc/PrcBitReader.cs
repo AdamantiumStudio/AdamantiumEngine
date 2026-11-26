@@ -423,17 +423,18 @@ internal sealed class PrcBitReader
 
     private PrcDoubleCode ReadDoubleCode()
     {
-        var code = 0u;
-        for (var length = 1; length <= PrcDoubleCodes.LongestCode; length++)
+        if (!PrcDoubleCodes.TryDecode(Peek(), out var entry))
         {
-            code = (code << 1) | ReadBit();
-            if (PrcDoubleCodes.TryFind(length, code, out var entry))
-            {
-                return entry;
-            }
+            throw CreateCorruptException("a Double starts with no code of the table of frequent doubles and exponents");
         }
 
-        throw CreateCorruptException("a Double starts with no code of the table of frequent doubles and exponents");
+        if (entry.Length > RemainingBits)
+        {
+            throw CreateEndOfDataException();
+        }
+
+        _bitPosition += entry.Length;
+        return entry;
     }
 
     private static void Repeat(byte[] value, int from, int downTo)
@@ -443,6 +444,22 @@ internal sealed class PrcBitReader
             value[position] = value[position + 1];
         }
     }
+
+    // The next 64 bits, not read, the first the highest; zeros past the end.
+    private ulong Peek()
+    {
+        var at = _bitPosition >> 3;
+        ulong bits = 0;
+        for (var index = 0; index < 8; index++)
+        {
+            bits = bits << 8 | ByteAt(at + index);
+        }
+
+        var shift = (int)(_bitPosition & 7);
+        return shift == 0 ? bits : bits << shift | ByteAt(at + 8) >> (8 - shift);
+    }
+
+    private ulong ByteAt(long at) => at < _bytes.Length ? _bytes[at] : 0u;
 
     private uint ReadBit()
     {

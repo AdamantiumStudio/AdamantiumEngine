@@ -1,7 +1,10 @@
+using System.Collections.Generic;
+using Adamantium.Core.Compression;
+
 namespace Adamantium.Engine.Compiler.Models.Prc;
 
-/// <summary>Reads a Huffman coded array (PRC Huffman Algorithm): rebuilds its tree from the stored leaves and walks the
-/// codes until the stored number of values is read.</summary>
+/// <summary>Reads a Huffman coded array (PRC Huffman Algorithm): makes a <see cref="PrefixCode"/> of the stored leaves
+/// and reads codes until the stored number of values is read.</summary>
 internal static class PrcHuffmanDecoder
 {
     private const int CountBits = 32;
@@ -24,12 +27,14 @@ internal static class PrcHuffmanDecoder
         }
 
         var lengthWidth = (int)stream.Read(8);
-        if (lengthWidth < 1 || lengthWidth > PrcHuffmanTree.LongestCode)
+        if (lengthWidth < 1 || lengthWidth > PrefixCode.LongestCode)
         {
             throw owner.CreateCorruptException($"the Huffman coded {what} stores its code lengths in {lengthWidth} bits");
         }
 
-        var tree = new PrcHuffmanTree();
+        // A leaf's code is read the first bit the lowest, and decoded the highest first: a code of the stream's order.
+        var words = new List<PrefixCodeWord>();
+        var leafValues = new List<int>();
         for (var leaf = 0; leaf < leaves; leaf++)
         {
             var value = (int)stream.Read(bitNumber);
@@ -39,25 +44,27 @@ internal static class PrcHuffmanDecoder
             }
 
             var length = (int)stream.Read(lengthWidth);
-            if (length > PrcHuffmanTree.LongestCode)
+            if (length > PrefixCode.LongestCode)
             {
                 throw owner.CreateCorruptException($"a code of the Huffman coded {what} is {length} bits long");
             }
 
-            var code = stream.Read(length);
-            if (!tree.Add(code, length, value))
-            {
-                throw owner.CreateCorruptException($"the codes of the Huffman coded {what} are not a prefix code");
-            }
+            words.Add(new PrefixCodeWord(stream.Read(length), length, leaf));
+            leafValues.Add(value);
+        }
+
+        if (!PrefixCode.TryCreate(words.ToArray(), PrefixBitOrder.LowFirst, out var code))
+        {
+            throw owner.CreateCorruptException($"the codes of the Huffman coded {what} are not a prefix code");
         }
 
         var count = stream.Read(CountBits);
-        if ((decimal)count * tree.ShortestCode > stream.Remaining)
+        if ((decimal)count * code.Shortest > stream.Remaining)
         {
             throw owner.CreateCorruptException($"the Huffman coded {what} names {count} values, more than its {stream.Remaining} bits of codes can hold");
         }
 
-        if (tree.ShortestCode == 0)
+        if (code.Shortest == 0)
         {
             owner.CheckCount(count, 1, $"values of the Huffman coded {what}");
         }
@@ -65,17 +72,14 @@ internal static class PrcHuffmanDecoder
         var values = new int[count];
         for (var index = 0; index < values.Length; index++)
         {
-            var node = 0;
-            while (!tree.IsLeaf(node))
+            var leaf = code.Decode(stream.Peek(), out var length);
+            if (leaf < 0)
             {
-                node = tree.GetChild(node, stream.ReadBit());
-                if (node == PrcHuffmanTree.NoChild)
-                {
-                    throw owner.CreateCorruptException($"the Huffman coded {what} holds a code no leaf has");
-                }
+                throw owner.CreateCorruptException($"the Huffman coded {what} holds a code no leaf has");
             }
 
-            values[index] = tree.GetValue(node);
+            stream.Skip(length);
+            values[index] = leafValues[leaf];
         }
 
         return values;

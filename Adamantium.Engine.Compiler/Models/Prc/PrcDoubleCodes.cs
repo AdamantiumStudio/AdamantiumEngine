@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Adamantium.Core.Compression;
 
 namespace Adamantium.Engine.Compiler.Models.Prc;
 
@@ -77,21 +78,24 @@ internal static class PrcDoubleCodes
         6, 0x2a, 0x41cdcd64ff800000
     ];
 
-    private static readonly Dictionary<long, PrcDoubleCode> ByCode = Build();
+    private static readonly PrcDoubleCode[] Entries = Build();
+    private static readonly PrefixCode Code = CodeOf(Entries);
 
     /// <summary>Every code of the table, the exponents' and the frequent values'.</summary>
-    internal static IReadOnlyCollection<PrcDoubleCode> All => ByCode.Values;
+    internal static IReadOnlyCollection<PrcDoubleCode> All => Entries;
 
-    /// <summary>The entry whose code is <paramref name="code"/>, <paramref name="length"/> bits long; false for a
-    /// prefix of a longer code, or no code at all.</summary>
-    internal static bool TryFind(int length, uint code, out PrcDoubleCode entry) =>
-        ByCode.TryGetValue(GetKey(length, code), out entry);
-
-    private static long GetKey(int length, uint code) => ((long)length << 32) | code;
-
-    private static Dictionary<long, PrcDoubleCode> Build()
+    /// <summary>The entry whose code <paramref name="next"/> begins by, the next bit its highest; false for none.
+    /// </summary>
+    internal static bool TryDecode(ulong next, out PrcDoubleCode entry)
     {
-        var codes = new Dictionary<long, PrcDoubleCode>();
+        var index = Code.Decode(next, out _);
+        entry = index < 0 ? default : Entries[index];
+        return index >= 0;
+    }
+
+    private static PrcDoubleCode[] Build()
+    {
+        var codes = new List<PrcDoubleCode>();
         var exponent = 0;
         for (var run = 0; run < ExponentRuns.Length; run += 3)
         {
@@ -99,7 +103,7 @@ internal static class PrcDoubleCodes
             for (var step = 0u; step < ExponentRuns[run + 2]; step++)
             {
                 var code = ExponentRuns[run + 1] + step;
-                codes.Add(GetKey(length, code), new PrcDoubleCode(length, code, true, exponent, 0));
+                codes.Add(new PrcDoubleCode(length, code, true, exponent, 0));
                 exponent++;
             }
         }
@@ -114,9 +118,22 @@ internal static class PrcDoubleCodes
             var length = (int)FrequentDoubles[index];
             var code = (uint)FrequentDoubles[index + 1];
             var value = BitConverter.UInt64BitsToDouble(FrequentDoubles[index + 2]);
-            codes.Add(GetKey(length, code), new PrcDoubleCode(length, code, false, 0, value));
+            codes.Add(new PrcDoubleCode(length, code, false, 0, value));
         }
 
-        return codes;
+        return [.. codes];
+    }
+
+    private static PrefixCode CodeOf(PrcDoubleCode[] entries)
+    {
+        var words = new PrefixCodeWord[entries.Length];
+        for (var index = 0; index < words.Length; index++)
+        {
+            words[index] = new PrefixCodeWord(entries[index].Code, entries[index].Length, index);
+        }
+
+        return PrefixCode.TryCreate(words, PrefixBitOrder.HighFirst, out var code)
+            ? code
+            : throw new InvalidOperationException("The PRC double table is no prefix code");
     }
 }

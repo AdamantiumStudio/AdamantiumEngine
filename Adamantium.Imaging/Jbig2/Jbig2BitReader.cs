@@ -36,6 +36,34 @@ internal sealed class Jbig2BitReader
         return bit;
     }
 
+    /// <summary>The next 64 bits, not read, the first the highest; zeros past the end.</summary>
+    public ulong Peek()
+    {
+        var at = _bit >> 3;
+        ulong bits = 0;
+        for (var index = 0; index < 8; index++)
+        {
+            bits = bits << 8 | ByteAt(at + index);
+        }
+
+        // From a bit within a byte: the ninth byte's highest bits make up the 64.
+        var shift = (int)(_bit & 7);
+        return shift == 0 ? bits : bits << shift | ByteAt(at + 8) >> (8 - shift);
+    }
+
+    private ulong ByteAt(long at) => at < _end ? _data[at] : 0u;
+
+    /// <summary>Passes <paramref name="count"/> bits, which must be there.</summary>
+    public void Skip(int count)
+    {
+        if (_bit + count > (long)_end * 8)
+        {
+            throw new InvalidDataException("Huffman-coded JBIG2 data ends early.");
+        }
+
+        _bit += count;
+    }
+
     /// <summary>The next <paramref name="count"/> bits, up to 32, as an unsigned number.</summary>
     public long ReadBits(int count)
     {

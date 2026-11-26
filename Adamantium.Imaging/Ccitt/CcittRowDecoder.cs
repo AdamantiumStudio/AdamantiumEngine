@@ -79,20 +79,20 @@ internal sealed class CcittRowDecoder
         while (a0 < _width)
         {
             var (b1, b2) = Below(ref scan, a0, black);
-            if (reader.Read(1) == 1)
+            var mode = (CcittMode)CcittCodes.Decode(CcittCodes.Modes, reader.Peek(CcittCodes.Bits), out var length);
+            if ((int)mode < 0)
             {
-                Change(ref a0, ref black, b1);
+                return false;
+            }
+
+            reader.Skip(length);
+            if (mode is not CcittMode.Horizontal and not CcittMode.Pass)
+            {
+                Change(ref a0, ref black, b1 + OffsetOf(mode));
                 continue;
             }
 
-            if (reader.Read(1) == 1)
-            {
-                var vertical = reader.Read(1) == 1 ? 1 : -1;
-                Change(ref a0, ref black, b1 + vertical);
-                continue;
-            }
-
-            if (reader.Read(1) == 1)
+            if (mode == CcittMode.Horizontal)
             {
                 var start = Math.Max(a0, 0);
                 var first = ReadRun(ref reader, black);
@@ -110,30 +110,23 @@ internal sealed class CcittRowDecoder
                 continue;
             }
 
-            if (reader.Read(1) == 1)
-            {
-                a0 = b2;
-                continue;
-            }
-
-            var code = reader.Read(2);
-            if (code >= 2)
-            {
-                Change(ref a0, ref black, b1 + (code == 3 ? 2 : -2));
-                continue;
-            }
-
-            var third = code == 1 ? reader.Read(1) : -1;
-            if (third < 0)
-            {
-                return false;
-            }
-
-            Change(ref a0, ref black, b1 + (third == 1 ? 3 : -3));
+            a0 = b2;
         }
 
         return true;
     }
+
+    // Where a vertical mode puts the change, from the one above.
+    private static int OffsetOf(CcittMode mode) => mode switch
+    {
+        CcittMode.VerticalRight1 => 1,
+        CcittMode.VerticalLeft1 => -1,
+        CcittMode.VerticalRight2 => 2,
+        CcittMode.VerticalLeft2 => -2,
+        CcittMode.VerticalRight3 => 3,
+        CcittMode.VerticalLeft3 => -3,
+        _ => 0,
+    };
 
     private (int B1, int B2) Below(ref int scan, int a0, bool black)
     {
@@ -175,19 +168,18 @@ internal sealed class CcittRowDecoder
         var total = 0;
         while (true)
         {
-            var entry = codes[reader.Peek(CcittCodes.Bits)];
-            if (entry == 0)
+            var run = CcittCodes.Decode(codes, reader.Peek(CcittCodes.Bits), out var length);
+            if (run < 0)
             {
                 return -1;
             }
 
-            reader.Skip(entry & 15);
+            reader.Skip(length);
             if (reader.IsOverrun)
             {
                 return -1;
             }
 
-            var run = entry >> 4;
             total += run;
             if (total > _width)
             {
