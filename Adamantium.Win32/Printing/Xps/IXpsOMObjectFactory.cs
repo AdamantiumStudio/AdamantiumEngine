@@ -31,7 +31,7 @@ public interface IXpsOMObjectFactory
 
     [PreserveSig] int CreatePageFromStream(IntPtr stream, IntPtr partUri, IntPtr resources, int reuse, out IntPtr page);
     [PreserveSig] int CreateCanvas(out IXpsOMCanvas canvas);
-    [PreserveSig] int CreateGlyphs(IntPtr fontResource, out IntPtr glyphs);
+    [PreserveSig] int CreateGlyphs(IXpsOMFontResource fontResource, out IXpsOMGlyphs glyphs);
     [PreserveSig] int CreatePath(out IXpsOMPath path);
     [PreserveSig] int CreateGeometry(out IXpsOMGeometry geometry);
     [PreserveSig] int CreateGeometryFigure(in XpsPoint start, out IXpsOMGeometryFigure figure);
@@ -53,7 +53,11 @@ public interface IXpsOMObjectFactory
     int CreatePrintTicketResource(IStream acquiredStream, [MarshalAs(UnmanagedType.IUnknown)] object partUri,
         out IXpsOMPrintTicketResource resource);
 
-    [PreserveSig] int CreateFontResource(IntPtr stream, int embedding, IntPtr partUri, int obfuscated, out IntPtr font);
+    /// <summary>A font of <paramref name="acquiredStream"/>, embedded as <paramref name="embedding"/> says; a stream
+    /// given plain (<paramref name="isObfuscatedSourceStream"/> 0) is obfuscated as it is written.</summary>
+    [PreserveSig]
+    int CreateFontResource(IStream acquiredStream, XpsFontEmbedding embedding,
+        [MarshalAs(UnmanagedType.IUnknown)] object partUri, int isObfuscatedSourceStream, out IXpsOMFontResource font);
 
     [PreserveSig]
     int CreateGradientStop(in XpsColor color, IntPtr colorProfile, float offset, out IXpsOMGradientStop stop);

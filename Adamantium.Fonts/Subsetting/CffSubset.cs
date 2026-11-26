@@ -69,7 +69,8 @@ public static class CffSubset
         return IsOwn(font, glyph) && !font.GetGlyphByIndex(glyph).IsInvalid && CharString(font, glyph, new Box()) != null;
     }
 
-    /// <summary>The glyphs written, in order: glyph 0, then each asked for that the font's file has, once.</summary>
+    /// <summary>The glyphs written, in the order of their indices: glyph 0 and each asked for that the font's file has,
+    /// once - the place of one in this list is its glyph in the subset.</summary>
     public static IReadOnlyList<uint> IndicesOf(IFont font, IEnumerable<uint> glyphs)
     {
         ArgumentNullException.ThrowIfNull(font);
@@ -214,7 +215,7 @@ public static class CffSubset
     }
 
     /// <summary>A name as a PostScript name may be: what cannot stand in one taken out.</summary>
-    private static string Plain(string name)
+    internal static string Plain(string name)
     {
         var plain = new StringBuilder();
         foreach (var letter in name)
