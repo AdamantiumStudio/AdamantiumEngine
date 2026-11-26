@@ -171,16 +171,28 @@ public class PdfContentHostileTests
         Assert.That(bitmap.Rgba[0], Is.EqualTo(215).Within(4));
     }
 
+    // Against the same samples read as plain gray, not a clock: CI runs every suite at once. On the grid the picture
+    // costs about ten plain reads, once per pixel thousands; the quickest of alternating runs leaves out what else ran.
     [Test]
     public void ATintTransformRunsOnAGridNotOncePerPixel()
     {
         var program = "{ " + string.Concat(Enumerable.Repeat("dup pop ", 2000)) + "pop 0.5 }";
-        var watch = Stopwatch.StartNew();
-        var bitmap = Image("/Width 1024 /Height 1024 /ColorSpace [/DeviceN [/A /B] /DeviceGray 4 0 R] " +
-                           "/BitsPerComponent 8 /Filter /FlateDecode",
-            PdfFileBuilder.Flate(Enumerable.Range(0, 1024 * 1024 * 2).Select(i => (byte)i).ToArray()),
-            PdfFileBuilder.Stream("/FunctionType 4 /Domain [0 1 0 1] /Range [0 1]", Text(program)));
-        Assert.That(watch.ElapsedMilliseconds, Is.LessThan(5000));
+        var samples = PdfFileBuilder.Flate(Enumerable.Range(0, 1024 * 1024 * 2).Select(i => (byte)i).ToArray());
+        var function = PdfFileBuilder.Stream("/FunctionType 4 /Domain [0 1 0 1] /Range [0 1]", Text(program));
+        PdfImageBitmap bitmap = null;
+        double tinted = double.MaxValue, plain = double.MaxValue;
+        for (var run = 0; run < 3 && (run == 0 || tinted >= plain * 50 + 100); run++)
+        {
+            var watch = Stopwatch.StartNew();
+            Image("/Width 1024 /Height 2048 /ColorSpace /DeviceGray /BitsPerComponent 8 /Filter /FlateDecode", samples);
+            plain = Math.Min(plain, watch.Elapsed.TotalMilliseconds);
+            watch.Restart();
+            bitmap = Image("/Width 1024 /Height 1024 /ColorSpace [/DeviceN [/A /B] /DeviceGray 4 0 R] " +
+                           "/BitsPerComponent 8 /Filter /FlateDecode", samples, function);
+            tinted = Math.Min(tinted, watch.Elapsed.TotalMilliseconds);
+        }
+
+        Assert.That(tinted, Is.LessThan(plain * 50 + 100), $"tinted {tinted:F0} ms against plain {plain:F0} ms");
         Assert.That(bitmap.Rgba[0], Is.EqualTo(128));
     }
 
