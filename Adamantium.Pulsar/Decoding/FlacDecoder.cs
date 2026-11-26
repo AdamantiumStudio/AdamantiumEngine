@@ -76,7 +76,8 @@ internal sealed class FlacDecoder : ISoundDecoder
                     ReadSeekTable(length);
                     break;
                 case VorbisComment when length <= LongestComments:
-                    Loop = ReadComments(length, out var speakers);
+                    Loop = ReadComments(length, out var speakers, out var tags);
+                    Tags = tags;
                     Format = AudioFormat.Fits(speakers, Format.Channels)
                         ? new AudioFormat(Format.SampleRate, Format.Channels, speakers)
                         : Format;
@@ -105,6 +106,10 @@ internal sealed class FlacDecoder : ISoundDecoder
     public long Frames { get; }
 
     public SoundLoop? Loop { get; }
+
+    public string Codec => "FLAC";
+
+    public SoundTags Tags { get; }
 
     public int Read(Span<float> samples)
     {
@@ -215,12 +220,13 @@ internal sealed class FlacDecoder : ISoundDecoder
 
     // LOOPSTART, and LOOPLENGTH or LOOPEND where it is not the end of the sound: what game music is written with. The
     // speakers are said where they are not the usual.
-    private SoundLoop? ReadComments(int length, out Speakers speakers)
+    private SoundLoop? ReadComments(int length, out Speakers speakers, out SoundTags tags)
     {
         var block = new byte[length];
         _stream.ReadExactly(block);
         var comments = VorbisComments.Read(block);
         speakers = comments.Speakers;
+        tags = comments.Tags;
         return comments.LoopWithin(Frames);
     }
 

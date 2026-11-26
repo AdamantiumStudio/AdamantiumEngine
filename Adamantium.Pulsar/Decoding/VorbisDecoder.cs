@@ -164,6 +164,7 @@ internal sealed class VorbisDecoder : ISoundDecoder
             var last = LastGranule();
             Frames = Math.Max(0, last - _start);
             Loop = comments.LoopWithin(Frames);
+            Tags = comments.Tags;
             _position = _start;
         }
         catch
@@ -178,6 +179,10 @@ internal sealed class VorbisDecoder : ISoundDecoder
     public long Frames { get; }
 
     public SoundLoop? Loop { get; }
+
+    public string Codec => "Vorbis";
+
+    public SoundTags Tags { get; }
 
     /// <summary>Whether <paramref name="packet"/>, a first one, is Vorbis's identification.</summary>
     public static bool IsVorbis(ReadOnlySpan<byte> packet) => packet.Length >= 7 && packet[0] == 1 && packet[1..].StartsWith("vorbis"u8);

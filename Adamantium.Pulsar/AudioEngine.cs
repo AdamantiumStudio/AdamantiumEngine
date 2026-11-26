@@ -20,6 +20,9 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
     private readonly Stack<int> _freeSounds = [];
     // 1 while the commands are applied or a block is rendered.
     private int _mixing;
+    // The last frames mixed, round, and how many were ever.
+    private readonly float[] _played = new float[2 * PlayedCapacity];
+    private long _playedEnd;
     private bool _disposed;
 
     public AudioEngine()
@@ -322,11 +325,41 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
         {
             ApplyCommands();
             _mixer.Render(samples);
+            KeepPlayed(samples);
         }
         finally
         {
             Volatile.Write(ref _mixing, 0);
         }
+    }
+
+    /// <summary>The last frames mixed, as many as <paramref name="frames"/> holds (stereo, side by side), up to
+    /// <see cref="PlayedCapacity"/>; how many there were. For what shows the sound - a spectrum, a level meter: read on
+    /// any thread without a lock, a block mixed meanwhile may be in part of them.</summary>
+    public int CopyPlayed(Span<float> frames)
+    {
+        var end = Volatile.Read(ref _playedEnd);
+        var count = (int)Math.Min(Math.Min(frames.Length / 2, PlayedCapacity), end);
+        var from = (int)((end - count) % PlayedCapacity);
+        var first = Math.Min(count, PlayedCapacity - from);
+        _played.AsSpan(2 * from, 2 * first).CopyTo(frames);
+        _played.AsSpan(0, 2 * (count - first)).CopyTo(frames[(2 * first)..]);
+        return count;
+    }
+
+    /// <summary>The most frames <see cref="CopyPlayed"/> gives: 85 ms.</summary>
+    public const int PlayedCapacity = 4096;
+
+    private void KeepPlayed(ReadOnlySpan<float> samples)
+    {
+        var frames = samples.Length / 2;
+        var kept = samples[(2 * Math.Max(0, frames - PlayedCapacity))..];
+        var count = kept.Length / 2;
+        var at = (int)((_playedEnd + frames - count) % PlayedCapacity);
+        var first = Math.Min(count, PlayedCapacity - at);
+        kept[..(2 * first)].CopyTo(_played.AsSpan(2 * at));
+        kept[(2 * first)..].CopyTo(_played);
+        Volatile.Write(ref _playedEnd, _playedEnd + frames);
     }
 
     /// <summary>Stops reading streamed sounds. An output that still plays it plays out what there is.</summary>

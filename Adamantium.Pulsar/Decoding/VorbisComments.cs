@@ -10,13 +10,17 @@ namespace Adamantium.Pulsar.Decoding;
 /// WAVEFORMATEXTENSIBLE_CHANNEL_MASK where they are not the usual.</summary>
 internal readonly struct VorbisComments
 {
-    private VorbisComments(long loopStart, long loopLength, long loopEnd, Speakers speakers)
+    private VorbisComments(long loopStart, long loopLength, long loopEnd, Speakers speakers, SoundTags tags)
     {
         LoopStart = loopStart;
         LoopLength = loopLength;
         LoopEnd = loopEnd;
         Speakers = speakers;
+        Tags = tags;
     }
+
+    /// <summary>TITLE, ARTIST and ALBUM; of several of a name, the first.</summary>
+    public SoundTags Tags { get; }
 
     /// <summary>-1 where it is not said, as the two after it.</summary>
     public long LoopStart { get; }
@@ -35,6 +39,9 @@ internal readonly struct VorbisComments
         long length = -1;
         long end = -1;
         var speakers = Speakers.None;
+        string title = null;
+        string artist = null;
+        string album = null;
         if (TryTake(ref block, out _) && block.Length >= 4)
         {
             block = block[4..];
@@ -45,10 +52,21 @@ internal readonly struct VorbisComments
                 ReadNumber(text, "LOOPLENGTH=", ref length);
                 ReadNumber(text, "LOOPEND=", ref end);
                 ReadSpeakers(text, ref speakers);
+                ReadText(text, "TITLE=", ref title);
+                ReadText(text, "ARTIST=", ref artist);
+                ReadText(text, "ALBUM=", ref album);
             }
         }
 
-        return new VorbisComments(start, length, end, speakers);
+        return new VorbisComments(start, length, end, speakers, new SoundTags(title, artist, album));
+    }
+
+    private static void ReadText(string comment, string name, ref string value)
+    {
+        if (value == null && comment.Length > name.Length && comment.StartsWith(name, StringComparison.OrdinalIgnoreCase))
+        {
+            value = comment[name.Length..];
+        }
     }
 
     /// <summary>The loop they say, within a sound of <paramref name="frames"/>, -1 where it is not known; null for none
