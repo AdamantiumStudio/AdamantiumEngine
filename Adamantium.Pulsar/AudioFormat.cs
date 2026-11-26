@@ -3,6 +3,9 @@ namespace Adamantium.Pulsar;
 /// <summary>How samples are laid out: 32-bit floats, the channels of a frame side by side.</summary>
 public readonly record struct AudioFormat(int SampleRate, int Channels)
 {
+    /// <summary>A file that says a higher one is damaged.</summary>
+    internal const int HighestRate = 1_000_000;
+
     /// <summary>What Pulsar mixes in.</summary>
     public static AudioFormat Default => new(48000, 2);
 

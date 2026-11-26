@@ -27,4 +27,8 @@
       <ProjectReference Include="..\..\Adamantium.Pulsar\Adamantium.Pulsar.csproj" />
     </ItemGroup>
 
+    <ItemGroup>
+      <EmbeddedResource Include="Flac\*.flac" LogicalName="%(Filename)%(Extension)" />
+    </ItemGroup>
+
 </Project>
