@@ -42,6 +42,29 @@ public class OpusPacketTests
         Assert.That((starts[0], sizes[0], length), Is.EqualTo((2, 2, 4)));
     }
 
+    // Variable, self-delimited: the last frame's length counted with the byte that says it, one past the end here.
+    [Test]
+    public void SelfDelimited_OfALastFramePastTheEnd_IsRefused()
+    {
+        byte[] packet = [Celt | 3, 0x80 | 2, 1, 3, 9, 8, 8];
+        Span<int> starts = stackalloc int[OpusPacket.MostFrames];
+        Span<int> sizes = stackalloc int[OpusPacket.MostFrames];
+
+        Assert.That(OpusPacket.Parse(packet, true, starts, sizes, out _), Is.EqualTo(-1));
+    }
+
+    // Lost samples of no whole number of 2.5 ms: concealed down to it, not forever.
+    [Test]
+    public void ALossOfNoWholeFrames_IsConcealedInWholeOnes()
+    {
+        var decoder = new OpusDecoder(2);
+        var output = new float[5760 * 2];
+        decoder.Decode([Celt, 0xFF, 0xFE], output);
+
+        Assert.That(decoder.Decode([], output, lostSamples: 100), Is.Zero);
+        Assert.That(decoder.Decode([], output, lostSamples: 1000), Is.EqualTo(960));
+    }
+
     // 3.4: R1 to R7; and padding past what a packet has, as RFC 8251, 4 has it read.
     [Test]
     public void WhatIsMalformed_IsRefused()

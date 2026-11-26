@@ -6,7 +6,8 @@ internal static class OggFile
     /// <exception cref="InvalidDataException">It has no stream of a codec read; the stream is disposed.</exception>
     public static ISoundDecoder Open(Stream stream)
     {
-        var ogg = OggStream.Open(stream, packet => VorbisDecoder.IsVorbis(packet) || OggOpusDecoder.IsOpus(packet) ||
+        // An Opus stream of what is not read - ambisonics, a later version - is passed by as any of a codec not known.
+        var ogg = OggStream.Open(stream, packet => VorbisDecoder.IsVorbis(packet) || OggOpusDecoder.IsReadable(packet) ||
             OggFlacStream.IsFlac(packet));
         try
         {

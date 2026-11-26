@@ -113,13 +113,13 @@ public class OpusTests
     // it as before, once the decoder is past what it had of the page before. Its lacing spoilt too, at 60 bytes in:
     // the page after it is found all the same. The one before the last spoilt: the last, whose granule cuts the end,
     // is placed where the page before ended.
-    [TestCase(2)]
-    [TestCase(3)]
-    public void ADamagedPage_IsSilenceAndTheRestIsRead(int page)
+    [TestCase(2, 60)]
+    [TestCase(3, 60)]
+    public void ADamagedPage_IsSilenceAndTheRestIsRead(int page, int at)
     {
         var file = Read("pages32.opus");
         var whole = SoundFile.Read(file);
-        file[OggPages.Of(file)[page] + 60] ^= 0x55;
+        file[OggPages.Of(file)[page] + at] ^= 0x55;
 
         var sound = SoundFile.Read(file);
 
@@ -130,6 +130,58 @@ public class OpusTests
         Assert.That(differing, Is.Not.Empty);
         // A page of a second, and what the decoder takes to come back after it.
         Assert.That(differing[^1] - differing[0], Is.LessThan(48000 + 9600));
+    }
+
+    // The capture pattern of the page before the last spoilt: it is not found at all, and is lost as the page numbers
+    // after it say - silence for its second, not the last page's packets read on where it was. Those of the last page
+    // are placed by its granule, which may cut the end: as late as that.
+    [Test]
+    public void APageNotFound_IsLost()
+    {
+        var file = Read("pages32.opus");
+        var whole = SoundFile.Read(file);
+        file[OggPages.Of(file)[3]] ^= 0x55;
+
+        var sound = SoundFile.Read(file);
+
+        Assert.That(sound.Frames, Is.EqualTo(whole.Frames));
+        Assert.That(sound.AsSpan()[..47000].SequenceEqual(whole.AsSpan()[..47000]), Is.True);
+        Assert.That(sound.AsSpan()[49000..95000].IndexOfAnyExcept(0f), Is.EqualTo(-1));
+    }
+
+    // The first audio page's granule spoilt, its checksum no longer its own: a seek into the page after it is placed by
+    // the next granule whole, not by that one.
+    [Test]
+    public void ASeekAfterAPageWhoseGranuleIsSpoilt_IsPlacedStill()
+    {
+        var file = Read("pages32.opus");
+        var whole = SoundFile.Read(file);
+        file[OggPages.Of(file)[2] + 9] ^= 0x40;
+        using var decoder = SoundFile.Open(new MemoryStream(file));
+        var samples = new float[700];
+
+        decoder.Seek(70000);
+        var got = decoder.Read(samples);
+
+        Assert.That(got, Is.EqualTo(700));
+        for (var index = 0; index < got; index++)
+        {
+            Assert.That(samples[index], Is.EqualTo(whole.AsSpan()[70000 + index]).Within(.01f), $"frame {70000 + index}");
+        }
+    }
+
+    // An Opus stream of mapping family 2, ambisonics, which is not read, before Vorbis's: Vorbis is the sound.
+    [Test]
+    public void AnOpusStreamNotRead_IsPassedBy()
+    {
+        var file = Read("ogg.beside22.ogg");
+        var first = OggPages.Of(file)[0];
+        OggPages.SetFirstBytes(file, 0, [.. "OpusHead"u8, 1, 1, 0, 0, 0x80, 0xBB, 0, 0, 0, 0, 2, 1, 0, 0]);
+        OggPages.Seal(file, first);
+
+        var sound = SoundFile.Read(file);
+
+        Assert.That(sound.AsSpan().SequenceEqual(SoundFile.Read(Read("ogg.pages22.ogg")).AsSpan()), Is.True);
     }
 
     [Test]
@@ -212,7 +264,7 @@ public class OpusTests
 
     private static byte[] Read(string name)
     {
-        using var resource = typeof(OpusTests).Assembly.GetManifestResourceStream("opus." + name);
+        using var resource = typeof(OpusTests).Assembly.GetManifestResourceStream(name.StartsWith("ogg.") ? name : "opus." + name);
         using var copy = new MemoryStream();
         resource.CopyTo(copy);
         return copy.ToArray();

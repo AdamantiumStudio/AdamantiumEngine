@@ -26,6 +26,8 @@ internal sealed class OpusDecoder
     private int _endBand;
     private int _silkRate;
     private int _streamChannels;
+    private int _silkCodedRate = 16000;
+    private int _silkCodedChannels;
 
     public OpusDecoder(int channels)
     {
@@ -35,7 +37,7 @@ internal sealed class OpusDecoder
         _transition = new float[Frame5 * channels];
         _redundant = new float[Frame5 * channels];
         _silkOutput = new float[LongestPacket * channels];
-        _streamChannels = channels;
+        _streamChannels = _silkCodedChannels = channels;
     }
 
     /// <summary>The range decoder's state at the end of the last packet, xored with its redundant frame's: as the
@@ -70,10 +72,16 @@ internal sealed class OpusDecoder
     {
         if (packet.IsEmpty)
         {
+            // In frames CELT has: 2.5, 5, 10 or 20 ms; less than 2.5 ms left is not concealed.
             var done = 0;
-            while (done < lostSamples)
+            while (lostSamples - done >= Frame2)
             {
-                var size = Math.Min(lostSamples - done, Frame20);
+                var size = Frame20;
+                while (size > lostSamples - done)
+                {
+                    size >>= 1;
+                }
+
                 done += DecodeFrame(default, output[(done * _channels)..], size);
             }
 
@@ -175,9 +183,16 @@ internal sealed class OpusDecoder
             var isFirst = true;
             var done = 0;
             var milliseconds = Math.Max(10, size / 48);
+            // A frame lost is concealed as the last one read was coded, whatever the packet now is.
+            if (!isLost)
+            {
+                _silkCodedRate = _silkRate;
+                _silkCodedChannels = _streamChannels;
+            }
+
             while (done < size)
             {
-                var decoded = _silk.Decode(ref decoder, isLost, isFirst, _silkRate, _streamChannels, milliseconds,
+                var decoded = _silk.Decode(ref decoder, isLost, isFirst, _silkCodedRate, _silkCodedChannels, milliseconds,
                     silk[(done * channels)..]);
                 if (decoded < 0)
                 {

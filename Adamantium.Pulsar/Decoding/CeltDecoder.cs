@@ -78,11 +78,7 @@ internal sealed class CeltDecoder
     /// <paramref name="isAdded"/>. Its state where it ended is the range decoder's.</summary>
     public void Decode(ref OpusRangeDecoder decoder, Span<float> output, int frameSize, bool isAdded)
     {
-        var shift = 0;
-        while (CeltTables.ShortBlock << shift != frameSize)
-        {
-            shift++;
-        }
+        var shift = ShiftOf(frameSize);
 
         var scale = 1 << shift;
         var size = scale * CeltTables.ShortBlock;
@@ -295,14 +291,18 @@ internal sealed class CeltDecoder
         var size = frameSize;
         var spectrum = _spectrum.AsSpan(0, _channels * size);
         spectrum.Clear();
-        var shift = 0;
-        while (CeltTables.ShortBlock << shift != size)
-        {
-            shift++;
-        }
-
-        Synthesize(spectrum, size, 0, shift, 0, 0, 0, output, isAdded);
+        Synthesize(spectrum, size, 0, ShiftOf(size), 0, 0, 0, output, isAdded);
     }
+
+    // Of a frame of 120, 240, 480 or 960 samples, how many times 120 is doubled to it.
+    private static int ShiftOf(int frameSize) => frameSize switch
+    {
+        120 => 0,
+        240 => 1,
+        480 => 2,
+        960 => 3,
+        _ => throw new ArgumentOutOfRangeException(nameof(frameSize), frameSize, "A CELT frame is of 2.5, 5, 10 or 20 ms."),
+    };
 
     // The inverse MDCTs, the post-filter on what they gave, and the de-emphasis into output.
     private void Synthesize(Span<float> spectrum, int size, int shortBlocks, int shift, int period, float gain,

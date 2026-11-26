@@ -200,7 +200,8 @@ internal static class OpusPacket
                     sizes[frame] = sizes[count - 1];
                 }
             }
-            else if (sizes[count - 1] > lastSize)
+            // Of what was left before its length was read: the length's own bytes too.
+            else if (bytes + sizes[count - 1] > lastSize)
             {
                 return -1;
             }

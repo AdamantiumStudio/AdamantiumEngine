@@ -61,9 +61,14 @@ internal sealed class OggOpusDecoder : ISoundDecoder
                         $"The Opus stream has {_channels} channels; no more than {AudioFormat.MostChannels} are read.");
                 }
 
-                if (head.Length < 21 + _channels || family != 1 && family != 255)
+                if (family != 1 && family != 255)
                 {
-                    throw Damaged("its channel mapping is of a family there is not, or cut short");
+                    throw new InvalidDataException($"The Opus stream is of channel mapping family {family}, which is not read.");
+                }
+
+                if (head.Length < 21 + _channels)
+                {
+                    throw Damaged("its channel mapping is cut short");
                 }
 
                 streams = head[19];
@@ -112,6 +117,16 @@ internal sealed class OggOpusDecoder : ISoundDecoder
     /// <summary>Whether <paramref name="packet"/>, a first one, is Opus's identification header.</summary>
     public static bool IsOpus(ReadOnlySpan<byte> packet) => packet.StartsWith("OpusHead"u8);
 
+    /// <summary>Whether <paramref name="packet"/> is the identification header of a stream this reads: of a version
+    /// before 16, mapping family 0 of one or two channels, or 1 or 255 of up to eight.</summary>
+    public static bool IsReadable(ReadOnlySpan<byte> packet) =>
+        IsOpus(packet) && packet.Length >= 19 && packet[8] < 16 && packet[9] > 0 && (packet[18] switch
+        {
+            0 => packet[9] <= 2,
+            1 or 255 => packet[9] <= AudioFormat.MostChannels && packet.Length >= 21 + packet[9],
+            _ => false,
+        });
+
     public int Read(Span<float> samples)
     {
         var wanted = (int)Math.Min(samples.Length / _channels, _start + Frames - _position);
@@ -145,9 +160,11 @@ internal sealed class OggOpusDecoder : ISoundDecoder
         var sample = _start + frame;
         var pages = _ogg.Pages;
         var page = _audioPage;
+        // Checked once it is found by the granules: only that page is read.
         for (var at = pages.Count - 1; at > _audioPage; at--)
         {
-            if (!pages[at].IsContinued && GranuleBefore(at) is var before and >= 0 && before <= sample - PreRoll)
+            if (!pages[at].IsContinued && GranuleBefore(at, false) is var before and >= 0 && before <= sample - PreRoll &&
+                GranuleBefore(at) >= 0)
             {
                 page = at;
                 break;
@@ -171,7 +188,11 @@ internal sealed class OggOpusDecoder : ISoundDecoder
         }
 
         _ready.Clear();
-        _ready.Place(page == _audioPage ? _first : GranuleBefore(page));
+        var start = page == _audioPage ? _first : GranuleBefore(page);
+        if (start >= 0)
+        {
+            _ready.Place(start);
+        }
     }
 
     // The next packet's samples after those ready; false past the last.
@@ -204,10 +225,12 @@ internal sealed class OggOpusDecoder : ISoundDecoder
         if (!_ready.IsPlaced && granule >= 0)
         {
             // The last page's granule may cut the end; where it begins a packet, its packets begin where the page
-            // before ended. A continued one's, after a loss, are placed as if none were cut.
+            // before ended - by that one's granule, a damaged page's too where it is between where they would begin
+            // cut and not. A continued one's, after a loss, are placed as if none were cut.
             var page = _ogg.NextPage - 1;
             var info = _ogg.Pages[page];
-            _ready.Place(info.IsLast && !info.IsContinued ? GranuleBefore(page) : granule - _ready.Count);
+            var before = info.IsLast && !info.IsContinued ? GranuleBefore(page, false) : -1;
+            _ready.Place(before > granule - _ready.Count && before <= granule ? before : granule - _ready.Count);
         }
 
         return true;
@@ -286,13 +309,22 @@ internal sealed class OggOpusDecoder : ISoundDecoder
         throw Damaged("it has no audio its pages place");
     }
 
-    private long GranuleBefore(int page)
+    // Of the nearest page before with a granule: the granule, as its header says; -1 where a page between them is not
+    // there, by their numbers, or where that page is not whole, when asked to check, as a damaged one's could be
+    // anything. Before the first audio page, the stream's start.
+    private long GranuleBefore(int page, bool isChecked = true)
     {
+        var pages = _ogg.Pages;
         for (var at = page - 1; at >= _audioPage; at--)
         {
-            if (_ogg.Pages[at].Granule >= 0)
+            if (pages[at].Sequence + 1 != pages[at + 1].Sequence)
             {
-                return _ogg.Pages[at].Granule;
+                return -1;
+            }
+
+            if (pages[at].Granule >= 0)
+            {
+                return !isChecked || _ogg.IsWhole(at) ? pages[at].Granule : -1;
             }
         }
 

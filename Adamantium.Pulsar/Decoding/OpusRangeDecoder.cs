@@ -39,9 +39,6 @@ internal ref struct OpusRangeDecoder
     /// <summary>The state the encoder ended in, the same where the frame is read as written.</summary>
     public readonly uint FinalRange => _range;
 
-    /// <summary>A uniform value read past what the encoder could have written, or raw bits past the frame.</summary>
-    public bool IsDamaged { get; private set; }
-
     /// <summary>4.1.2: the value fs of a context of <paramref name="total"/>, before its symbol is known.</summary>
     public uint Decode(uint total)
     {
@@ -108,8 +105,8 @@ internal ref struct OpusRangeDecoder
         return symbol;
     }
 
-    /// <summary>4.1.5: one of <paramref name="count"/> values alike, more than 1; one past the last is the last, and
-    /// damage.</summary>
+    /// <summary>4.1.5: one of <paramref name="count"/> values alike, more than 1; one past the last, which only damage
+    /// gives, is the last, as the reference has it.</summary>
     public uint DecodeUniform(uint count)
     {
         var top = count - 1;
@@ -126,13 +123,7 @@ internal ref struct OpusRangeDecoder
         var high = Decode(total);
         Update(high, high + 1, total);
         var result = high << low | ReadBits(low);
-        if (result <= top)
-        {
-            return result;
-        }
-
-        IsDamaged = true;
-        return top;
+        return Math.Min(result, top);
     }
 
     /// <summary>4.1.4: up to 25 raw bits from the end, the first the lowest.</summary>
