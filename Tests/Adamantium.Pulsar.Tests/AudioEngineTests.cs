@@ -70,6 +70,70 @@ public class AudioEngineTests
         Assert.That(Render(1), Is.EqualTo(new[] { left, right }).Within(Exact));
     }
 
+    // 7.1, ITU-R BS.775: the center and the surrounds 3 dB down in their sides, the low frequencies left out.
+    [TestCase(0, 1f, 0f)]
+    [TestCase(1, 0f, 1f)]
+    [TestCase(2, Middle, Middle)]
+    [TestCase(3, 0f, 0f)]
+    [TestCase(4, Middle, 0f)]
+    [TestCase(5, 0f, Middle)]
+    [TestCase(6, Middle, 0f)]
+    [TestCase(7, 0f, Middle)]
+    public void ASoundOfManyChannels_IsMixedDownToTwo(int channel, float left, float right)
+    {
+        var samples = new float[8 * 10];
+        for (var frame = 0; frame < 10; frame++)
+        {
+            samples[frame * 8 + channel] = 0.5f;
+        }
+
+        _engine.Play(_engine.AddSound(new SoundData(new AudioFormat(Rate, 8), samples)));
+
+        Assert.That(Render(1), Is.EqualTo(new[] { left * 0.5f, right * 0.5f }).Within(Exact));
+    }
+
+    [Test]
+    public void SpeakersOfItsOwn_AreMixedDownWhereTheyAre()
+    {
+        var speakers = Speakers.FrontLeftOfCenter | Speakers.BackCenter | Speakers.TopFrontRight;
+        _engine.Play(_engine.AddSound(new SoundData(new AudioFormat(Rate, 3, speakers), [1, 1, 1])));
+
+        // Between the front left and the center, keeping its power; the back center 6 dB down in each side.
+        Assert.That(Render(1), Is.EqualTo(new[] { 0.9238795f + 0.5f, 0.38268343f + 0.5f + 1 }).Within(Exact));
+
+        // Two at the back are no front two.
+        _engine = new AudioEngine();
+        _engine.Play(_engine.AddSound(new SoundData(new AudioFormat(Rate, 2, Speakers.BackLeft | Speakers.BackRight), [1, -1])));
+
+        Assert.That(Render(1), Is.EqualTo(new[] { Middle, -Middle }).Within(Exact));
+    }
+
+    [TestCase(1f)]
+    [TestCase(1.37f)]
+    public void ASoundOfManyChannels_IsReadAtItsPitch_AsOneOfTwo(float pitch)
+    {
+        var noise = Noise(4000);
+        var many = new float[noise.Length * 6];
+        var two = new float[noise.Length * 2];
+        for (var frame = 0; frame < noise.Length; frame++)
+        {
+            many[frame * 6] = noise[frame];
+            many[frame * 6 + 5] = -noise[frame];
+            two[frame * 2] = noise[frame];
+            two[frame * 2 + 1] = -noise[frame] * Middle;
+        }
+
+        var settings = new VoiceSettings { Pitch = pitch, Loops = true, Pan = 0.2f };
+        _engine.Play(_engine.AddSound(new SoundData(new AudioFormat(24000, 6), many)), settings);
+        var expected = new AudioEngine();
+        expected.Play(expected.AddSound(new SoundData(new AudioFormat(24000, 2), two)), settings);
+        var rendered = Render(10000);
+        var samples = new float[rendered.Length];
+        expected.Render(samples, AudioFormat.Default);
+
+        Assert.That(rendered, Is.EqualTo(samples).Within(Exact));
+    }
+
     [Test]
     public void VoicesAndBuses_AreAdded()
     {
@@ -519,10 +583,11 @@ public class AudioEngineTests
     {
         _engine = new AudioEngine(new AudioEngineSettings { AudibleVoices = 8 });
         var sound = Add(Noise(Rate));
+        var surround = _engine.AddSound(new SoundData(new AudioFormat(Rate, 6), Noise(Rate * 6)));
         var samples = new float[960];
         for (var index = 0; index < 100; index++)
         {
-            _engine.Play(sound, new VoiceSettings { Pitch = 1 + index / 100f, Loops = true });
+            _engine.Play(index % 2 == 0 ? sound : surround, new VoiceSettings { Pitch = 1 + index / 100f, Loops = true });
         }
 
         _engine.Render(samples, AudioFormat.Default);

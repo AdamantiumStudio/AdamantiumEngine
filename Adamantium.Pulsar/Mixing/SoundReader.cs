@@ -35,7 +35,12 @@ internal static class SoundReader
             }
             else
             {
-                done += channels == 1 ? ReadMono(ref voice, step, rest) : ReadStereo(ref voice, step, rest);
+                done += channels switch
+                {
+                    1 => ReadMono(ref voice, step, rest),
+                    2 => ReadStereo(ref voice, step, rest),
+                    _ => ReadChannels(ref voice, step, rest, channels),
+                };
             }
         }
 
@@ -102,6 +107,7 @@ internal static class SoundReader
         return frame;
     }
 
+    // Two apart from many: a count of channels not known cost 10% of mixing at a pitch.
     private static int ReadStereo(ref Voice voice, long step, Span<float> samples)
     {
         var source = voice.Sound.Samples;
@@ -124,6 +130,39 @@ internal static class SoundReader
                 var sample = at * 2 + channel;
                 samples[frame * 2 + channel] = inside
                     ? Interpolate(source[sample - 2], source[sample], source[sample + 2], source[sample + 4], fraction)
+                    : InterpolateAtEdge(voice, at, channel, fraction);
+            }
+
+            position += step;
+        }
+
+        voice.Position = position;
+        return frame;
+    }
+
+    private static int ReadChannels(ref Voice voice, long step, Span<float> samples, int channels)
+    {
+        var source = voice.Sound.Samples;
+        var start = voice.HasLooped ? voice.Sound.Loop.Start : 0;
+        var end = EndOf(voice);
+        var position = voice.Position;
+        var frame = 0;
+        for (; frame < samples.Length / channels; frame++)
+        {
+            var at = (int)(position >> 32);
+            if (at >= end)
+            {
+                break;
+            }
+
+            var fraction = (uint)position * FractionScale;
+            var inside = at > start && at + 2 < end;
+            for (var channel = 0; channel < channels; channel++)
+            {
+                var sample = at * channels + channel;
+                samples[frame * channels + channel] = inside
+                    ? Interpolate(source[sample - channels], source[sample], source[sample + channels],
+                        source[sample + channels * 2], fraction)
                     : InterpolateAtEdge(voice, at, channel, fraction);
             }
 

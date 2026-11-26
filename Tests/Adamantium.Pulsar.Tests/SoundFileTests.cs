@@ -91,6 +91,25 @@ public class SoundFileTests
         Assert.That(SoundFile.Read(Wav(Chunk("fmt ", Format(Pcm, 1, 48000, 16)), data)).Frames, Is.EqualTo(1));
     }
 
+    // A mask of as many speakers as channels is theirs; another, or none, is not said.
+    [TestCase(4, 0x603u, 0x603u)]
+    [TestCase(4, 0x3u, 0x33u)]
+    [TestCase(4, 0x7FFu, 0x33u)]
+    [TestCase(4, 0x80000033u, 0x33u)]
+    [TestCase(6, 0u, 0x3Fu)]
+    [TestCase(8, 0x63Fu, 0x63Fu)]
+    public void TheSpeakersOfAWav_AreItsMask_OrTheUsual(int channels, uint mask, uint expected)
+    {
+        var data = Enumerable.Range(0, channels).SelectMany(channel => BitConverter.GetBytes((short)(channel * 1000))).ToArray();
+
+        var sound = SoundFile.Read(Wav(Chunk("fmt ", Extensible(channels, 48000, 16, mask)), Chunk("data", data)));
+
+        Assert.That(sound.Format.Speakers, Is.EqualTo((Speakers)expected));
+        Assert.That(sound.AsSpan().ToArray(), Is.EqualTo(Enumerable.Range(0, channels).Select(channel => channel * 1000 / 32768f)));
+        Assert.That(SoundFile.Read(Wav(Chunk("fmt ", Format(Pcm, 6, 48000, 16)), Chunk("data", new byte[12]))).Format,
+            Is.EqualTo(new AudioFormat(48000, 6)), "no mask at all");
+    }
+
     [Test]
     public void WhatIsNoWav_IsRefused()
     {
@@ -104,7 +123,7 @@ public class SoundFileTests
             Wav(format, Chunk("data", [1])),
             Wav(Chunk("data", [1, 2])),
             Wav(Chunk("fmt ", [1, 0]), Chunk("data", [1, 2])),
-            Wav(Chunk("fmt ", Format(Pcm, 6, 48000, 16)), Chunk("data", new byte[12])),
+            Wav(Chunk("fmt ", Format(Pcm, 9, 48000, 16)), Chunk("data", new byte[18])),
             Wav(Chunk("fmt ", Format(Pcm, 1, 0, 16)), Chunk("data", [1, 2])),
             Wav(Chunk("fmt ", Format(Pcm, 1, 48000, 12)), Chunk("data", [1, 2])),
             Wav(Chunk("fmt ", Format(2, 1, 48000, 4)), Chunk("data", [1, 2])),
@@ -166,6 +185,13 @@ public class SoundFileTests
             .. BitConverter.GetBytes(rate * frame), .. BitConverter.GetBytes((ushort)frame), .. BitConverter.GetBytes((ushort)bits),
         ];
     }
+
+    // WAVEFORMATEXTENSIBLE of whole samples.
+    private static byte[] Extensible(int channels, int rate, int bits, uint mask) =>
+    [
+        .. Format(0xFFFE, channels, rate, bits), 22, 0, .. BitConverter.GetBytes((ushort)bits), .. BitConverter.GetBytes(mask),
+        .. new Guid("00000001-0000-0010-8000-00AA00389B71").ToByteArray(),
+    ];
 
     private static byte[] Loop(uint start, uint end) =>
     [

@@ -35,9 +35,12 @@ internal static class StreamReader
         var frames = samples.Length / channels;
         // The frames around the last are read with it: silence past the end.
         var readable = hasAll ? left : left - 2;
-        var done = channels == 1
-            ? ReadMono(ref voice, step, samples, left, readable)
-            : ReadStereo(ref voice, step, samples, left, readable);
+        var done = channels switch
+        {
+            1 => ReadMono(ref voice, step, samples, left, readable),
+            2 => ReadStereo(ref voice, step, samples, left, readable),
+            _ => ReadChannels(ref voice, step, samples, left, readable, channels),
+        };
         Advance(ref voice);
         starved = done < frames && !hasAll;
         if (!starved)
@@ -63,7 +66,7 @@ internal static class StreamReader
                 break;
             }
 
-            samples[frame] = step == SoundReader.One &&(uint)position == 0
+            samples[frame] = step == SoundReader.One && (uint)position == 0
                 ? source[(int)(read + at) & Mask]
                 : Interpolate(source, read, at, left, 1, 0, position);
             position += step;
@@ -73,6 +76,7 @@ internal static class StreamReader
         return frame;
     }
 
+    // As SoundReader's: two kept apart from many.
     private static int ReadStereo(ref Voice voice, long step, Span<float> samples, long left, long readable)
     {
         var source = voice.Stream.Samples;
@@ -87,7 +91,7 @@ internal static class StreamReader
                 break;
             }
 
-            if (step == SoundReader.One &&(uint)position == 0)
+            if (step == SoundReader.One && (uint)position == 0)
             {
                 var sample = ((int)(read + at) & Mask) * 2;
                 samples[frame * 2] = source[sample];
@@ -97,6 +101,40 @@ internal static class StreamReader
             {
                 samples[frame * 2] = Interpolate(source, read, at, left, 2, 0, position);
                 samples[frame * 2 + 1] = Interpolate(source, read, at, left, 2, 1, position);
+            }
+
+            position += step;
+        }
+
+        voice.Position = position;
+        return frame;
+    }
+
+    private static int ReadChannels(ref Voice voice, long step, Span<float> samples, long left, long readable, int channels)
+    {
+        var source = voice.Stream.Samples;
+        var read = voice.Stream.Read;
+        var position = voice.Position;
+        var frame = 0;
+        for (; frame < samples.Length / channels; frame++)
+        {
+            var at = position >> 32;
+            if (at >= readable)
+            {
+                break;
+            }
+
+            var target = samples.Slice(frame * channels, channels);
+            if (step == SoundReader.One && (uint)position == 0)
+            {
+                source.AsSpan(((int)(read + at) & Mask) * channels, channels).CopyTo(target);
+            }
+            else
+            {
+                for (var channel = 0; channel < channels; channel++)
+                {
+                    target[channel] = Interpolate(source, read, at, left, channels, channel, position);
+                }
             }
 
             position += step;

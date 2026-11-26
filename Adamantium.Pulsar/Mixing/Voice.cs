@@ -42,4 +42,6 @@ internal struct Voice
     public float Right;
 
     public readonly AudioFormat Format => Stream?.Format ?? Sound.Format;
+
+    public readonly float[] Downmix => Stream != null ? Stream.Downmix : Sound.Downmix;
 }

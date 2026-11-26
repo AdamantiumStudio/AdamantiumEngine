@@ -24,7 +24,7 @@ internal sealed class Mixer
     private readonly int[] _positions;
     // Parents before their children.
     private readonly int[] _busOrder;
-    private readonly float[] _read = new float[BlockFrames * Channels];
+    private readonly float[] _read = new float[BlockFrames * AudioFormat.MostChannels];
     private readonly float[] _mixed = new float[BlockFrames * Channels];
     private int _mixedTaken = BlockFrames * Channels;
     private readonly SlotReturns _endedVoices;
@@ -307,6 +307,12 @@ internal sealed class Mixer
                 got = StreamReader.Read(ref voice, step, read, out var starved);
                 _streamGaps += starved && !voice.Starved ? 1 : 0;
                 voice.Starved = starved;
+            }
+
+            if (voice.Downmix is { } downmix)
+            {
+                Downmix.Apply(read, got, channels, downmix);
+                channels = Channels;
             }
 
             PrepareBus(ref bus);
