@@ -49,11 +49,6 @@ internal sealed class OggStream : IDisposable
             ? new OggStream(stream, pages, serial)
             : throw new InvalidDataException("The Ogg file has no stream of a sound it can read.");
 
-    /// <summary>Whether <paramref name="stream"/>, from its position, has a logical stream whose first packet
-    /// <paramref name="isKnown"/> takes.</summary>
-    public static bool Has(Stream stream, Func<ReadOnlySpan<byte>, bool> isKnown) =>
-        TryIndex(stream, isKnown, out _, out _);
-
     private static bool TryIndex(Stream stream, Func<ReadOnlySpan<byte>, bool> isKnown, out OggPage[] found,
         out uint chosen)
     {
@@ -61,9 +56,13 @@ internal sealed class OggStream : IDisposable
         var pages = new List<OggPage>();
         uint? serial = null;
         var at = stream.Position;
+        var previous = at - 1;
+        // Where a page's end is no page, its header may be damaged, its length too: the next is looked for from just
+        // after where it began.
         while (TryHeaderAt(stream, at, header, out var page, out var pageSerial) ||
-            FindPage(stream, at + 1, header, out at, out page, out pageSerial))
+            FindPage(stream, previous + 1, header, out at, out page, out pageSerial))
         {
+            previous = page.At;
             if (serial == null && page.IsFirst && IsKnownStream(stream, page, isKnown))
             {
                 serial = pageSerial;
@@ -145,12 +144,13 @@ internal sealed class OggStream : IDisposable
 
     /// <summary>Whether page <paramref name="page"/> is as its checksum says; the packet being read is left as it is,
     /// the stream's position not.</summary>
-    public bool IsWhole(int page)
+    public bool IsWhole(int page) => IsWholeAt(_stream, _pages[page]);
+
+    private static bool IsWholeAt(Stream stream, OggPage page)
     {
-        var info = _pages[page];
-        var bytes = new byte[info.HeaderLength + info.BodyLength];
-        _stream.Position = info.At;
-        return _stream.ReadAtLeast(bytes, bytes.Length, throwOnEndOfStream: false) == bytes.Length &&
+        var bytes = new byte[page.HeaderLength + page.BodyLength];
+        stream.Position = page.At;
+        return stream.ReadAtLeast(bytes, bytes.Length, throwOnEndOfStream: false) == bytes.Length &&
             BinaryPrimitives.ReadUInt32LittleEndian(bytes.AsSpan(22)) == ChecksumOf(bytes);
     }
 
@@ -272,7 +272,8 @@ internal sealed class OggStream : IDisposable
         return true;
     }
 
-    // The next page after bytes that are none: damage, or what a stream ends by.
+    // The next page after bytes that are none: damage, or what a stream ends by. Found by its capture pattern, it is
+    // taken where it is whole, as its pattern may be in what is no page.
     private static bool FindPage(Stream stream, long from, byte[] header, out long at, out OggPage page, out uint serial)
     {
         var buffer = new byte[4096];
@@ -283,7 +284,7 @@ internal sealed class OggStream : IDisposable
             var found = buffer.AsSpan(0, read).IndexOf("OggS"u8);
             if (found >= 0)
             {
-                if (TryHeaderAt(stream, at + found, header, out page, out serial))
+                if (TryHeaderAt(stream, at + found, header, out page, out serial) && IsWholeAt(stream, page))
                 {
                     at += found;
                     return true;
