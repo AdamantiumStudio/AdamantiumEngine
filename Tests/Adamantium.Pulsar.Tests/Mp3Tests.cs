@@ -46,6 +46,9 @@ public class Mp3Tests
     [TestCase("vbr48")]
     [TestCase("lower22")]
     [TestCase("lowest8")]
+    // Of one granule a frame and frames of 720 bytes: two frames before are what the one sought takes.
+    [TestCase("wide16")]
+    [TestCase("tiny24")]
     public void Sought_ItReadsOnAsFromTheBeginning(string name)
     {
         var whole = SoundFile.Read(Read(name + ".mp3"));
@@ -80,6 +83,36 @@ public class Mp3Tests
         // An ID3v2.4 tag of 300 bytes, its size in 7 bits a byte, and another after it.
         byte[] tag = [.. "ID3"u8, 4, 0, 0, 0, 0, 2, 44, .. new byte[300]];
         var tagged = SoundFile.Read([.. tag, .. tag, .. file]);
+
+        Assert.That(tagged.AsSpan().SequenceEqual(SoundFile.Read(file).AsSpan()), Is.True);
+    }
+
+    // Frames of 24 bytes, MPEG-2 at 8 kbit/s: no room for what is looked for in a frame of the coder's, and a seek
+    // goes back no more than the reservoir takes.
+    [Test]
+    public void FramesOfFewBytes_AreReadAndSoughtInto()
+    {
+        var file = Read("tiny24.mp3");
+        var stream = new ReadCounting(file);
+        using var decoder = SoundFile.Open(stream);
+        var samples = new float[1000];
+
+        stream.BytesRead = 0;
+        decoder.Seek(decoder.Frames - 2000);
+        decoder.Read(samples);
+
+        Assert.That(decoder.Format, Is.EqualTo(new AudioFormat(24000, 1)));
+        Assert.That(stream.BytesRead, Is.LessThan(file.Length / 4), "bytes read for a seek near the end");
+    }
+
+    // An ID3v1 tag at the end whose text holds what looks like a frame's header, of a frame that fits in it.
+    [Test]
+    public void ATagAtTheEnd_IsNoFrame()
+    {
+        var file = Read("cbr128.mp3");
+        byte[] tag = [.. "TAG"u8, .. "a title "u8, 0xFF, 0xFB, 0x10, 0x00, .. new byte[125 - 12]];
+
+        var tagged = SoundFile.Read([.. file, .. tag]);
 
         Assert.That(tagged.AsSpan().SequenceEqual(SoundFile.Read(file).AsSpan()), Is.True);
     }
@@ -130,11 +163,13 @@ public class Mp3Tests
         }
     }
 
-    // Any byte of a file spoilt, or the file cut anywhere: refused, or read with silence for what is damaged.
-    [Test]
-    public void ASpoiltFile_IsRefusedOrRead()
+    // Any byte of a file spoilt, or the file cut anywhere: refused, or read with silence for what is damaged; and
+    // nothing that is no number, as intensity positions past those of the standard would give.
+    [TestCase("lowest8")]
+    [TestCase("intensity44")]
+    public void ASpoiltFile_IsRefusedOrRead(string name)
     {
-        var file = Read("lowest8.mp3");
+        var file = Read(name + ".mp3");
         var random = new Random(2);
         for (var round = 0; round < 400; round++)
         {
@@ -182,6 +217,25 @@ public class Mp3Tests
         }
 
         Assert.That(least, Is.Zero);
+    }
+
+    private sealed class ReadCounting(byte[] bytes) : MemoryStream(bytes, writable: false)
+    {
+        public long BytesRead { get; set; }
+
+        public override int Read(Span<byte> buffer)
+        {
+            var read = base.Read(buffer);
+            BytesRead += read;
+            return read;
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            var read = base.Read(buffer, offset, count);
+            BytesRead += read;
+            return read;
+        }
     }
 
     private static byte[] Read(string name)

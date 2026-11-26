@@ -14,12 +14,19 @@ internal sealed class Mp3Decoder : ISoundDecoder
     private const int LongestSearch = 1 << 16;
     // A frame takes this much of the frames before: main_data_begin's most.
     private const int LongestReservoir = 511;
+    // Of the lower rates', of 8 bits.
+    private const int LongestLowerReservoir = 255;
+    private const int VbriAt = Mp3FrameHeader.Length + 32;
+    private const int Id3v1Length = 128;
+    private const int ApeFooterLength = 32;
     private const int ReservoirCapacity = 4096;
 
     private readonly Stream _stream;
     private readonly Mp3Layer3 _layer3 = new();
     private readonly Mp3FrameHeader _first;
     private readonly long[] _frameAt;
+    // Where the frames end: before the tags at the end of the file.
+    private readonly long _end;
     private readonly int _startSkip;
     private readonly byte[] _frame = new byte[LongestFrame];
     private readonly byte[] _reservoir = new byte[ReservoirCapacity];
@@ -37,6 +44,7 @@ internal sealed class Mp3Decoder : ISoundDecoder
     {
         _stream = stream;
         var start = SkipTags(stream);
+        _end = EndOfFrames(stream);
         var first = FindFrame(stream, start, start + LongestSearch) ??
             throw new InvalidDataException("It is no MP3 file.");
         _first = ReadHeaderAt(first);
@@ -113,12 +121,15 @@ internal sealed class Mp3Decoder : ISoundDecoder
             throw new InvalidDataException($"The MP3 file has no frame {frame}.");
         }
 
+        // The two granules before the one sought make what it is heard with: the frame before at MPEG-1, the two
+        // before at the lower rates. The first of them takes main data from as far back as main_data_begin can say.
         var sample = frame + _startSkip;
         var target = (int)Math.Min(sample / _first.Samples, _frameAt.Length);
-        var from = Math.Max(0, target - 1);
-        for (var bytes = 0; from > 0 && bytes < LongestReservoir; from--)
+        var from = Math.Max(0, target - (_first.IsFirst ? 1 : 2));
+        var reservoir = _first.IsFirst ? LongestReservoir : LongestLowerReservoir;
+        for (var bytes = 0; from > 0 && bytes < reservoir; from--)
         {
-            bytes += (int)(_frameAt[from] - _frameAt[from - 1]) - Mp3FrameHeader.Length - 2 - 32;
+            bytes += MainDataOf(from - 1);
         }
 
         _layer3.Reset();
@@ -130,6 +141,13 @@ internal sealed class Mp3Decoder : ISoundDecoder
     }
 
     public void Dispose() => _stream.Dispose();
+
+    // How many bytes of main data a frame holds.
+    private int MainDataOf(int frame)
+    {
+        var header = ReadHeaderAt(_frameAt[frame]);
+        return Math.Max(0, header.FrameLength - header.SideInfoAt - header.SideInfoLength);
+    }
 
     // ID3v2 tags, one after another, each with its footer where it says.
     private static long SkipTags(Stream stream)
@@ -150,11 +168,38 @@ internal sealed class Mp3Decoder : ISoundDecoder
         }
     }
 
+    // An ID3v1 tag, its 128 bytes beginning by TAG; an APEv2 tag before it or at the end, by its footer, and its header
+    // where the footer says there is one.
+    private static long EndOfFrames(Stream stream)
+    {
+        var end = stream.Length;
+        Span<byte> bytes = stackalloc byte[ApeFooterLength];
+        if (end >= Id3v1Length && ReadAt(stream, end - Id3v1Length, bytes[..3]) && bytes[..3].SequenceEqual("TAG"u8))
+        {
+            end -= Id3v1Length;
+        }
+
+        if (end >= ApeFooterLength && ReadAt(stream, end - ApeFooterLength, bytes) && bytes.StartsWith("APETAGEX"u8))
+        {
+            var length = BinaryPrimitives.ReadUInt32LittleEndian(bytes[12..]);
+            var hasHeader = (BinaryPrimitives.ReadUInt32LittleEndian(bytes[20..]) & 0x80000000) != 0;
+            end = Math.Max(0, end - length - (hasHeader ? ApeFooterLength : 0));
+        }
+
+        return end;
+    }
+
+    private static bool ReadAt(Stream stream, long at, Span<byte> bytes)
+    {
+        stream.Position = at;
+        return stream.ReadAtLeast(bytes, bytes.Length, throwOnEndOfStream: false) == bytes.Length;
+    }
+
     // A frame header that the next one agrees with: a lone one may be bytes of a tag or a picture.
     private long? FindFrame(Stream stream, long from, long to)
     {
         var buffer = new byte[4096];
-        for (var at = from; at < Math.Min(to, stream.Length - Mp3FrameHeader.Length);)
+        for (var at = from; at < Math.Min(to, _end - Mp3FrameHeader.Length);)
         {
             stream.Position = at;
             var read = stream.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
@@ -175,8 +220,8 @@ internal sealed class Mp3Decoder : ISoundDecoder
     private bool IsFollowed(long at, Mp3FrameHeader header)
     {
         var next = at + header.FrameLength;
-        // The only frame of a file is one too.
-        return next >= _stream.Length - 128 || TryHeaderAt(next, out var following) && following.IsLike(header);
+        // The last frame of a file is one too.
+        return next == _end || next < _end && TryHeaderAt(next, out var following) && following.IsLike(header);
     }
 
     private Mp3FrameHeader ReadHeaderAt(long at) =>
@@ -205,7 +250,8 @@ internal sealed class Mp3Decoder : ISoundDecoder
 
         var tagAt = _first.SideInfoAt + _first.SideInfoLength;
         var tag = frame.AsSpan(tagAt);
-        if (tag.StartsWith("VBRI"u8) || frame.AsSpan(Mp3FrameHeader.Length + 32).StartsWith("VBRI"u8))
+        // Fraunhofer's, 32 bytes after the header whatever the side information's length.
+        if (tag.StartsWith("VBRI"u8) || frame.Length >= VbriAt + 4 && frame.AsSpan(VbriAt).StartsWith("VBRI"u8))
         {
             return (true, -1, 0);
         }
@@ -247,11 +293,11 @@ internal sealed class Mp3Decoder : ISoundDecoder
     {
         var frames = new List<long>();
         channels = 1;
-        while (at + Mp3FrameHeader.Length <= _stream.Length)
+        while (at + Mp3FrameHeader.Length <= _end)
         {
             if (TryHeaderAt(at, out var header) && header.IsLike(_first))
             {
-                if (at + header.FrameLength > _stream.Length)
+                if (at + header.FrameLength > _end)
                 {
                     break;
                 }
@@ -319,6 +365,7 @@ internal sealed class Mp3Decoder : ISoundDecoder
         // A frame of one channel in a stream of two: from the last sample back, each in both.
         if (header.Channels < Format.Channels)
         {
+            _layer3.ShareFirstChannel();
             for (var sample = header.Samples - 1; sample >= 0; sample--)
             {
                 _decoded[sample * 2 + 1] = _decoded[sample * 2] = _decoded[sample];

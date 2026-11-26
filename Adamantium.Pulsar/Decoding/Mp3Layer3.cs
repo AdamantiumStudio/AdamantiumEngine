@@ -48,6 +48,15 @@ internal sealed class Mp3Layer3
         }
     }
 
+    /// <summary>After a frame of one channel in a stream of two: the second goes on from where the first, heard in both,
+    /// got to, not from where it was before.</summary>
+    public void ShareFirstChannel()
+    {
+        _overlap[0].CopyTo(_overlap[1], 0);
+        _history[0].CopyTo(_history[1], 0);
+        _historyAt[1] = _historyAt[0];
+    }
+
     /// <summary>Reads the side information; false where it can not be.</summary>
     public bool ReadSideInfo(Mp3FrameHeader header, ReadOnlySpan<byte> sideInfo, out int mainDataBegin)
     {
@@ -174,8 +183,8 @@ internal sealed class Mp3Layer3
             {
                 ref var info = ref _granules[granule * 2 + channel];
                 Reorder(info, bands, _lines[channel]);
-                AntiAlias(info, _lines[channel]);
-                Transform(info, _lines[channel], _overlap[channel]);
+                AntiAlias(info, bands, _lines[channel]);
+                Transform(info, bands, _lines[channel], _overlap[channel]);
                 Synthesize(channel, samples[(granule * Lines * channels)..], channels);
             }
         }
@@ -424,7 +433,7 @@ internal sealed class Mp3Layer3
         var line = 0;
         if (!info.IsShort || info.Mixed)
         {
-            var longEnd = info.IsShort ? 36 : Lines;
+            var longEnd = info.IsShort ? MixedLines(bands) : Lines;
             for (var band = 0; band < 22 && line < longEnd; band++)
             {
                 var gain = MathF.Pow(2, global - multiplier * (longs[band] + (info.Preflag ? Mp3Tables.Pretab[band] : 0)));
@@ -560,8 +569,9 @@ internal sealed class Mp3Layer3
     private void IntensityOf(Mp3FrameHeader header, in Mp3Granule info, int position, int illegal, float[] left,
         float[] right, int from, int to)
     {
-        // As the bands below: middle and side where the frame says.
-        if (position == illegal)
+        // As the bands below: middle and side where the frame says. MPEG-1's positions past 6 are none: of a coder's
+        // only 7, of damage any up to 15, whose tangent would be no number.
+        if (header.IsFirst ? position >= illegal : position == illegal)
         {
             return;
         }
@@ -605,7 +615,7 @@ internal sealed class Mp3Layer3
         }
 
         var first = info.Mixed ? 3 : 0;
-        var start = info.Mixed ? 36 : 0;
+        var start = info.Mixed ? MixedLines(bands) : 0;
         for (var band = first; band < 13; band++)
         {
             var bandStart = bands.Short[band];
@@ -624,10 +634,13 @@ internal sealed class Mp3Layer3
         _reordered.AsSpan(start).CopyTo(lines.AsSpan(start));
     }
 
+    // Where a mixed block's short part begins, its long part's lines before: 36, but for MPEG 2.5 at 8 kHz 72.
+    private static int MixedLines(Mp3Bands bands) => bands.Short[3] * 3;
+
     // 2.4.3.4.10: between the subbands of long blocks.
-    private static void AntiAlias(in Mp3Granule info, float[] lines)
+    private static void AntiAlias(in Mp3Granule info, Mp3Bands bands, float[] lines)
     {
-        var subbands = info.IsShort ? info.Mixed ? 2 : 0 : Subbands;
+        var subbands = info.IsShort ? info.Mixed ? MixedLines(bands) / SubbandLines : 0 : Subbands;
         for (var subband = 1; subband < subbands; subband++)
         {
             for (var at = 0; at < 8; at++)
@@ -644,12 +657,13 @@ internal sealed class Mp3Layer3
 
     // 2.4.3.4.10.2: each subband's lines to 36 samples, windowed by its block's type, half added to the last
     // granule's half; every other sample of the odd subbands turned over.
-    private void Transform(in Mp3Granule info, float[] lines, float[] overlap)
+    private void Transform(in Mp3Granule info, Mp3Bands bands, float[] lines, float[] overlap)
     {
+        var longSubbands = MixedLines(bands) / SubbandLines;
         for (var subband = 0; subband < Subbands; subband++)
         {
             // A mixed block's long subbands, and those of the start and stop blocks around it, are normal ones.
-            var blockType = info.WindowSwitching && info.Mixed && subband < 2 ? 0 : info.BlockType;
+            var blockType = info.WindowSwitching && info.Mixed && subband < longSubbands ? 0 : info.BlockType;
             var source = lines.AsSpan(subband * SubbandLines, SubbandLines);
             if (blockType == 2)
             {
