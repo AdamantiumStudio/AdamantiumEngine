@@ -13,6 +13,26 @@ public class FakeGamepad : Gamepad
 
     public int VibrationsSet { get; private set; }
 
+    public float LowSharpness { get; private set; } = DeepSharpness;
+
+    public float HighSharpness { get; private set; } = FineSharpness;
+
+    public float LeftTrigger { get; private set; }
+
+    public float RightTrigger { get; private set; }
+
+    public override void SetSharpness(float lowFrequency, float highFrequency)
+    {
+        LowSharpness = lowFrequency;
+        HighSharpness = highFrequency;
+    }
+
+    public override void SetTriggerVibration(float left, float right)
+    {
+        LeftTrigger = left;
+        RightTrigger = right;
+    }
+
     public override GamepadState GetState()
     {
         return State;

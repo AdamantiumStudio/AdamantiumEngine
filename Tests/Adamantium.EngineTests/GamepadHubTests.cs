@@ -158,6 +158,7 @@ public class GamepadHubTests
         hub.Update();
         Assert.That(gamepad.LowFrequency, Is.EqualTo(GamepadHub.GreetingStrength));
         Assert.That(gamepad.HighFrequency, Is.EqualTo(GamepadHub.GreetingStrength));
+        Assert.That(gamepad.LowSharpness, Is.EqualTo(GamepadHub.GreetingSharpness));
 
         clock.Advance(GamepadHub.GreetingLength / 2);
         hub.Update();
@@ -169,6 +170,7 @@ public class GamepadHubTests
         Assert.That(gamepad.LowFrequency, Is.Zero);
         Assert.That(gamepad.HighFrequency, Is.Zero);
         Assert.That(gamepad.VibrationsSet, Is.EqualTo(2), "stopped once");
+        Assert.That(gamepad.LowSharpness, Is.EqualTo(Gamepad.DeepSharpness), "each motor as fine as its own again");
     }
 
     [Test]

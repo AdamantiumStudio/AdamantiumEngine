@@ -28,6 +28,18 @@ public abstract class Gamepad
     {
     }
 
+    /// <summary>The sharpness of a deep rumble: the low-frequency motor's own.</summary>
+    public const float DeepSharpness = 0;
+
+    /// <summary>The sharpness of a fine buzz: the high-frequency motor's own.</summary>
+    public const float FineSharpness = 1;
+
+    /// <summary>How fine each body motor buzzes, from <see cref="DeepSharpness"/> to <see cref="FineSharpness"/>, where the
+    /// gamepad can tell (Core Haptics); elsewhere each motor buzzes as it is made to.</summary>
+    public virtual void SetSharpness(float lowFrequency, float highFrequency)
+    {
+    }
+
     /// <summary>Runs the motors behind the triggers, each 0..1, where the gamepad has them.</summary>
     public virtual void SetTriggerVibration(float left, float right)
     {

@@ -56,6 +56,8 @@ namespace Adamantium.Multiverse
 
         public bool HasOutputs => outputs.Count > 0;
 
+        public GamepadHub Gamepads => gamepads;
+
         protected IUniverse Universe { get; }
         
         internal IGraphicsDeviceService GraphicsDeviceService { get; private set; }

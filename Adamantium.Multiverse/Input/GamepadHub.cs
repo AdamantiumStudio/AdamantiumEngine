@@ -20,8 +20,11 @@ public class GamepadHub
     /// <summary>How strongly a gamepad taken in says so: an Elite Series 2 barely makes out half strength.</summary>
     public const float GreetingStrength = 0.7f;
 
+    /// <summary>How fine it buzzes then: a deep rumble is barely felt on an Elite Series 2.</summary>
+    public const float GreetingSharpness = Gamepad.FineSharpness;
+
     /// <summary>How long it says so.</summary>
-    public static readonly TimeSpan GreetingLength = TimeSpan.FromMilliseconds(250);
+    public static readonly TimeSpan GreetingLength = TimeSpan.FromMilliseconds(500);
 
     private readonly IGamepadBackend backend;
     private readonly IEventAggregator events;
@@ -88,6 +91,7 @@ public class GamepadHub
     // A gamepad taken in buzzes briefly, so whoever holds it knows the engine has it.
     private void Greet(int slot)
     {
+        slots[slot].SetSharpness(GreetingSharpness, GreetingSharpness);
         slots[slot].SetVibration(GreetingStrength, GreetingStrength);
         greetedAt[slot] = clock.GetTimestamp();
     }
@@ -101,6 +105,7 @@ public class GamepadHub
 
         greetedAt[slot] = 0;
         slots[slot].SetVibration(0, 0);
+        slots[slot].SetSharpness(Gamepad.DeepSharpness, Gamepad.FineSharpness);
     }
 
     private void DropDeparted(IReadOnlyList<Gamepad> connected)
