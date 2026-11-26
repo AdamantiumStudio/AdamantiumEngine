@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Adamantium.Pulsar.Decoding;
 
-/// <summary>FLAC files, RFC 9639, of one channel or two. Each frame's checksum is checked.</summary>
+/// <summary>FLAC files, RFC 9639. Each frame's checksum is checked.</summary>
 internal sealed class FlacDecoder : ISoundDecoder
 {
     private const int StreamInfo = 0;
@@ -12,7 +12,7 @@ internal sealed class FlacDecoder : ISoundDecoder
     private const int VorbisComment = 4;
     private const int StreamInfoLength = 34;
     private const int SeekPointLength = 18;
-    // A comment block holds pictures too: one larger has no loop worth its reading.
+    // A comment block holds pictures too: one larger has no loop or speakers worth its reading.
     private const int LongestComments = 1 << 20;
     private const int LeftSide = 8;
     private const int SideRight = 9;
@@ -78,7 +78,10 @@ internal sealed class FlacDecoder : ISoundDecoder
                     ReadSeekTable(length);
                     break;
                 case VorbisComment when length <= LongestComments:
-                    Loop = ReadLoop(length);
+                    Loop = ReadComments(length, out var speakers);
+                    Format = AudioFormat.Fits(speakers, Format.Channels)
+                        ? new AudioFormat(Format.SampleRate, Format.Channels, speakers)
+                        : Format;
                     break;
             }
 
@@ -183,11 +186,6 @@ internal sealed class FlacDecoder : ISoundDecoder
         var channels = (int)(packed >> 41 & 7) + 1;
         var bits = (int)(packed >> 36 & 31) + 1;
         var frames = (long)(packed & (1UL << 36) - 1);
-        if (channels > 2)
-        {
-            throw new InvalidDataException($"The FLAC file has {channels} channels, not one or two.");
-        }
-
         if (rate is 0 or > AudioFormat.HighestRate)
         {
             throw new InvalidDataException($"The FLAC file has a rate of {rate} Hz.");
@@ -217,8 +215,9 @@ internal sealed class FlacDecoder : ISoundDecoder
         }
     }
 
-    // LOOPSTART, and LOOPLENGTH or LOOPEND where it is not the end of the sound: what game music is written with.
-    private SoundLoop? ReadLoop(int length)
+    // LOOPSTART, and LOOPLENGTH or LOOPEND where it is not the end of the sound: what game music is written with. The
+    // speakers are said where they are not the usual.
+    private SoundLoop? ReadComments(int length, out Speakers speakers)
     {
         var block = new byte[length];
         _stream.ReadExactly(block);
@@ -226,6 +225,7 @@ internal sealed class FlacDecoder : ISoundDecoder
         long start = -1;
         long loopLength = -1;
         long end = -1;
+        speakers = Speakers.None;
         if (!TryTake(ref rest, out _) || rest.Length < 4)
         {
             return null;
@@ -238,6 +238,7 @@ internal sealed class FlacDecoder : ISoundDecoder
             ReadNumber(text, "LOOPSTART=", ref start);
             ReadNumber(text, "LOOPLENGTH=", ref loopLength);
             ReadNumber(text, "LOOPEND=", ref end);
+            ReadSpeakers(text, ref speakers);
         }
 
         if (end < 0)
@@ -275,6 +276,18 @@ internal sealed class FlacDecoder : ISoundDecoder
             long.TryParse(comment.AsSpan(name.Length), NumberStyles.None, CultureInfo.InvariantCulture, out var number))
         {
             value = number;
+        }
+    }
+
+    // In hexadecimal, after 0x.
+    private static void ReadSpeakers(string comment, ref Speakers speakers)
+    {
+        const string name = "WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0x";
+        if (comment.StartsWith(name, StringComparison.OrdinalIgnoreCase) &&
+            uint.TryParse(comment.AsSpan(name.Length), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture,
+                out var mask))
+        {
+            speakers = (Speakers)mask;
         }
     }
 

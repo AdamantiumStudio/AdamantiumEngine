@@ -21,6 +21,8 @@ internal sealed class SoundStream(StreamedSound sound, int from, bool loops)
 
     public AudioFormat Format { get; } = sound.Format;
 
+    public float[] Downmix { get; } = sound.Downmix;
+
     /// <summary>The frames, each at its number's lowest bits.</summary>
     public float[] Samples { get; private set; }
 

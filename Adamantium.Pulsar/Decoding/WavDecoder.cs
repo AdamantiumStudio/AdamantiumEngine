@@ -139,14 +139,18 @@ internal sealed class WavDecoder : ISoundDecoder
         int channels = BinaryPrimitives.ReadUInt16LittleEndian(format[2..]);
         var rate = BinaryPrimitives.ReadUInt32LittleEndian(format[4..]);
         int bits = BinaryPrimitives.ReadUInt16LittleEndian(format[14..]);
+        var speakers = Speakers.None;
         if (tag == Extensible && format.Length == FormatLength)
         {
             tag = BinaryPrimitives.ReadUInt16LittleEndian(format[24..]);
+            // Speakers fewer or more than the channels, or none, are not said.
+            speakers = (Speakers)BinaryPrimitives.ReadUInt32LittleEndian(format[20..]);
+            speakers = AudioFormat.Fits(speakers, channels) ? speakers : Speakers.None;
         }
 
-        if (channels is not (1 or 2))
+        if (channels is < 1 or > AudioFormat.MostChannels)
         {
-            throw new InvalidDataException($"The WAV file has {channels} channels, not one or two.");
+            throw new InvalidDataException($"The WAV file has {channels} channels, not from one to {AudioFormat.MostChannels}.");
         }
 
         if (rate is 0 or > AudioFormat.HighestRate)
@@ -163,7 +167,7 @@ internal sealed class WavDecoder : ISoundDecoder
             throw new InvalidDataException($"The WAV file has samples of an unknown kind ({tag}, {bits} bits in {bytes} bytes).");
         }
 
-        return (new AudioFormat((int)rate, channels), bytes, isFloat);
+        return (new AudioFormat((int)rate, channels, speakers), bytes, isFloat);
     }
 
     private static float SampleOf(ReadOnlySpan<byte> bytes, bool isFloat) => (bytes.Length, isFloat) switch

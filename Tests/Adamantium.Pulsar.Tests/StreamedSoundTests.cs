@@ -24,15 +24,18 @@ public class StreamedSoundTests
     [TestCase(2.9f, true, 0)]
     [TestCase(1f, false, 50000)]
     [TestCase(1f, true, 100000)]
-    public void Streamed_ItIsHeardAsInMemory(float pitch, bool loops, int from)
+    [TestCase(1f, true, 0, "octo24")]
+    [TestCase(1.37f, true, 1000, "octo24")]
+    [TestCase(0.5f, false, 0, "surround16")]
+    public void Streamed_ItIsHeardAsInMemory(float pitch, bool loops, int from, string name = "long16")
     {
         var settings = new VoiceSettings
         {
             Pitch = pitch, Loops = loops, From = TimeSpan.FromSeconds(from / 48000.0), Pan = -0.3f,
         };
         using var memory = new AudioEngine();
-        var expected = memory.Play(memory.AddSound(SoundFile.Read(FlacFiles.Read("long16"))), settings);
-        var voice = _engine.Play(_engine.AddSound(Streamed("long16")), settings);
+        var expected = memory.Play(memory.AddSound(SoundFile.Read(FlacFiles.Read(name))), settings);
+        var voice = _engine.Play(_engine.AddSound(Streamed(name)), settings);
         WaitUntilHeard();
         var first = true;
 
@@ -276,9 +279,11 @@ public class StreamedSoundTests
     public void RenderingStreams_AllocatesNothing()
     {
         var sound = _engine.AddSound(Streamed("long16"));
+        var surround = _engine.AddSound(Streamed("octo24"));
         for (var voice = 0; voice < 4; voice++)
         {
             _engine.Play(sound, new VoiceSettings { Loops = true, Pitch = 1 + voice * 0.1f });
+            _engine.Play(surround, new VoiceSettings { Loops = true, Pitch = 1 + voice * 0.1f });
         }
 
         WaitUntilHeard();

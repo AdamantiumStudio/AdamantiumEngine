@@ -12,7 +12,7 @@ internal static class MixingCost
         Console.WriteLine("voices  heard  channels  pitch   part of a core");
         foreach (var voices in new[] { 0, 64, 256, 1024 })
         {
-            foreach (var channels in new[] { 1, 2 })
+            foreach (var channels in new[] { 1, 2, 6 })
             {
                 foreach (var pitch in new[] { 1f, 1.1f })
                 {
@@ -32,7 +32,7 @@ internal static class MixingCost
             samples[index] = random.NextSingle() * 2 - 1;
         }
 
-        var sound = engine.AddSound(new SoundData(AudioFormat.Default with { Channels = channels }, samples));
+        var sound = engine.AddSound(new SoundData(new AudioFormat(AudioFormat.Default.SampleRate, channels), samples));
         for (var voice = 0; voice < voices; voice++)
         {
             engine.Play(sound, new VoiceSettings { Loops = true, Pitch = pitch, Volume = 0.1f + voice * 0.0001f });

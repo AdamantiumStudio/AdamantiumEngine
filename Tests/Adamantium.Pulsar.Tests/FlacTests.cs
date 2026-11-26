@@ -17,12 +17,27 @@ public class FlacTests
     [TestCase("stereo32", 2, 32, 4000, 4, 48000)]
     [TestCase("noise16", 2, 16, 2000, 16000, 48000)]
     [TestCase("long16", 1, 16, 120000, 2, 48000)]
+    [TestCase("surround16", 6, 16, 3000, 4, 48000)]
+    [TestCase("octo24", 8, 24, 2000, 4, 48000)]
     public void WhatWasEncoded_IsDecoded(string name, int channels, int bits, int frames, int noise, int rate)
     {
         var sound = SoundFile.Read(FlacFiles.Read(name));
 
         Assert.That(sound.Format, Is.EqualTo(new AudioFormat(rate, channels)));
         Assert.That(sound.AsSpan().SequenceEqual(new FlacSignal(channels, bits, frames, noise).ToFloats()), Is.True);
+    }
+
+    [Test]
+    public void TheSpeakersOfItsComments_AreItsSpeakers()
+    {
+        var sound = SoundFile.Read(FlacFiles.Read("quadsides16"));
+
+        Assert.That(sound.Format.Speakers,
+            Is.EqualTo(Speakers.FrontLeft | Speakers.FrontRight | Speakers.SideLeft | Speakers.SideRight));
+        Assert.That(sound.AsSpan().SequenceEqual(new FlacSignal(4, 16, 1000).ToFloats()), Is.True);
+        Assert.That(SoundFile.Read(FlacFiles.Read("surround16")).Format.Speakers,
+            Is.EqualTo(Speakers.FrontLeft | Speakers.FrontRight | Speakers.FrontCenter | Speakers.LowFrequency |
+                Speakers.BackLeft | Speakers.BackRight));
     }
 
     [TestCase("long16")]

@@ -9,8 +9,8 @@ internal sealed class SoundStreamer : IDisposable
     private readonly AutoResetEvent _wanted = new(false);
     private readonly List<SoundStream> _added = [];
     private readonly List<SoundStream> _streams = [];
-    // Of one channel and of two, at their number's place.
-    private readonly Stack<float[]>[] _spare = [null, new(), new()];
+    // By their channels, at their number's place.
+    private readonly Stack<float[]>[] _spare = [.. Enumerable.Range(0, AudioFormat.MostChannels + 1).Select(_ => new Stack<float[]>())];
     private Thread _thread;
     private bool _stopping;
     private string _problem;
