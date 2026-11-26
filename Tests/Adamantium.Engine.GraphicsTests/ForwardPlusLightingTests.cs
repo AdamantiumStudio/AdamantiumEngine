@@ -31,6 +31,7 @@ public class ForwardPlusLightingTests
 
     private Universe _universe;
     private OffscreenOutput _output;
+    private ForwardPlusRenderingProcessor _processor;
 
     [SetUp]
     public void MakeUniverse()
@@ -48,7 +49,8 @@ public class ForwardPlusLightingTests
         _universe.AddOutput(_output);
         RunFrame();
         var rendering = _universe.CreateRenderService<RenderingService>(_output);
-        rendering.AttachProcessor(new ForwardPlusRenderingProcessor());
+        _processor = new ForwardPlusRenderingProcessor();
+        rendering.AttachProcessor(_processor);
     }
 
     [TearDown]
@@ -122,6 +124,45 @@ public class ForwardPlusLightingTests
         {
             Assert.That(simple, Is.GreaterThan(150), "the top lit simply, in the sun");
             Assert.That(physical, Is.LessThan(simple - 40), "the top lit physically, a metal without its reflection");
+        });
+    }
+
+    // A cube giving off strong light, seen head on in the dark: in a high dynamic range frame its light spreads past its
+    // edges and its face goes to white; drawn straight, nothing shows beside it.
+    [TestCase(false)]
+    [TestCase(true)]
+    public void ABrightCube_GlowsPastItsEdges_OnlyInAHighDynamicRangeFrame(bool highDynamicRange)
+    {
+        _processor.HighDynamicRange = highDynamicRange;
+        var eye = _output.Camera;
+        eye.Owner.Transform.Position = new WorldPosition(0, 0, -4);
+        eye.SetFreeLookAt(WorldPosition.Zero);
+        var cube = new ShapeTemplate(new CubeShape()).Build(new Entity(null, "Cube"));
+        cube.AddComponent(new Material { DiffuseColor = new Vector4F(0, 0, 0, 1), Emission = new Vector4F(8, 4, 2, 0) });
+        _universe.EntityWorld.EntityManager.AddEntity(cube, _universe.EntityWorld.MainScene);
+        for (var frame = 0; frame < Frames; frame++)
+        {
+            RunFrame();
+        }
+
+        var pixels = Pixels(_output.ReadFrame(), $"forward-plus-glow-{highDynamicRange}.png");
+        var camera = _output.Camera;
+        var face = PixelStart(camera, new WorldPosition(0, 0, -0.5));
+        var beside = PixelStart(camera, new WorldPosition(0.75, 0, -0.5));
+        var besideBrightness = (pixels[beside] + pixels[beside + 1] + pixels[beside + 2]) / 3;
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(pixels[face], Is.GreaterThan(240), "the face's red, its brightest");
+            if (highDynamicRange)
+            {
+                Assert.That(pixels[face + 2], Is.GreaterThan(150), "the face's blue: strong light goes to white");
+                Assert.That(besideBrightness, Is.GreaterThan(8), "the glow beside the cube");
+            }
+            else
+            {
+                Assert.That(besideBrightness, Is.LessThan(3), "nothing beside the cube");
+            }
         });
     }
 

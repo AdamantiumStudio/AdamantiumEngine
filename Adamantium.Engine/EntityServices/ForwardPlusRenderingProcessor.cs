@@ -53,6 +53,17 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private IRenderTarget weightedCoverage;
     private readonly IRenderTarget[] weightedTargets = new IRenderTarget[2];
     private readonly IRenderTarget[] frameTargets = new IRenderTarget[1];
+    private IRenderTarget sceneLight;
+    private IRenderTarget[] glowCopies = [];
+    private readonly IRenderTarget[] sceneLightTargets = new IRenderTarget[1];
+    private readonly IRenderTarget[] glowTargets = new IRenderTarget[1];
+    private bool linearFrame;
+    private ColorComponentFlagBits frameChannels;
+    private Color frameClearColor;
+
+    // The glow's copies stop when the smaller side reaches this, or at so many.
+    private const uint SmallestGlow = 8;
+    private const int MostGlowCopies = 7;
 
     // The weighted sums add up; the coverage is laid over what the layers before covered.
     private static readonly ColorBlendEquationEXT[] WeightedBlends =
@@ -80,6 +91,17 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     /// <summary>The light every surface gets whatever the lights in the scene.</summary>
     public Vector3F Ambient { get; set; } = new(0.08f, 0.08f, 0.1f);
+
+    /// <summary>Whether the scene is lit in linear light without a ceiling, then brought to the screen by the AgX tone
+    /// curve - bright colors go to white as on film - its brightest light spreading into a glow. Off, every surface is
+    /// drawn straight into the frame, as the screen shows it.</summary>
+    public bool HighDynamicRange { get; set; }
+
+    /// <summary>How many stops brighter the light is taken before the tone curve; 0 takes it as it is.</summary>
+    public float Exposure { get; set; }
+
+    /// <summary>The share of the light that spreads into the glow, 0 to 1.</summary>
+    public float Glow { get; set; } = 0.04f;
 
     /// <summary>The color of a surface that has neither a texture nor a diffuse color.</summary>
     public Vector3F UntexturedColor { get; set; } = new(0.75f, 0.75f, 0.75f);
@@ -182,6 +204,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         }
 
         var frame = (int)(GraphicsDevice.CurrentFrame % (uint)clusterCounts.Length);
+        // Held for the frame: the shaders were told it here, the draw must not go otherwise.
+        linearFrame = HighDynamicRange;
         var directional = CollectLights(camera);
         var lights = GraphicsDevice.UploadFrameData<ClusterLight>(frameLights.AsSpan(0, LightCount));
         SetFrameParameters(effect, camera, frame, directional, lights);
@@ -233,12 +257,23 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             var paletteAddress = GraphicsDevice.UploadFrameData<Matrix4x4F>(palettes.AsSpan(0, paletteMatrices));
             DrawCalls = groupsDrawn.Count + wires.Count + wiresOverBlended.Count + colliders.Count;
             UploadInstances(paletteAddress);
-            DrawGroups(groupsDrawn);
-            // The lines go with the opaque surfaces: what is see-through over them dims them as it does those. A
-            // see-through surface's own wire goes over it.
-            DrawLines(paletteAddress);
-            DrawCalls += DrawSeeThrough();
-            DrawWires(wiresOverBlended, paletteAddress);
+            var frame = linearFrame ? OpenSceneLight() : null;
+            try
+            {
+                DrawGroups(groupsDrawn);
+                // The lines go with the opaque surfaces: what is see-through over them dims them as it does those. A
+                // see-through surface's own wire goes over it.
+                DrawLines(paletteAddress);
+                DrawCalls += DrawSeeThrough();
+                DrawWires(wiresOverBlended, paletteAddress);
+            }
+            finally
+            {
+                if (frame != null)
+                {
+                    CloseSceneLight(frame);
+                }
+            }
         }
         catch (Exception exception)
         {
@@ -299,6 +334,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         parameters["ClusterW"].SetValue(new Vector2F(projection.M34, projection.M44));
         parameters["ViewportRect"].SetValue(new Vector4F(viewport.X, viewport.Y, viewport.Width, viewport.Height));
         parameters["Ambient"].SetValue(Ambient);
+        parameters["LinearFrame"].SetValue(linearFrame ? 1u : 0u);
     }
 
     private void OnDraw(Entity entity)
@@ -481,14 +517,14 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             basicEffect.View.SetValue(ActiveCamera.ViewMatrix);
             basicEffect.Joints.SetValue(paletteAddress + wire.PaletteFirst * (ulong)Unsafe.SizeOf<Matrix4x4F>());
             basicEffect.JointCount.SetValue(wire.PaletteCount);
-            GizmoInstance[] copy = [new GizmoInstance(wire.World, new Vector4F(WireColor, 1f))];
+            GizmoInstance[] copy = [new GizmoInstance(wire.World, new Vector4F(InFrame(WireColor), 1f))];
             basicEffect.Instances.SetValue(GraphicsDevice.UploadFrameData<GizmoInstance>(copy));
             basicEffect.BasicSkinnedFlatInstancedPass.Apply();
         }
         else
         {
             basicEffect.Wvp.SetValue(wire.World * ActiveCamera.ViewProjectionMatrix);
-            basicEffect.MeshColor.SetValue(WireColor);
+            basicEffect.MeshColor.SetValue(InFrame(WireColor));
             basicEffect.BasicColoredPass.Apply();
         }
 
@@ -764,8 +800,16 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
     private void Composite()
     {
+        var descriptors = ((GraphicsDevice)GraphicsDevice).DescriptorManager;
+        effect.Parameters["AccumulatedTexture"].SetValue(descriptors.TextureIndex(weightedSums.ResolveTexture));
+        effect.Parameters["CoverageTexture"].SetValue(descriptors.TextureIndex(weightedCoverage.ResolveTexture));
+        DrawOverTarget(effect.ForwardPlusWeightedCompositePass, ColorBlendEquations.AlphaBlend);
+    }
+
+    // One triangle over the whole target by the pass, blended so, neither tested nor writing depth.
+    private void DrawOverTarget(IEffectPass pass, ColorBlendEquationEXT blendEquation)
+    {
         var device = GraphicsDevice;
-        var descriptors = ((GraphicsDevice)device).DescriptorManager;
         var blend = device.ColorBlendEquation;
         var vertexTypes = device.VertexTypes;
         var topology = device.PrimitiveTopology;
@@ -773,9 +817,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         var cullMode = device.CullMode;
         var depthTest = device.DepthTestEnabled;
         var depthWrite = device.DepthWriteEnable;
-        effect.Parameters["AccumulatedTexture"].SetValue(descriptors.TextureIndex(weightedSums.ResolveTexture));
-        effect.Parameters["CoverageTexture"].SetValue(descriptors.TextureIndex(weightedCoverage.ResolveTexture));
-        device.ColorBlendEquation = ColorBlendEquations.AlphaBlend;
+        device.ColorBlendEquation = blendEquation;
         device.VertexType = null;
         device.PrimitiveTopology = PrimitiveTopology.TriangleList;
         device.PolygonMode = PolygonMode.Fill;
@@ -784,7 +826,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         device.DepthWriteEnable = false;
         try
         {
-            effect.ForwardPlusWeightedCompositePass.Apply();
+            pass.Apply();
             device.Draw(3, 1);
         }
         finally
@@ -797,6 +839,200 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             device.DepthTestEnabled = depthTest;
             device.DepthWriteEnable = depthWrite;
         }
+    }
+
+    // Leaves the frame for the linear one beside it, the frame's size and samples and tested against its depth, cleared to
+    // nothing; gives the frame to come back to.
+    private IRenderTarget OpenSceneLight()
+    {
+        var device = GraphicsDevice;
+        var frame = device.CurrentRenderTarget;
+        EnsureSceneLight(frame, device.MSAALevel);
+        frameChannels = device.ColorComponentFlags;
+        frameClearColor = device.ClearColor;
+        device.SuspendRendering();
+        try
+        {
+            KeepDepthForNextPass();
+            PrepareToDraw(sceneLight);
+            sceneLightTargets[0] = sceneLight;
+            device.SetRenderTargets(sceneLightTargets);
+            device.ClearColor = Colors.Transparent;
+            // Its alpha is how much the scene covers, which the tone curve lays it over the frame by.
+            device.ColorComponentFlags = AllChannels;
+            device.BeginRendering(device.CurrentCommandBuffer, keepDepth: true);
+        }
+        catch
+        {
+            ReturnToFrame(frame);
+            throw;
+        }
+
+        return frame;
+    }
+
+    // Closes the linear frame, makes its glow, and lays it over the frame through the tone curve.
+    private void CloseSceneLight(IRenderTarget frame)
+    {
+        var device = GraphicsDevice;
+        device.SuspendRendering();
+        PrepareToRead(sceneLight);
+        KeepDepthForNextPass();
+        var glow = MeshInstance.NoMap;
+        try
+        {
+            glow = Glow > 0 && glowCopies.Length > 0 ? DrawGlow() : MeshInstance.NoMap;
+        }
+        finally
+        {
+            ReturnToFrame(frame);
+        }
+
+        var descriptors = ((GraphicsDevice)device).DescriptorManager;
+        var parameters = effect.Parameters;
+        parameters["SceneLightTexture"].SetValue(descriptors.TextureIndex(sceneLight.ResolveTexture));
+        parameters["GlowTexture"].SetValue(glow);
+        parameters["ToneMapping"].SetValue(new Vector4F(MathF.Pow(2f, Exposure), Math.Clamp(Glow, 0f, 1f),
+            Math.Max(1, glowCopies.Length), 0f));
+        parameters["FrameStep"].SetValue(new Vector2F(1f / sceneLight.Width, 1f / sceneLight.Height));
+        DrawOverTarget(effect.ForwardPlusToneMapPass, ColorBlendEquations.Premultiplied);
+    }
+
+    private void ReturnToFrame(IRenderTarget frame)
+    {
+        var device = GraphicsDevice;
+        device.ColorComponentFlags = frameChannels;
+        device.ClearColor = frameClearColor;
+        frameTargets[0] = frame;
+        device.SetRenderTargets(frameTargets);
+        device.ResumeRendering();
+    }
+
+    // The glow: the linear frame copied smaller and smaller, then each copy blurred and added to the one twice its size.
+    // Gives the biggest copy's texture.
+    private uint DrawGlow()
+    {
+        var device = GraphicsDevice;
+        var descriptors = ((GraphicsDevice)device).DescriptorManager;
+        var depth = device.CurrentDepthStencilBuffer;
+        var samples = device.MSAALevel;
+        var clearColor = device.ClearColor;
+        // The copies have neither depth nor samples.
+        device.SetDepthBuffer(null);
+        device.MSAALevel = MSAALevel.None;
+        device.ClearColor = Colors.Transparent;
+        try
+        {
+            ITexture source = sceneLight.ResolveTexture;
+            foreach (var copy in glowCopies)
+            {
+                DrawGlowStep(effect.ForwardPlusGlowDownPass, source, copy, ColorBlendEquations.Opaque, adding: false);
+                source = copy;
+            }
+
+            for (var i = glowCopies.Length - 2; i >= 0; i--)
+            {
+                DrawGlowStep(effect.ForwardPlusGlowUpPass, glowCopies[i + 1], glowCopies[i], ColorBlendEquations.Sum,
+                    adding: true);
+            }
+
+            return descriptors.TextureIndex(glowCopies[0].ResolveTexture);
+        }
+        finally
+        {
+            device.SetDepthBuffer(depth);
+            device.MSAALevel = samples;
+            device.ClearColor = clearColor;
+            device.SetViewports(Window.Viewport);
+            device.SetScissors(Window.Scissor);
+        }
+    }
+
+    // One step of the glow: the source read into the target, which it replaces or is added to.
+    private void DrawGlowStep(IEffectPass pass, ITexture source, IRenderTarget target, ColorBlendEquationEXT blend,
+        bool adding)
+    {
+        var device = GraphicsDevice;
+        var descriptors = ((GraphicsDevice)device).DescriptorManager;
+        if (adding)
+        {
+            PrepareToAddTo(target);
+        }
+        else
+        {
+            PrepareToDraw(target);
+        }
+
+        glowTargets[0] = target;
+        device.SetRenderTargets(glowTargets);
+        device.SetViewports(new Viewport { X = 0, Y = 0, Width = target.Width, Height = target.Height, MinDepth = 0, MaxDepth = 1 });
+        device.SetScissors(new Rect2D
+        {
+            Offset = new Offset2D(), Extent = new Extent2D { Width = target.Width, Height = target.Height }
+        });
+        effect.Parameters["GlowSource"].SetValue(descriptors.TextureIndex(source));
+        effect.Parameters["GlowStep"].SetValue(new Vector4F(1f / target.Width, 1f / target.Height, 1f / source.Width,
+            1f / source.Height));
+        device.BeginRendering(device.CurrentCommandBuffer, continueRendering: adding);
+        try
+        {
+            DrawOverTarget(pass, blend);
+        }
+        finally
+        {
+            device.SuspendRendering();
+            PrepareToRead(target);
+        }
+    }
+
+    // A copy read by the step before, written again over what it holds.
+    private void PrepareToAddTo(IRenderTarget layer)
+    {
+        GraphicsDevice.InsertImageMemoryBarrier(GraphicsDevice.CurrentCommandBuffer, layer, AccessFlagBits2.ShaderReadBit,
+            AccessFlagBits2.ColorAttachmentReadBit | AccessFlagBits2.ColorAttachmentWriteBit,
+            ImageLayout.ShaderReadOnlyOptimal, ImageLayout.ColorAttachmentOptimal, PipelineStageFlagBits2.FragmentShaderBit,
+            PipelineStageFlagBits2.ColorAttachmentOutputBit);
+    }
+
+    // The linear frame the size and samples of the frame, and the glow's copies, each half the one before, from half the
+    // frame's size: made anew when the frame changes, the old ones let go once the frames in flight are done with them.
+    private void EnsureSceneLight(IRenderTarget frame, MSAALevel samples)
+    {
+        if (sceneLight is { IsDisposed: false } && sceneLight.Width == frame.Width
+            && sceneLight.Height == frame.Height && sceneLight.MSAALevel == samples)
+        {
+            return;
+        }
+
+        ReleaseSceneLight();
+        sceneLight = GraphicsDevice.CreateRenderTarget(frame.Width, frame.Height, samples,
+            Format.R16G16B16A16_SFLOAT, ImageUsageFlagBits.SampledBit, ImageLayout.ColorAttachmentOptimal, "Scene light");
+        var copies = new List<IRenderTarget>();
+        var width = frame.Width / 2;
+        var height = frame.Height / 2;
+        while (copies.Count < MostGlowCopies && Math.Min(width, height) >= SmallestGlow)
+        {
+            copies.Add(GraphicsDevice.CreateRenderTarget(width, height, MSAALevel.None, Format.R16G16B16A16_SFLOAT,
+                ImageUsageFlagBits.SampledBit, ImageLayout.ColorAttachmentOptimal, $"Glow {copies.Count + 1}"));
+            width /= 2;
+            height /= 2;
+        }
+
+        glowCopies = copies.ToArray();
+    }
+
+    private void ReleaseSceneLight()
+    {
+        if (sceneLight is IDisposable light && !sceneLight.IsDisposed)
+            sceneLight.GraphicsDevice.AddToDeferDisposeQueue(light);
+        foreach (var copy in glowCopies)
+        {
+            if (copy is IDisposable disposable && !copy.IsDisposed)
+                copy.GraphicsDevice.AddToDeferDisposeQueue(disposable);
+        }
+
+        sceneLight = null;
+        glowCopies = [];
     }
 
     // The layers the size and samples of the frame they go over: made anew when it changes, the old ones let go once the
@@ -901,12 +1137,23 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     {
         var transform = entity.Transform.GetMetadata(ActiveCamera);
         basicEffect.Wvp.SetValue(transform.WorldMatrixF * ActiveCamera.ViewProjectionMatrix);
-        basicEffect.MeshColor.SetValue(ColliderColor);
+        basicEffect.MeshColor.SetValue(InFrame(ColliderColor));
         basicEffect.BasicColoredPass.Apply();
         if (collider.GetVisualRepresentation() is { } outline)
         {
             geometryCache.GetOrCreate(outline, typeof(MeshVertex)).Draw(GraphicsDevice, RenderState.Default);
         }
+    }
+
+    // A color given as the screen shows it, as the frame takes it: decoded from sRGB for a linear frame.
+    private Vector3F InFrame(Vector3F color)
+    {
+        return linearFrame ? new Vector3F(Linear(color.X), Linear(color.Y), Linear(color.Z)) : color;
+    }
+
+    private static float Linear(float srgb)
+    {
+        return srgb <= 0.04045f ? srgb / 12.92f : MathF.Pow((srgb + 0.055f) / 1.055f, 2.4f);
     }
 
     // The diffuse color's alpha counts unless the material is opaque.
@@ -926,6 +1173,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private void ReleaseDeviceResources()
     {
         ReleaseWeightedLayers();
+        ReleaseSceneLight();
         geometryCache?.Dispose();
         effect?.Dispose();
         wireEffect?.Dispose();

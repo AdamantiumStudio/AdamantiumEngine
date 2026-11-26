@@ -150,11 +150,17 @@ float4 MapOf(uint map, float2 uv, float4 none)
     return map == NoMap ? none : meshTextures[NonUniformResourceIndex(map)].Sample(sampleType, uv);
 }
 
-// The light the surface gives off at the pixel, its map times its color and strength.
+float3 Linear(float3 srgb)
+{
+    return srgb <= 0.04045f ? srgb / 12.92f : pow((srgb + 0.055f) / 1.055f, 2.4f);
+}
+
+// The light the surface gives off at the pixel, in linear light: its map, decoded from sRGB, times its color and
+// strength.
 float3 EmissionOf(LIT_PIXEL input)
 {
     MeshInstance copy = Instances[input.instance];
-    return copy.emission.rgb * MapOf(copy.maps.w, input.uv, float4(1.0f, 1.0f, 1.0f, 1.0f)).rgb;
+    return copy.emission.rgb * Linear(MapOf(copy.maps.w, input.uv, float4(1.0f, 1.0f, 1.0f, 1.0f)).rgb);
 }
 
 // The surface's own color, from its texture if it has one, times its color.
@@ -228,19 +234,30 @@ float3 Shade(float3 surface, float3 position, float3 normal, float2 pixel)
 }
 
 // --- The physical model: metalness and roughness, Cook-Torrance with the GGX distribution, Smith-Schlick geometry and
-// Schlick's Fresnel. It works in linear light, the colors it is given decoded from sRGB, and gives sRGB back.
+// Schlick's Fresnel. It works in linear light, the colors it is given decoded from sRGB.
 
 static const float Pi = 3.14159265f;
-
-float3 Linear(float3 srgb)
-{
-    return srgb <= 0.04045f ? srgb / 12.92f : pow((srgb + 0.055f) / 1.055f, 2.4f);
-}
 
 float3 Srgb(float3 linear)
 {
     float3 c = saturate(linear);
     return c <= 0.0031308f ? c * 12.92f : 1.055f * pow(c, 1.0f / 2.4f) - 0.055f;
+}
+
+// 1 when the frame holds linear light without a ceiling, for the tone curve to bring to the screen; 0 when it holds
+// what the screen shows.
+uint LinearFrame;
+
+// A simple surface's light as the frame takes it: its sRGB as it is, or decoded for a linear frame, its glow added.
+float3 SimpleInFrame(float3 lit, float3 glow)
+{
+    return LinearFrame != 0 ? Linear(saturate(lit)) + glow : lit + glow;
+}
+
+// A physical surface's linear light as the frame takes it.
+float3 PhysicalInFrame(float3 lit)
+{
+    return LinearFrame != 0 ? lit : Srgb(lit);
 }
 
 // What one light gives a physical surface, its direction and strength at the point already found.

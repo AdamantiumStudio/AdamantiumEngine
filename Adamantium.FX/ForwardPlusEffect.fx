@@ -51,42 +51,45 @@ void AssignLightsCS(uint3 tid : SV_DispatchThreadID)
 [shader("fragment")]
 float4 LitColored_PS(LIT_PIXEL input) : SV_TARGET
 {
-    return float4(Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy) + EmissionOf(input), 1.0f);
+    float3 lit = Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    return float4(SimpleInFrame(lit, EmissionOf(input)), 1.0f);
 }
 
 [shader("fragment")]
 float4 LitTextured_PS(LIT_PIXEL input) : SV_TARGET
 {
     float4 surface = SurfaceOf(input);
-    return float4(Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy) + EmissionOf(input), 1.0f);
+    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    return float4(SimpleInFrame(lit, EmissionOf(input)), 1.0f);
 }
 
 [shader("fragment")]
 float4 LitMaskedTextured_PS(LIT_PIXEL input) : SV_TARGET
 {
     float4 surface = MaskedSurfaceOf(input);
-    return float4(Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy) + EmissionOf(input), 1.0f);
+    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    return float4(SimpleInFrame(lit, EmissionOf(input)), 1.0f);
 }
 
 [shader("fragment")]
 WEIGHTED_PIXEL LitWeightedColored_PS(LIT_PIXEL input)
 {
-    float3 lit = Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy) + EmissionOf(input);
-    return Weighted(lit, input.albedo.a, input.viewPosition.z);
+    float3 lit = Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    return Weighted(SimpleInFrame(lit, EmissionOf(input)), input.albedo.a, input.viewPosition.z);
 }
 
 [shader("fragment")]
 WEIGHTED_PIXEL LitWeightedTextured_PS(LIT_PIXEL input)
 {
     float4 surface = SurfaceOf(input);
-    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy) + EmissionOf(input);
-    return Weighted(lit, surface.a * input.albedo.a, input.viewPosition.z);
+    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    return Weighted(SimpleInFrame(lit, EmissionOf(input)), surface.a * input.albedo.a, input.viewPosition.z);
 }
 
 [shader("fragment")]
 float4 LitPhysical_PS(LIT_PIXEL input) : SV_TARGET
 {
-    return float4(Srgb(LitPhysical(input, BaseColorOf(input)).rgb), 1.0f);
+    return float4(PhysicalInFrame(LitPhysical(input, BaseColorOf(input)).rgb), 1.0f);
 }
 
 [shader("fragment")]
@@ -94,14 +97,14 @@ float4 LitMaskedPhysical_PS(LIT_PIXEL input) : SV_TARGET
 {
     float4 base = BaseColorOf(input);
     clip(base.a - input.alphaCutoff);
-    return float4(Srgb(LitPhysical(input, base).rgb), 1.0f);
+    return float4(PhysicalInFrame(LitPhysical(input, base).rgb), 1.0f);
 }
 
 [shader("fragment")]
 WEIGHTED_PIXEL LitWeightedPhysical_PS(LIT_PIXEL input)
 {
     float4 lit = LitPhysical(input, BaseColorOf(input));
-    return Weighted(Srgb(lit.rgb), lit.a, input.viewPosition.z);
+    return Weighted(PhysicalInFrame(lit.rgb), lit.a, input.viewPosition.z);
 }
 
 // The see-through layers' textures in meshTextures, resolved: the weighted sums and the coverage.
@@ -129,6 +132,109 @@ float4 WeightedComposite_PS(float4 position : SV_POSITION) : SV_TARGET
 
     float4 accumulated = meshTextures[NonUniformResourceIndex(AccumulatedTexture)].Load(pixel);
     return float4(accumulated.rgb / max(accumulated.a, 1e-5f), saturate(coverage));
+}
+
+// --- The linear frame brought to the screen: its glow, a chain of ever smaller copies blurred and added back up (Jimenez,
+// "Next Generation Post Processing in Call of Duty: Advanced Warfare", 2014), and the AgX tone curve.
+
+// The texture a glow step reads, in meshTextures.
+uint GlowSource;
+// xy: one over the size of the target drawn, zw: one over the size of the source read.
+float4 GlowStep;
+
+float3 GlowAt(float2 uv)
+{
+    float2 inside = clamp(uv, GlowStep.zw * 0.5f, 1.0f - GlowStep.zw * 0.5f);
+    // A single bright pixel would flicker as it moves across the smaller copies: its light is held to a ceiling.
+    return min(meshTextures[NonUniformResourceIndex(GlowSource)].Sample(sampleType, inside).rgb, 64.0f);
+}
+
+// A copy half the size, from 13 taps of the one before it, weighted so no pattern of the bigger one shows through.
+[shader("fragment")]
+float4 GlowDown_PS(float4 position : SV_POSITION) : SV_TARGET
+{
+    float2 uv = position.xy * GlowStep.xy;
+    float2 t = GlowStep.zw;
+    float3 a = GlowAt(uv + t * float2(-2.0f, -2.0f));
+    float3 b = GlowAt(uv + t * float2(0.0f, -2.0f));
+    float3 c = GlowAt(uv + t * float2(2.0f, -2.0f));
+    float3 d = GlowAt(uv + t * float2(-2.0f, 0.0f));
+    float3 e = GlowAt(uv);
+    float3 f = GlowAt(uv + t * float2(2.0f, 0.0f));
+    float3 g = GlowAt(uv + t * float2(-2.0f, 2.0f));
+    float3 h = GlowAt(uv + t * float2(0.0f, 2.0f));
+    float3 i = GlowAt(uv + t * float2(2.0f, 2.0f));
+    float3 j = GlowAt(uv + t * float2(-1.0f, -1.0f));
+    float3 k = GlowAt(uv + t * float2(1.0f, -1.0f));
+    float3 l = GlowAt(uv + t * float2(-1.0f, 1.0f));
+    float3 m = GlowAt(uv + t * float2(1.0f, 1.0f));
+    float3 down = e * 0.125f + (a + c + g + i) * 0.03125f + (b + d + f + h) * 0.0625f + (j + k + l + m) * 0.125f;
+    return float4(down, 1.0f);
+}
+
+// The smaller copy, blurred by a 3 x 3 tent, added to the one twice its size.
+[shader("fragment")]
+float4 GlowUp_PS(float4 position : SV_POSITION) : SV_TARGET
+{
+    float2 uv = position.xy * GlowStep.xy;
+    float2 t = GlowStep.zw;
+    float3 corners = GlowAt(uv + t * float2(-1.0f, -1.0f)) + GlowAt(uv + t * float2(1.0f, -1.0f))
+                     + GlowAt(uv + t * float2(-1.0f, 1.0f)) + GlowAt(uv + t * float2(1.0f, 1.0f));
+    float3 sides = GlowAt(uv + t * float2(0.0f, -1.0f)) + GlowAt(uv + t * float2(-1.0f, 0.0f))
+                   + GlowAt(uv + t * float2(1.0f, 0.0f)) + GlowAt(uv + t * float2(0.0f, 1.0f));
+    return float4((GlowAt(uv) * 4.0f + sides * 2.0f + corners) / 16.0f, 0.0f);
+}
+
+// The linear frame in meshTextures, resolved, and its glow - NoMap for none.
+uint SceneLightTexture;
+uint GlowTexture;
+// x: what the light is multiplied by before the curve, y: the share of the glow, z: what the glow is divided by - the
+// copies it sums - w unused.
+float4 ToneMapping;
+// One over the size of the frame.
+float2 FrameStep;
+
+// AgX (Troy Sobotka), as fitted for real time by Benjamin Wrensch: the light into a log space a little narrower than the
+// sRGB gamut, a sigmoid over it, and back - bright colors go to white as film does, not to a flat hue.
+float3 AgxContrast(float3 x)
+{
+    float3 x2 = x * x;
+    float3 x4 = x2 * x2;
+    return 15.5f * x4 * x2 - 40.14f * x4 * x + 31.96f * x4 - 6.868f * x2 * x + 0.4298f * x2 + 0.1191f * x - 0.00232f;
+}
+
+float3 Agx(float3 light)
+{
+    const float3x3 inset = float3x3(
+        0.842479062253094f, 0.0423282422610123f, 0.0423756549057051f,
+        0.0784335999999992f, 0.878468636469772f, 0.0784336f,
+        0.0792237451477643f, 0.0791661274605434f, 0.879142973793104f);
+    const float3x3 outset = float3x3(
+        1.19687900512017f, -0.0528968517574562f, -0.0529716355144438f,
+        -0.0980208811401368f, 1.15190312990417f, -0.0980434501171241f,
+        -0.0990297440797205f, -0.0989611768448433f, 1.15107367264116f);
+    const float lowest = -12.47393f;
+    const float highest = 4.026069f;
+    float3 c = mul(max(light, 0.0f), inset);
+    c = clamp(log2(max(c, 1e-10f)), lowest, highest);
+    c = AgxContrast((c - lowest) / (highest - lowest));
+    return pow(max(mul(c, outset), 0.0f), 2.2f);
+}
+
+// The frame as the screen shows it, premultiplied by how much the scene covers: where it drew nothing its glow still
+// lies over what is behind.
+[shader("fragment")]
+float4 ToneMap_PS(float4 position : SV_POSITION) : SV_TARGET
+{
+    float4 scene = meshTextures[NonUniformResourceIndex(SceneLightTexture)].Load(int3(position.xy, 0));
+    float3 light = scene.rgb;
+    if (GlowTexture != NoMap)
+    {
+        float3 glow = meshTextures[NonUniformResourceIndex(GlowTexture)].Sample(sampleType, position.xy * FrameStep).rgb;
+        light = lerp(light, glow / ToneMapping.z, ToneMapping.y);
+    }
+
+    return float4(Srgb(Agx(light * ToneMapping.x)), saturate(scene.a));
 }
 
 technique ForwardPlus
@@ -238,5 +344,23 @@ technique ForwardPlus
     {
         VertexShader = Fullscreen_VS;
         PixelShader = WeightedComposite_PS;
+    }
+
+    pass GlowDown
+    {
+        VertexShader = Fullscreen_VS;
+        PixelShader = GlowDown_PS;
+    }
+
+    pass GlowUp
+    {
+        VertexShader = Fullscreen_VS;
+        PixelShader = GlowUp_PS;
+    }
+
+    pass ToneMap
+    {
+        VertexShader = Fullscreen_VS;
+        PixelShader = ToneMap_PS;
     }
 }

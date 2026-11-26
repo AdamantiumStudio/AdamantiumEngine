@@ -19,36 +19,37 @@ float3 OverWire(float3 lit, float3 barycentrics)
     float3 pixel = fwidth(barycentrics);
     float halfWidth = wireWidth * 0.5f;
     float3 inside = smoothstep(pixel * (halfWidth - 0.5f), pixel * (halfWidth + 0.5f), barycentrics);
-    return lerp(wireColor, lit, min(min(inside.x, inside.y), inside.z));
+    float3 wire = LinearFrame != 0 ? Linear(wireColor) : wireColor;
+    return lerp(wire, lit, min(min(inside.x, inside.y), inside.z));
 }
 
 [shader("fragment")]
 float4 LitColoredWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics) : SV_TARGET
 {
-    float3 lit = Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy) + EmissionOf(input);
-    return float4(OverWire(lit, barycentrics), 1.0f);
+    float3 lit = Shade(input.albedo.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    return float4(OverWire(SimpleInFrame(lit, EmissionOf(input)), barycentrics), 1.0f);
 }
 
 [shader("fragment")]
 float4 LitTexturedWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics) : SV_TARGET
 {
     float4 surface = SurfaceOf(input);
-    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy) + EmissionOf(input);
-    return float4(OverWire(lit, barycentrics), 1.0f);
+    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    return float4(OverWire(SimpleInFrame(lit, EmissionOf(input)), barycentrics), 1.0f);
 }
 
 [shader("fragment")]
 float4 LitMaskedTexturedWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics) : SV_TARGET
 {
     float4 surface = MaskedSurfaceOf(input);
-    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy) + EmissionOf(input);
-    return float4(OverWire(lit, barycentrics), 1.0f);
+    float3 lit = Shade(surface.rgb, input.viewPosition, input.viewNormal, input.position.xy);
+    return float4(OverWire(SimpleInFrame(lit, EmissionOf(input)), barycentrics), 1.0f);
 }
 
 [shader("fragment")]
 float4 LitPhysicalWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Barycentrics) : SV_TARGET
 {
-    return float4(OverWire(Srgb(LitPhysical(input, BaseColorOf(input)).rgb), barycentrics), 1.0f);
+    return float4(OverWire(PhysicalInFrame(LitPhysical(input, BaseColorOf(input)).rgb), barycentrics), 1.0f);
 }
 
 [shader("fragment")]
@@ -56,7 +57,7 @@ float4 LitMaskedPhysicalWire_PS(LIT_PIXEL input, float3 barycentrics : SV_Baryce
 {
     float4 base = BaseColorOf(input);
     clip(base.a - input.alphaCutoff);
-    return float4(OverWire(Srgb(LitPhysical(input, base).rgb), barycentrics), 1.0f);
+    return float4(OverWire(PhysicalInFrame(LitPhysical(input, base).rgb), barycentrics), 1.0f);
 }
 
 technique ForwardPlusWire
