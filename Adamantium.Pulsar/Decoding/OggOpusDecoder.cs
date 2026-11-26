@@ -32,9 +32,11 @@ internal sealed class OggOpusDecoder : ISoundDecoder
         _ogg = ogg;
         try
         {
-            if (!ogg.TryReadPacket(out var head, out _, out _) || head.Length < 19 || !IsOpus(head) || head[8] >= 16)
+            // Whether it is of what is read, as the stream was chosen by; then what only damage makes wrong.
+            if (!ogg.TryReadPacket(out var head, out _, out _) || !IsReadable(head))
             {
-                throw Damaged("its identification header is of no version read");
+                throw new InvalidDataException(
+                    "The Opus stream's identification header is of a version, a channel mapping or a number of channels not read.");
             }
 
             _channels = head[9];
@@ -44,33 +46,12 @@ internal sealed class OggOpusDecoder : ISoundDecoder
             int streams;
             if (family == 0)
             {
-                if (_channels is < 1 or > 2)
-                {
-                    throw Damaged("a stream of mapping family 0 is of one or two channels");
-                }
-
                 streams = 1;
                 _coupled = _channels - 1;
                 _mapping = _channels == 1 ? [0] : [0, 1];
             }
             else
             {
-                if (_channels is < 1 or > AudioFormat.MostChannels)
-                {
-                    throw new InvalidDataException(
-                        $"The Opus stream has {_channels} channels; no more than {AudioFormat.MostChannels} are read.");
-                }
-
-                if (family != 1 && family != 255)
-                {
-                    throw new InvalidDataException($"The Opus stream is of channel mapping family {family}, which is not read.");
-                }
-
-                if (head.Length < 21 + _channels)
-                {
-                    throw Damaged("its channel mapping is cut short");
-                }
-
                 streams = head[19];
                 _coupled = head[20];
                 _mapping = head.Slice(21, _channels).ToArray();
@@ -98,7 +79,7 @@ internal sealed class OggOpusDecoder : ISoundDecoder
             Frames = Math.Max(0, LastGranule() - _start);
             Loop = comments.LoopWithin(Frames);
             _ready = new DecodedSamples(_channels, LongestPacket);
-            Restart(_audioPage);
+            Restart(_audioPage, _first);
             _position = _start;
         }
         catch
@@ -160,6 +141,7 @@ internal sealed class OggOpusDecoder : ISoundDecoder
         var sample = _start + frame;
         var pages = _ogg.Pages;
         var page = _audioPage;
+        var start = _first;
         // Checked once it is found by the granules: only that page is read.
         for (var at = pages.Count - 1; at > _audioPage; at--)
         {
@@ -167,19 +149,20 @@ internal sealed class OggOpusDecoder : ISoundDecoder
                 GranuleBefore(at) >= 0)
             {
                 page = at;
+                start = before;
                 break;
             }
         }
 
-        Restart(page);
+        Restart(page, start);
         _position = sample;
     }
 
     public void Dispose() => _ogg.Dispose();
 
-    // Decoding from the first packet that begins on the page, with the decoders as at the beginning; for one that is
-    // not continued, its first packet begins where the page before ended.
-    private void Restart(int page)
+    // Decoding from the first packet that begins on the page, with the decoders as at the beginning: placed at
+    // <paramref name="start"/>, where the page before ended, the stream's start for the first.
+    private void Restart(int page, long start)
     {
         _ogg.SeekToPage(page);
         foreach (var stream in _streams)
@@ -188,11 +171,7 @@ internal sealed class OggOpusDecoder : ISoundDecoder
         }
 
         _ready.Clear();
-        var start = page == _audioPage ? _first : GranuleBefore(page);
-        if (start >= 0)
-        {
-            _ready.Place(start);
-        }
+        _ready.Place(start);
     }
 
     // The next packet's samples after those ready; false past the last.

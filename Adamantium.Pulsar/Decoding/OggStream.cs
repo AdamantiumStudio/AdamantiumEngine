@@ -17,8 +17,8 @@ internal sealed class OggStream : IDisposable
     private readonly Stream _stream;
     private readonly OggPage[] _pages;
     private readonly byte[] _page = new byte[LongestPage];
-    // For pages checked apart from the one being read.
-    private readonly byte[] _check = new byte[LongestPage];
+    // For pages checked apart from the one being read; made when one first is.
+    private byte[] _check;
     private byte[] _packet = new byte[1 << 16];
     private int _packetLength;
     private int _next;
@@ -102,7 +102,8 @@ internal sealed class OggStream : IDisposable
         _packetLength = 0;
         _isSkipping = false;
         _isLost = false;
-        _sequence = -1;
+        // Pages missing between it and the one before are a loss as any.
+        _sequence = page > 0 && page <= _pages.Length ? _pages[page - 1].Sequence : -1;
     }
 
     /// <summary>The next whole packet, with the granule its page says where it is the last to end on it, -1 otherwise;
@@ -149,11 +150,12 @@ internal sealed class OggStream : IDisposable
 
     /// <summary>Whether page <paramref name="page"/> is as its checksum says; the packet being read is left as it is,
     /// the stream's position not.</summary>
-    public bool IsWhole(int page) => IsWholeAt(_stream, _pages[page], _check);
+    public bool IsWhole(int page) => IsWholeAt(_stream, _pages[page], _check ??= new byte[LongestPage]);
 
     private static bool IsWholeAt(Stream stream, OggPage page, byte[] buffer = null)
     {
-        var bytes = (buffer ?? new byte[LongestPage]).AsSpan(0, page.HeaderLength + page.BodyLength);
+        var length = page.HeaderLength + page.BodyLength;
+        var bytes = (buffer ?? new byte[length]).AsSpan(0, length);
         stream.Position = page.At;
         return stream.ReadAtLeast(bytes, bytes.Length, throwOnEndOfStream: false) == bytes.Length &&
             BinaryPrimitives.ReadUInt32LittleEndian(bytes[22..]) == ChecksumOf(bytes);

@@ -66,8 +66,8 @@ internal sealed class OpusDecoder
     }
 
     /// <summary>A packet's samples into <paramref name="output"/>, the channels side by side; how many a channel, or
-    /// -1 for a packet that is damaged. An empty packet is one lost: <paramref name="lostSamples"/> are concealed.
-    /// </summary>
+    /// -1 for a packet that is damaged. An empty packet is one lost: of <paramref name="lostSamples"/>, the whole 2.5 ms
+    /// frames are concealed, and how many those are is returned; the rest is the caller's.</summary>
     public int Decode(ReadOnlySpan<byte> packet, Span<float> output, bool isSelfDelimited = false, int lostSamples = 0)
     {
         if (packet.IsEmpty)

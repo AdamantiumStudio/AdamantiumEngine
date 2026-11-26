@@ -149,6 +149,25 @@ public class OpusTests
         Assert.That(sound.AsSpan()[49000..95000].IndexOfAnyExcept(0f), Is.EqualTo(-1));
     }
 
+    // The first audio page's capture pattern spoilt: not found, it is lost by the page numbers as well - a second of
+    // silence, the sound as long as ever, the rest where it was.
+    [Test]
+    public void TheFirstAudioPageNotFound_IsLost()
+    {
+        var file = Read("pages32.opus");
+        var whole = SoundFile.Read(file);
+        file[OggPages.Of(file)[2]] ^= 0x55;
+
+        var sound = SoundFile.Read(file);
+
+        Assert.That(sound.Frames, Is.EqualTo(whole.Frames));
+        Assert.That(sound.AsSpan()[..47000].IndexOfAnyExcept(0f), Is.EqualTo(-1));
+        for (var frame = 60000; frame < whole.Frames; frame++)
+        {
+            Assert.That(sound.AsSpan()[frame], Is.EqualTo(whole.AsSpan()[frame]).Within(.01f), $"frame {frame}");
+        }
+    }
+
     // The first audio page's granule spoilt, its checksum no longer its own: a seek into the page after it is placed by
     // the next granule whole, not by that one.
     [Test]
