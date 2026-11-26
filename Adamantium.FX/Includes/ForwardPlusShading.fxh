@@ -349,24 +349,31 @@ float3 SkyDirectionOf(float2 place)
     return float3(cos(around) * sin(down), -cos(down), sin(around) * sin(down));
 }
 
-float SkyHash(float3 cell)
+// A number 0 to 1 of a cell and a salt, the same on every GPU: integer mixing, as a sine of a large number loses its
+// digits and draws patterns.
+float SkyHash(int3 cell, uint salt)
 {
-    return frac(sin(dot(cell, float3(127.1f, 311.7f, 74.7f))) * 43758.5453f);
+    uint3 v = asuint(cell) * uint3(1597334673u, 3812015801u, 2798796415u);
+    uint h = (v.x ^ v.y ^ v.z ^ salt) * 2654435761u;
+    h ^= h >> 15;
+    h *= 739982445u;
+    h ^= h >> 12;
+    return h / 4294967295.0f;
 }
 
-// The stars of one layer: the sphere cut into cells, some holding one star somewhere inside.
+// The stars of one layer: the sphere cut into cells, a few holding one star somewhere inside.
 float StarsOf(float3 direction, float cells, float share, float size)
 {
-    float3 at = direction * cells;
-    float3 cell = floor(at);
-    if (SkyHash(cell) > share)
+    int3 cell = int3(floor(direction * cells));
+    if (SkyHash(cell, 0u) > share)
     {
         return 0.0f;
     }
 
-    float3 star = cell + 0.25f + 0.5f * float3(SkyHash(cell + 1.7f), SkyHash(cell + 3.1f), SkyHash(cell + 5.3f));
+    float3 star = cell + 0.25f + 0.5f * float3(SkyHash(cell, 1u), SkyHash(cell, 2u), SkyHash(cell, 3u));
     float apart = acos(saturate(dot(direction, normalize(star))));
-    return (0.4f + 0.6f * SkyHash(cell + 9.2f)) * exp(-apart * apart / (size * size));
+    float brightness = pow(SkyHash(cell, 4u), 3.0f);
+    return (0.15f + 0.85f * brightness) * exp(-apart * apart / (size * size));
 }
 
 // The sky's light along a direction, before its strength. Smooth leaves the stars out but keeps their sum, for what
@@ -394,7 +401,8 @@ float3 SkyLight(float3 direction, bool smooth)
             return light + 0.002f;
         }
 
-        float stars = StarsOf(direction, 160.0f, 0.12f, 0.0016f) * 1.5f + StarsOf(direction, 420.0f, 0.2f, 0.0009f) * 0.5f;
+        // A few thousand bright stars and more faint ones, as a night sky away from towns.
+        float stars = StarsOf(direction, 160.0f, 0.012f, 0.0006f) * 4.0f + StarsOf(direction, 420.0f, 0.004f, 0.0004f);
         return light + stars * float3(0.95f, 0.97f, 1.0f);
     }
 
