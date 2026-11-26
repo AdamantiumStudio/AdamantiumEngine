@@ -45,11 +45,25 @@ public static class NSAccessibility
     private static readonly IntPtr WorkspaceClass = GetWorkspaceClass();
     private static readonly IntPtr SharedWorkspaceSelector = ObjectiveC.ObjCRuntime.RegisterSelector("sharedWorkspace");
     private static readonly IntPtr VoiceOverEnabledSelector = ObjectiveC.ObjCRuntime.RegisterSelector("isVoiceOverEnabled");
+    private static readonly IntPtr SwitchControlEnabledSelector = ObjectiveC.ObjCRuntime.RegisterSelector("isSwitchControlEnabled");
 
-    /// <summary>Whether VoiceOver is on now. Any thread.</summary>
-    public static bool IsVoiceOverOn =>
-        WorkspaceClass != IntPtr.Zero &&
-        NSObject.SendForBoolean(NSObject.Send(WorkspaceClass, SharedWorkspaceSelector), VoiceOverEnabledSelector);
+    /// <summary>Whether VoiceOver, Zoom or Switch Control is on now - what waits to be told of changes before it asks.
+    /// Any thread.</summary>
+    public static bool IsAssistiveTechnologyOn
+    {
+        get
+        {
+            if (ZoomEnabled())
+                return true;
+
+            if (WorkspaceClass == IntPtr.Zero)
+                return false;
+
+            var workspace = NSObject.Send(WorkspaceClass, SharedWorkspaceSelector);
+            return NSObject.SendForBoolean(workspace, VoiceOverEnabledSelector) ||
+                   NSObject.SendForBoolean(workspace, SwitchControlEnabledSelector);
+        }
+    }
 
     private static IntPtr GetWorkspaceClass()
     {
@@ -76,4 +90,8 @@ public static class NSAccessibility
 
     [DllImport("/System/Library/Frameworks/AppKit.framework/AppKit", EntryPoint = "NSAccessibilityPostNotification")]
     private static extern void Post(IntPtr element, IntPtr notification);
+
+    [DllImport("/System/Library/Frameworks/ApplicationServices.framework/ApplicationServices", EntryPoint = "UAZoomEnabled")]
+    [return: MarshalAs(UnmanagedType.U1)]
+    private static extern bool ZoomEnabled();
 }

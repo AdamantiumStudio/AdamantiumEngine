@@ -1,3 +1,3 @@
 ### Added
 
-- `Adamantium.MacOS`: `NSAccessibility.IsVoiceOverOn`.
+- `Adamantium.MacOS`: `NSAccessibility.IsAssistiveTechnologyOn` - whether VoiceOver, Zoom or Switch Control is on.
