@@ -15,7 +15,8 @@
 - Shadows of a directional light: the first one whose `Light.IsWithShadows` is on casts the opaque surfaces' shadow in
   four cascades, the near ones fine and the far ones coarse, as far as `ForwardPlusRenderingProcessor.ShadowDistance`;
   each cascade `Light.ShadowMapResolution` texels square, 1024 when it is not set. The edge is softened over a few texels,
-  and it does not crawl as the camera moves. Both lighting models take it.
+  and it does not crawl as the camera moves. What stands out of view between the light and what is seen casts too.
+  Both lighting models take it.
 - `IGraphicsDevice.CreateReadableDepthBuffer`: a depth buffer a shader can read once it is drawn, as a shadow map is - of
   depth alone, resting in `ShaderReadOnlyOptimal`. `SurfaceFormat.HasDepthFormat`.
 - A pass may draw depth alone: with no color target, it takes its size from the depth buffer, and a buffer without

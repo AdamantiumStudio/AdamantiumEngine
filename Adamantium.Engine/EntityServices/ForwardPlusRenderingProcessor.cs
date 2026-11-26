@@ -65,6 +65,8 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     private readonly Matrix4x4F[] cascadeLookups = new Matrix4x4F[Cascades];
     private readonly IRenderTarget[] noTargets = [];
     private uint cascadeSide;
+    private readonly BoundingFrustum<float>[] cascadeReaches = new BoundingFrustum<float>[Cascades];
+    private readonly List<MeshDrawGroup> casterGroups = [];
     private readonly float[] cascadeEnds = new float[Cascades];
     private readonly float[] cascadeTexels = new float[Cascades];
 
@@ -474,6 +476,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             var square = Matrix4x4.CreateOrthoOffCenterLH(across - radius, across + radius, upward - radius,
                 upward + radius, center.Z - radius - ShadowDistance, center.Z + radius);
             cascadeViews[cascade] = toLight * square;
+            cascadeReaches[cascade] = new BoundingFrustum<float>(cascadeViews[cascade]);
             cascadeLookups[cascade] = fromView * cascadeViews[cascade] * QuarterOf(cascade);
             cascadeEnds[cascade] = end;
             cascadeTexels[cascade] = texel;
@@ -555,7 +558,14 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
             Offset = new Offset2D { X = x, Y = y }, Extent = new Extent2D { Width = cascadeSide, Height = cascadeSide }
         });
         effect.ViewProjection.SetValue(cascadeViews[cascade]);
-        foreach (var group in groupsDrawn)
+        DrawCasters(groupsDrawn);
+        DrawCasters(casterGroups);
+    }
+
+    private void DrawCasters(List<MeshDrawGroup> casters)
+    {
+        var device = GraphicsDevice;
+        foreach (var group in casters)
         {
             var key = group.Key;
             if (!key.DepthWrite || key.WireFrame)
@@ -670,6 +680,13 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         trianglesInScene += triangles;
         if (!inView)
         {
+            // Out of view, it may still stand between the light and what is seen.
+            if (shadowCaster != null && shown is not (EntityDisplay.Wireframe or EntityDisplay.Collider)
+                && entity.GetComponent<Material>() is not { AlphaMode: AlphaMode.Blend } && InShadowReach(entity))
+            {
+                EnqueueCaster(entity, meshData);
+            }
+
             return true;
         }
 
@@ -850,6 +867,56 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
         group.Instances.Add(instance);
     }
 
+    // Whether an entity's box in the scene's index lies in any cascade's box, which reaches back towards the light.
+    private bool InShadowReach(Entity entity)
+    {
+        if (sceneIndex == null || !sceneIndex.TryGetBox(entity, out var box))
+        {
+            return false;
+        }
+
+        var near = new BoundingBox<float>((box.Minimum - cameraPosition.ToVector()).As<float>(),
+            (box.Maximum - cameraPosition.ToVector()).As<float>());
+        foreach (var reach in cascadeReaches)
+        {
+            if (reach.Contains(near) != ContainmentType.Disjoint)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    // A mesh out of view that only casts: drawn into the shadow map and nowhere else.
+    private void EnqueueCaster(Entity entity, MeshData meshData)
+    {
+        var transformation = entity.Transform.GetMetadata(ActiveCamera);
+        if (!transformation.Enabled)
+        {
+            return;
+        }
+
+        var world = transformation.WorldMatrixF;
+        var skinned = meshData.RenderMode == MeshRenderMode.Skinned;
+        var (first, count) = skinned ? PaletteOf(entity.GetComponent<Skin>(), world) : default;
+        var instance = new MeshInstance(world, default, first, count, MeshInstance.NoMap, 0f, default, default,
+            MaterialMaps.None);
+        var geometry = geometryCache.GetOrCreate(meshData.Mesh, meshData.ResolveVertexType());
+        var pass = skinned ? effect.ForwardPlusSkinnedShadowDepthPass : effect.ForwardPlusShadowDepthPass;
+        var key = new MeshDrawKey(geometry, pass, CullModeFlagBits.None, true, true, false, meshData.TopologyOverride);
+        if (!groups.TryGetValue(key, out var group))
+        {
+            group = spareGroups.Count > 0 ? spareGroups.Pop() : new MeshDrawGroup();
+            group.Key = key;
+            group.Effect = effect;
+            groups.Add(key, group);
+            casterGroups.Add(group);
+        }
+
+        group.Instances.Add(instance);
+    }
+
     private uint IndexOf(Texture texture) =>
         texture == null ? MeshInstance.NoMap : ((GraphicsDevice)GraphicsDevice).DescriptorManager.TextureIndex(texture);
 
@@ -929,6 +996,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     {
         var count = PlaceGroups(groupsDrawn, 0);
         count = PlaceGroups(weightedGroups, count);
+        count = PlaceGroups(casterGroups, count);
         if (count == 0)
         {
             return;
@@ -941,6 +1009,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
 
         CopyInstances(groupsDrawn);
         CopyInstances(weightedGroups);
+        CopyInstances(casterGroups);
         var instanceAddress = GraphicsDevice.UploadFrameData<MeshInstance>(instances.AsSpan(0, count));
         foreach (var target in (ReadOnlySpan<Effect>)[effect, wireEffect])
         {
@@ -1364,6 +1433,7 @@ public class ForwardPlusRenderingProcessor : RenderingProcessor
     {
         Recycle(groupsDrawn);
         Recycle(weightedGroups);
+        Recycle(casterGroups);
         groups.Clear();
         framePalettes.Clear();
         paletteMatrices = 0;

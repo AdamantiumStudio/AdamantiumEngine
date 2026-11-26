@@ -222,6 +222,54 @@ public class ForwardPlusLightingTests
         });
     }
 
+    // A cube hung 10 above the floor, behind and above a camera looking down at the floor: out of view, its shadow still
+    // falls where the camera looks.
+    [Test]
+    public void ACubeOutOfView_StillCastsItsShadowIntoIt()
+    {
+        var eye = _output.Camera;
+        eye.Owner.Transform.Position = new WorldPosition(0, -3, -8);
+        eye.SetFreeLookAt(new WorldPosition(0, 0.5, -6.3));
+        var scene = _universe.EntityWorld.MainScene;
+        var lights = new LightManager(_universe, scene);
+        scene.Satellites.Add(lights);
+        var sun = new LightTemplate().BuildEntity(null, "Sun", LightType.Directional);
+        sun.Transform.Rotation = Quaternion.CreateFromAxisAngle<float>(Vector3F.UnitX, float.DegreesToRadians(150));
+        sun.GetComponent<Light>().IsWithShadows = true;
+        lights.AddLight(sun);
+        var cube = new ShapeTemplate(new CubeShape()).Build(new Entity(null, "Cube"));
+        cube.Transform.Position = new WorldPosition(0, -10, 0);
+        cube.AddComponent(new Material());
+        _universe.EntityWorld.EntityManager.AddEntity(cube, scene);
+        var floor = new ShapeTemplate(new CubeShape()).Build(new Entity(null, "Floor"));
+        floor.Transform.Position = new WorldPosition(0, 0.55, 0);
+        floor.Transform.ScaleFactor = new Vector3F(20, 0.1f, 20);
+        floor.AddComponent(new Material());
+        _universe.EntityWorld.EntityManager.AddEntity(floor, scene);
+        for (var frame = 0; frame < Frames; frame++)
+        {
+            RunFrame();
+        }
+
+        var pixels = Pixels(_output.ReadFrame(), "forward-plus-shadow-out-of-view.png");
+        var camera = _output.Camera;
+        int BrightnessAt(WorldPosition point)
+        {
+            var start = PixelStart(camera, point);
+            return (pixels[start] + pixels[start + 1] + pixels[start + 2]) / 3;
+        }
+
+        // 10 to 11 above the floor, the sun 30 degrees off straight down: the shadow lies 5.3 to 6.9 towards -Z.
+        var inShadow = BrightnessAt(new WorldPosition(0, 0.5, -6.1));
+        var sideways = BrightnessAt(new WorldPosition(1.6, 0.5, -6.1));
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(sideways, Is.GreaterThan(120), "the floor beside the shadow, in the sun");
+            Assert.That(inShadow, Is.LessThan(sideways / 3), "the floor in the shadow of the cube out of view");
+        });
+    }
+
     // How bright the top of a metal cube in the sun is, lit by the given model.
     private double TopOf(LightingModel lighting, string savedAs)
     {
