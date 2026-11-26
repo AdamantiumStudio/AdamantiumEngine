@@ -47,18 +47,125 @@ public class AudioPlaybackTests
     public void ASoundPlayedToTheEnd_Stops_AndSaysItEnded()
     {
         var ended = 0;
+        var said = new ManualResetEventSlim();
         var changes = new List<AudioPlaybackState>();
-        _playback.Ended += (_, _) => ended++;
-        _playback.StateChanged += (_, _) => changes.Add(_playback.State);
+        // Raised by the check of its end, or by what asks after it: of one thread at a time.
+        _playback.Ended += (_, _) =>
+        {
+            Interlocked.Increment(ref ended);
+            said.Set();
+        };
+        _playback.StateChanged += (_, _) =>
+        {
+            lock (changes)
+            {
+                changes.Add(_playback.State);
+            }
+        };
         _playback.Open(Storage(Sine(1000, 0.2)));
 
         _playback.Play();
         Assert.That(_playback.State, Is.EqualTo(AudioPlaybackState.Playing));
         RenderUntil(() => _playback.State == AudioPlaybackState.Stopped);
 
+        Assert.That(said.Wait(Patience), Is.True);
         Assert.That(ended, Is.EqualTo(1));
-        Assert.That(changes, Is.EqualTo(new[] { AudioPlaybackState.Playing, AudioPlaybackState.Stopped }));
+        lock (changes)
+        {
+            Assert.That(changes, Is.EqualTo(new[] { AudioPlaybackState.Playing, AudioPlaybackState.Stopped }));
+        }
+
         Assert.That(_playback.Position, Is.EqualTo(TimeSpan.Zero));
+    }
+
+    // Before its end is checked for: a pause then is of a sound that ended.
+    [Test]
+    public void ACommandAfterTheEnd_SeesTheEnd()
+    {
+        var ended = new ManualResetEventSlim();
+        _playback.Ended += (_, _) => ended.Set();
+        _playback.Open(Storage(Sine(1000, 0.05)));
+        _playback.Play();
+        Render(10);
+
+        _playback.Pause();
+
+        Assert.That(ended.Wait(Patience), Is.True);
+        Assert.That(_playback.State, Is.EqualTo(AudioPlaybackState.Stopped));
+    }
+
+    // Of an engine of one voice: a seek can not have the new one while the old fades.
+    [Test]
+    public void ASeekWithNoVoiceToSpare_Stops_AndSaysNoEnd()
+    {
+        using var engine = new AudioEngine(new AudioEngineSettings { Voices = 1 });
+        using var playback = new AudioPlayback(engine);
+        var ended = 0;
+        playback.Ended += (_, _) => Interlocked.Increment(ref ended);
+        playback.Open(Storage(Sine(1000, 2)));
+        playback.Play();
+
+        Assert.Throws<InvalidOperationException>(() => playback.Seek(TimeSpan.FromSeconds(1)));
+
+        Assert.That(playback.State, Is.EqualTo(AudioPlaybackState.Stopped));
+        Assert.That(playback.Position, Is.EqualTo(TimeSpan.FromSeconds(1)));
+        engine.Render(new float[2 * 480], AudioFormat.Default);
+        Thread.Sleep(200);
+        Assert.That(ended, Is.Zero);
+    }
+
+    // 44.1 kHz: a frame is not a whole number of ticks.
+    [Test]
+    public void APlayFromAFrame_IsFromThatFrame()
+    {
+        _playback.Open(Storage(WavFiles.Floats(44100, 1, new float[44100])));
+        _playback.Seek(TimeSpan.FromTicks(227));
+        var position = _playback.Position;
+
+        _playback.Play();
+
+        Assert.That(position, Is.EqualTo(new AudioFormat(44100, 1).DurationOf(1)));
+        Assert.That(_playback.Position, Is.EqualTo(position));
+    }
+
+    [Test]
+    public void ADisposedPlayback_SaysSo()
+    {
+        _playback.Open(Storage(Sine(1000, 1)));
+        _playback.Dispose();
+
+        Assert.That(_playback.Info, Is.Null);
+        Assert.Throws<ObjectDisposedException>(() => _playback.ReadWaveform(10, CancellationToken.None));
+    }
+
+    // Any failure: the rest is silence, and it is complete.
+    [Test]
+    public void AWaveformThatCanNotBeRead_IsCompleteWithSilence()
+    {
+        var storage = new FailingStorage(Sine(1000, 1));
+        _playback.Open(storage);
+        storage.Fails = true;
+
+        var waveform = _playback.ReadWaveform(10, CancellationToken.None);
+
+        Assert.That(SpinWait.SpinUntil(() => waveform.IsComplete, Patience), Is.True);
+    }
+
+    // One opened while another is: the engine keeps the last only.
+    [Test]
+    public void OpensAtOnce_LeaveOneSound()
+    {
+        var first = new HeldStorage(Sine(1000, 1));
+        var opening = Task.Run(() => _playback.Open(first));
+        Assert.That(first.Opened.Wait(Patience), Is.True);
+
+        _playback.Open(Storage(Sine(500, 1)));
+        first.Release.Set();
+        opening.Wait(Patience);
+
+        Assert.That(_engine.Sounds, Is.EqualTo(1));
+        _playback.Close();
+        Assert.That(_engine.Sounds, Is.Zero);
     }
 
     [Test]

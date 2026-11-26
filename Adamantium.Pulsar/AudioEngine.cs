@@ -244,6 +244,18 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
         }
     }
 
+    /// <summary>For tests: the sounds it has.</summary>
+    internal int Sounds
+    {
+        get
+        {
+            lock (_lock)
+            {
+                return _sounds.Count - _freeSounds.Count;
+            }
+        }
+    }
+
     /// <summary>For tests, which render faster than it is heard: no streamed voice wants more now.</summary>
     internal bool IsReadAhead => _streamer.IsIdle;
 

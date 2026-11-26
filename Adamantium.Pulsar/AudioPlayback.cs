@@ -148,40 +148,44 @@ public sealed class AudioPlayback : IDisposable
         Sound sound = frames > 0 ? StreamedSound.Open(storage) : SoundFile.Read(storage.Open());
         var seconds = sound.Duration.TotalSeconds;
         var info = new SoundInfo(sound.Codec, sound.Format, sound.Duration, (int)Math.Round(length * 8 / seconds), sound.Tags);
+        bool ended;
+        bool changed;
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
+            // Another may have been opened meanwhile.
+            ended = EndIfDone();
+            changed = Release();
             _storage = storage;
             _sound = sound;
             _soundId = _engine.AddSound(sound);
             _from = 0;
             Info = info;
         }
+
+        RaiseChanged(changed || ended, ended);
     }
 
     /// <summary>Stops, and lets the sound go.</summary>
     public void Close()
     {
+        bool ended;
         bool changed;
         lock (_lock)
         {
-            changed = StopVoice();
-            if (_sound != null)
-            {
-                _engine.RemoveSound(_soundId);
-                _sound = null;
-                _storage = null;
-                Info = null;
-            }
+            ended = EndIfDone();
+            changed = Release();
         }
 
-        RaiseChanged(changed, ended: false);
+        RaiseChanged(changed || ended, ended);
     }
 
     /// <summary>From where it is: from the beginning, or where it was paused or sought to.</summary>
     /// <exception cref="InvalidOperationException">No sound is open, or the engine has no voice to spare.</exception>
     public void Play()
     {
+        bool ended;
+        bool changed;
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
@@ -190,59 +194,72 @@ public sealed class AudioPlayback : IDisposable
                 throw new InvalidOperationException("No sound is open to play.");
             }
 
-            switch (_state)
+            ended = EndIfDone();
+            changed = _state != AudioPlaybackState.Playing;
+            if (_state == AudioPlaybackState.Paused)
             {
-                case AudioPlaybackState.Playing:
-                    return;
-                case AudioPlaybackState.Paused:
-                    _engine.SetPaused(_voice, false);
-                    break;
-                default:
-                    StartOutput();
-                    _voice = PlayVoice(_from, TimeSpan.Zero);
-                    break;
+                _engine.SetPaused(_voice, false);
+            }
+            else if (_state == AudioPlaybackState.Stopped)
+            {
+                StartOutput();
+                _voice = TryPlayVoice(_from, TimeSpan.Zero);
+                if (_voice == default)
+                {
+                    throw new InvalidOperationException("The engine has no voice to spare.");
+                }
             }
 
             _state = AudioPlaybackState.Playing;
             _endCheck.Change(EndCheck, EndCheck);
         }
 
-        RaiseChanged(changed: true, ended: false);
+        RaiseChanged(ended, ended);
+        RaiseChanged(changed, ended: false);
     }
 
     public void Pause()
     {
+        bool ended;
+        bool changed;
         lock (_lock)
         {
-            if (_state != AudioPlaybackState.Playing)
+            ended = EndIfDone();
+            changed = _state == AudioPlaybackState.Playing;
+            if (changed)
             {
-                return;
+                _engine.SetPaused(_voice, true);
+                _state = AudioPlaybackState.Paused;
+                _endCheck.Change(Timeout.Infinite, Timeout.Infinite);
             }
-
-            _engine.SetPaused(_voice, true);
-            _state = AudioPlaybackState.Paused;
-            _endCheck.Change(Timeout.Infinite, Timeout.Infinite);
         }
 
-        RaiseChanged(changed: true, ended: false);
+        RaiseChanged(ended, ended);
+        RaiseChanged(changed, ended: false);
     }
 
     /// <summary>Stops, back at the beginning.</summary>
     public void Stop()
     {
+        bool ended;
         bool changed;
         lock (_lock)
         {
+            ended = EndIfDone();
             changed = StopVoice();
             _from = 0;
         }
 
+        RaiseChanged(ended, ended);
         RaiseChanged(changed, ended: false);
     }
 
     /// <summary>To <paramref name="position"/>, kept within the sound; playing or paused it goes on from there.</summary>
+    /// <exception cref="InvalidOperationException">The engine has no voice to spare: it is stopped there.</exception>
     public void Seek(TimeSpan position)
     {
+        bool ended;
+        var failed = false;
         lock (_lock)
         {
             if (_sound == null)
@@ -250,21 +267,37 @@ public sealed class AudioPlayback : IDisposable
                 return;
             }
 
+            ended = EndIfDone();
             var frame = Math.Clamp(_sound.Format.FramesIn(position), 0, _sound.Frames);
-            _from = frame;
-            if (_state == AudioPlaybackState.Stopped)
+            if (_state != AudioPlaybackState.Stopped)
             {
-                return;
+                // The new one first: the old plays on where there is none. A paused voice is silent, no fade to hear.
+                var paused = _state == AudioPlaybackState.Paused;
+                var voice = TryPlayVoice(frame, paused ? TimeSpan.Zero : Fade);
+                if (voice == default)
+                {
+                    StopVoice();
+                    failed = true;
+                }
+                else
+                {
+                    _engine.Stop(_voice, paused ? TimeSpan.Zero : Fade);
+                    _voice = voice;
+                    if (paused)
+                    {
+                        _engine.SetPaused(voice, true);
+                    }
+                }
             }
 
-            // A paused voice is silent: no fade to hear, and none would go on.
-            var paused = _state == AudioPlaybackState.Paused;
-            _engine.Stop(_voice, paused ? TimeSpan.Zero : Fade);
-            _voice = PlayVoice(frame, paused ? TimeSpan.Zero : Fade);
-            if (paused)
-            {
-                _engine.SetPaused(_voice, true);
-            }
+            _from = frame;
+        }
+
+        RaiseChanged(ended, ended);
+        RaiseChanged(failed, ended: false);
+        if (failed)
+        {
+            throw new InvalidOperationException("The engine has no voice to spare.");
         }
     }
 
@@ -294,6 +327,7 @@ public sealed class AudioPlayback : IDisposable
         SoundWaveform waveform;
         lock (_lock)
         {
+            ObjectDisposedException.ThrowIf(_disposed, this);
             storage = _storage ?? throw new InvalidOperationException("No sound is open.");
             waveform = new SoundWaveform(_sound.Format.Channels, parts, _sound.Frames);
         }
@@ -311,13 +345,7 @@ public sealed class AudioPlayback : IDisposable
                 return;
             }
 
-            StopVoice();
-            if (_sound != null)
-            {
-                _engine.RemoveSound(_soundId);
-                _sound = null;
-            }
-
+            Release();
             _disposed = true;
         }
 
@@ -339,19 +367,35 @@ public sealed class AudioPlayback : IDisposable
             {
             }
         }
-        catch (Exception e) when (e is InvalidDataException or IOException)
+        catch (Exception)
         {
+            // Whatever it was - damaged, taken away, locked - it is drawn as silence, and a drawing waits no longer.
             waveform.Finish();
         }
     }
 
-    private VoiceId PlayVoice(long frame, TimeSpan fadeIn)
+    // None where the engine has no voice to spare.
+    private VoiceId TryPlayVoice(long frame, TimeSpan fadeIn)
     {
-        var voice = _engine.Play(_soundId, new VoiceSettings
+        // The time that is that frame again: of 44.1 kHz a frame is not whole ticks, and both ways cut down.
+        var rate = _sound.Format.SampleRate;
+        var from = TimeSpan.FromTicks((long)(((Int128)frame * TimeSpan.TicksPerSecond + rate - 1) / rate));
+        return _engine.Play(_soundId, new VoiceSettings { From = from, FadeIn = fadeIn, Volume = _volume });
+    }
+
+    // Stops, and lets the sound go; whether it was playing or paused.
+    private bool Release()
+    {
+        var changed = StopVoice();
+        if (_sound != null)
         {
-            From = _sound.Format.DurationOf(frame), FadeIn = fadeIn, Volume = _volume,
-        });
-        return voice != default ? voice : throw new InvalidOperationException("The engine has no voice to spare.");
+            _engine.RemoveSound(_soundId);
+            _sound = null;
+            _storage = null;
+            Info = null;
+        }
+
+        return changed;
     }
 
     private void StartOutput()
@@ -379,23 +423,30 @@ public sealed class AudioPlayback : IDisposable
         return true;
     }
 
-    // Whether the voice ended by itself, at the end of the sound.
     private void Refresh()
     {
+        bool ended;
         lock (_lock)
         {
-            if (_disposed || _state != AudioPlaybackState.Playing || _engine.IsPlaying(_voice))
-            {
-                return;
-            }
-
-            _voice = default;
-            _state = AudioPlaybackState.Stopped;
-            _from = 0;
-            _endCheck.Change(Timeout.Infinite, Timeout.Infinite);
+            ended = EndIfDone();
         }
 
-        RaiseChanged(changed: true, ended: true);
+        RaiseChanged(ended, ended);
+    }
+
+    // Under the lock: whether the voice ended by itself, at the end of the sound; stopped then, back at the beginning.
+    private bool EndIfDone()
+    {
+        if (_disposed || _state != AudioPlaybackState.Playing || _engine.IsPlaying(_voice))
+        {
+            return false;
+        }
+
+        _voice = default;
+        _state = AudioPlaybackState.Stopped;
+        _from = 0;
+        _endCheck.Change(Timeout.Infinite, Timeout.Infinite);
+        return true;
     }
 
     private void RaiseChanged(bool changed, bool ended)
