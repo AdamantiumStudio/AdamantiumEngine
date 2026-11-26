@@ -1,6 +1,4 @@
 using System.Buffers.Binary;
-using System.Globalization;
-using System.Text;
 
 namespace Adamantium.Pulsar.Decoding;
 
@@ -221,74 +219,9 @@ internal sealed class FlacDecoder : ISoundDecoder
     {
         var block = new byte[length];
         _stream.ReadExactly(block);
-        var rest = block.AsSpan();
-        long start = -1;
-        long loopLength = -1;
-        long end = -1;
-        speakers = Speakers.None;
-        if (!TryTake(ref rest, out _) || rest.Length < 4)
-        {
-            return null;
-        }
-
-        rest = rest[4..];
-        while (TryTake(ref rest, out var comment))
-        {
-            var text = Encoding.UTF8.GetString(comment);
-            ReadNumber(text, "LOOPSTART=", ref start);
-            ReadNumber(text, "LOOPLENGTH=", ref loopLength);
-            ReadNumber(text, "LOOPEND=", ref end);
-            ReadSpeakers(text, ref speakers);
-        }
-
-        if (end < 0)
-        {
-            end = loopLength > 0 ? start + loopLength : Frames;
-        }
-
-        return start >= 0 && end > start && end <= int.MaxValue && (Frames < 0 || end <= Frames)
-            ? new SoundLoop((int)start, (int)end)
-            : null;
-    }
-
-    private static bool TryTake(ref Span<byte> rest, out Span<byte> taken)
-    {
-        taken = default;
-        if (rest.Length < 4)
-        {
-            return false;
-        }
-
-        var length = BinaryPrimitives.ReadUInt32LittleEndian(rest);
-        if (length > rest.Length - 4)
-        {
-            return false;
-        }
-
-        taken = rest.Slice(4, (int)length);
-        rest = rest[(4 + (int)length)..];
-        return true;
-    }
-
-    private static void ReadNumber(string comment, string name, ref long value)
-    {
-        if (comment.StartsWith(name, StringComparison.OrdinalIgnoreCase) &&
-            long.TryParse(comment.AsSpan(name.Length), NumberStyles.None, CultureInfo.InvariantCulture, out var number))
-        {
-            value = number;
-        }
-    }
-
-    // In hexadecimal, after 0x.
-    private static void ReadSpeakers(string comment, ref Speakers speakers)
-    {
-        const string name = "WAVEFORMATEXTENSIBLE_CHANNEL_MASK=0x";
-        if (comment.StartsWith(name, StringComparison.OrdinalIgnoreCase) &&
-            uint.TryParse(comment.AsSpan(name.Length), NumberStyles.AllowHexSpecifier, CultureInfo.InvariantCulture,
-                out var mask))
-        {
-            speakers = (Speakers)mask;
-        }
+        var comments = VorbisComments.Read(block);
+        speakers = comments.Speakers;
+        return comments.LoopWithin(Frames);
     }
 
     // Where a frame begins that is not after the one sought: by the table, then halving what is between.
