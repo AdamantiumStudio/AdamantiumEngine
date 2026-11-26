@@ -5,6 +5,7 @@ using System.Linq;
 using Adamantium.Content.Pipeline;
 using Adamantium.Graphics.Core.Assets;
 using Adamantium.Graphics.Core.Models;
+using Adamantium.Pulsar;
 
 namespace Adamantium.Engine.ContentCompiler.CLI
 {
@@ -95,6 +96,11 @@ namespace Adamantium.Engine.ContentCompiler.CLI
                 return 1;
             }
 
+            if (new AssetFileInfo(aemfPath).Kind == AssetKind.Sound)
+            {
+                return VerifySound(aemfPath);
+            }
+
             AssetFile file;
             SceneData scene;
             try
@@ -144,6 +150,30 @@ namespace Adamantium.Engine.ContentCompiler.CLI
                               $"materials={scene.Materials.Count}  skins={scene.Controllers.Count}  parentLinks={(brokenParents == 0 ? "ok" : $"BROKEN x{brokenParents}")}  " +
                               $"source={file.Source?.Path ?? "-"}  thumbnail={(file.Thumbnail == null ? "none" : $"{file.Thumbnail.Length} bytes")}");
             return brokenParents == 0 ? 0 : 3;
+        }
+
+        private static int VerifySound(string aemfPath)
+        {
+            try
+            {
+                var file = AssetFile.Read(aemfPath, AssetFileSection.Source | AssetFileSection.Body);
+                if (file.Body == null)
+                {
+                    Console.WriteLine("It holds no sound.");
+                    return 2;
+                }
+
+                var sound = BakedSound.Read(new SoundMemoryStorage(file.Body));
+                Console.WriteLine($"OK: {sound.Duration}  {sound.Format.SampleRate} Hz  channels={sound.Format.Channels}  " +
+                                  $"{(sound is StreamedSound ? "streamed" : "in memory")}  loop={sound.Loop.Start}-{sound.Loop.End}  " +
+                                  $"source={file.Source?.Path ?? "-"}");
+                return 0;
+            }
+            catch (Exception exception) when (exception is AssetFormatException or InvalidDataException)
+            {
+                Console.WriteLine(exception.Message);
+                return 2;
+            }
         }
 
         private static string GetOption(string[] args, string name)

@@ -33,6 +33,7 @@ internal sealed class CommandQueue
         command = _commands[_taken % Capacity];
         // A sound removed must not be kept alive by a command long done.
         _commands[_taken % Capacity].Sound = null;
+        _commands[_taken % Capacity].Stream = null;
         Volatile.Write(ref _taken, _taken + 1);
         return true;
     }

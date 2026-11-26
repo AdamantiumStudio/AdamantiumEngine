@@ -3,12 +3,14 @@ namespace Adamantium.Pulsar.Mixing;
 /// <summary>Reads a voice's sound at its pitch and the mixer's rate.</summary>
 internal static class SoundReader
 {
-    private const long One = 1L << 32;
-    private const float FractionScale = 1f / One;
+    /// <summary>A frame, as positions count.</summary>
+    public const long One = 1L << 32;
+
+    public const float FractionScale = 1f / One;
 
     /// <summary>How far the sound goes in a frame of the mixer.</summary>
     public static long StepOf(in Voice voice, int sampleRate) =>
-        Math.Max(1, (long)((double)voice.Pitch * voice.Sound.Format.SampleRate / sampleRate * One));
+        Math.Max(1, (long)((double)voice.Pitch * voice.Format.SampleRate / sampleRate * One));
 
     /// <summary>Goes on by <paramref name="frames"/> unread; false where the sound ended.</summary>
     public static bool Skip(ref Voice voice, long step, int frames)
@@ -154,8 +156,8 @@ internal static class SoundReader
             : 0;
     }
 
-    // Catmull-Rom.
-    private static float Interpolate(float before, float from, float to, float after, float fraction)
+    /// <summary>Catmull-Rom.</summary>
+    public static float Interpolate(float before, float from, float to, float after, float fraction)
     {
         var slope = 0.5f * (to - before);
         var square = before - 2.5f * from + 2 * to - 0.5f * after;

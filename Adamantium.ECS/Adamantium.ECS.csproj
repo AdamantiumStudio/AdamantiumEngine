@@ -17,6 +17,7 @@
 		<ProjectReference Include="..\Adamantium.Graphics\Adamantium.Graphics.csproj" />
 		<ProjectReference Include="..\Adamantium.Mathematics\Adamantium.Mathematics.csproj" />
 		<ProjectReference Include="..\Adamantium.ProceduralGeometry\Adamantium.ProceduralGeometry.csproj" />
+		<ProjectReference Include="..\Adamantium.Pulsar\Adamantium.Pulsar.csproj" />
 		<!-- AdamantiumViewModel base (UI-free, Core-only) so Component is INPC/[Bindable]-ready + the MVVM generator. -->
 		<ProjectReference Include="..\Adamantium.MVVM\Adamantium.MVVM.csproj" />
 		<ProjectReference Include="..\Adamantium.MVVM.Generators\Adamantium.MVVM.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />

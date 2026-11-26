@@ -288,7 +288,7 @@ public class ContentBuilderTests
             Assert.That(builder.FindSource(manifest, _project, Path.Combine(_project, "obj", "assets", "Models", "b.obj.aemf")),
                 Is.EqualTo(Path.GetFullPath(Path.Combine(_project, "..", "Shared", "b.obj"))));
             Assert.That(builder.FindSource(manifest, _project, Path.Combine(_project, "Models", "other.obj.aemf")), Is.Null);
-            Assert.That(builder.ImporterNames, Is.EquivalentTo((string[])["Model"]));
+            Assert.That(builder.ImporterNames, Is.EquivalentTo((string[])["Model", "Sound"]));
         });
     }
 
