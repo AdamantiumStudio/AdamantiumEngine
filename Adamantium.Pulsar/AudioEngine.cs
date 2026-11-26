@@ -336,7 +336,7 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
     /// <summary>The last frames mixed, as many as <paramref name="frames"/> holds (stereo, side by side), up to
     /// <see cref="PlayedCapacity"/>; how many there were. For what shows the sound - a spectrum, a level meter: read on
     /// any thread without a lock, a block mixed meanwhile may be in part of them.</summary>
-    public int CopyPlayed(Span<float> frames)
+    internal int CopyPlayed(Span<float> frames)
     {
         var end = Volatile.Read(ref _playedEnd);
         var count = (int)Math.Min(Math.Min(frames.Length / 2, PlayedCapacity), end);
@@ -348,7 +348,7 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
     }
 
     /// <summary>The most frames <see cref="CopyPlayed"/> gives: 85 ms.</summary>
-    public const int PlayedCapacity = 4096;
+    internal const int PlayedCapacity = 4096;
 
     private void KeepPlayed(ReadOnlySpan<float> samples)
     {

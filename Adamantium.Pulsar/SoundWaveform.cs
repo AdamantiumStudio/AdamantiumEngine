@@ -1,9 +1,9 @@
 namespace Adamantium.Pulsar;
 
 /// <summary>A sound's waveform for drawing: of each channel, the least and the greatest sample of each of so many equal
-/// parts of it. Read a part at a time, on a thread of its own: what shows it may draw the parts read so far, as
-/// <see cref="BucketsRead"/> says, while the rest is read.</summary>
-public sealed class SoundPeaks
+/// parts of it. It is read in the background (<see cref="AudioPlayback.ReadWaveform"/>): the parts before
+/// <see cref="PartsRead"/> may be drawn while the rest is read.</summary>
+public sealed class SoundWaveform
 {
     private const int ChunkFrames = 4096;
 
@@ -12,19 +12,19 @@ public sealed class SoundPeaks
     private readonly long _frames;
     private readonly float[] _chunk;
     private long _read;
-    private int _bucketsRead;
+    private int _partsRead;
 
     /// <param name="frames">The sound's frames, as its decoder says; more than 0.</param>
-    public SoundPeaks(int channels, int buckets, long frames)
+    internal SoundWaveform(int channels, int parts, long frames)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(channels, 1);
-        ArgumentOutOfRangeException.ThrowIfLessThan(buckets, 1);
+        ArgumentOutOfRangeException.ThrowIfLessThan(parts, 1);
         ArgumentOutOfRangeException.ThrowIfLessThan(frames, 1);
         Channels = channels;
-        Buckets = buckets;
+        Parts = parts;
         _frames = frames;
-        _minimums = new float[channels * buckets];
-        _maximums = new float[channels * buckets];
+        _minimums = new float[channels * parts];
+        _maximums = new float[channels * parts];
         _minimums.AsSpan().Fill(float.PositiveInfinity);
         _maximums.AsSpan().Fill(float.NegativeInfinity);
         _chunk = new float[ChunkFrames * channels];
@@ -32,45 +32,45 @@ public sealed class SoundPeaks
 
     public int Channels { get; }
 
-    public int Buckets { get; }
+    public int Parts { get; }
 
     /// <summary>The parts read: those before it are whole.</summary>
-    public int BucketsRead => Volatile.Read(ref _bucketsRead);
+    public int PartsRead => Volatile.Read(ref _partsRead);
 
-    public bool IsComplete => BucketsRead == Buckets;
-
-    /// <summary>Of <paramref name="decoder"/>'s sound, all its frames in the parts it has.</summary>
-    public static SoundPeaks Of(ISoundDecoder decoder, int buckets)
-    {
-        ArgumentNullException.ThrowIfNull(decoder);
-        return decoder.Frames > 0
-            ? new SoundPeaks(decoder.Format.Channels, buckets, decoder.Frames)
-            : throw new ArgumentException("A sound of a length not known has no peaks to read.", nameof(decoder));
-    }
+    public bool IsComplete => PartsRead == Parts;
 
     /// <summary>0 of a part of no frames, or not read yet.</summary>
-    public float MinimumOf(int channel, int bucket)
+    public float MinimumOf(int channel, int part)
     {
-        var minimum = _minimums[channel * Buckets + bucket];
+        var minimum = _minimums[channel * Parts + part];
         return float.IsPositiveInfinity(minimum) ? 0 : minimum;
     }
 
     /// <summary>0 of a part of no frames, or not read yet.</summary>
-    public float MaximumOf(int channel, int bucket)
+    public float MaximumOf(int channel, int part)
     {
-        var maximum = _maximums[channel * Buckets + bucket];
+        var maximum = _maximums[channel * Parts + part];
         return float.IsNegativeInfinity(maximum) ? 0 : maximum;
+    }
+
+    /// <summary>Of <paramref name="decoder"/>'s sound, all its frames in the parts it has.</summary>
+    internal static SoundWaveform Of(ISoundDecoder decoder, int parts)
+    {
+        ArgumentNullException.ThrowIfNull(decoder);
+        return decoder.Frames > 0
+            ? new SoundWaveform(decoder.Format.Channels, parts, decoder.Frames)
+            : throw new ArgumentException("A sound of a length not known has no waveform to read.", nameof(decoder));
     }
 
     /// <summary>Up to <paramref name="frames"/> more of <paramref name="decoder"/>, of as many channels, which reads on
     /// from where it was left; false once the sound is read.</summary>
-    public bool ReadOn(ISoundDecoder decoder, int frames)
+    internal bool ReadOn(ISoundDecoder decoder, int frames)
     {
         ArgumentNullException.ThrowIfNull(decoder);
         var channels = Channels;
         if (decoder.Format.Channels != channels)
         {
-            throw new ArgumentException($"The peaks are of {channels} channels, the sound of {decoder.Format.Channels}.",
+            throw new ArgumentException($"The waveform is of {channels} channels, the sound of {decoder.Format.Channels}.",
                 nameof(decoder));
         }
 
@@ -87,11 +87,11 @@ public sealed class SoundPeaks
 
             for (var frame = 0; frame < got; frame++)
             {
-                var bucket = (int)((_read + frame) * Buckets / _frames);
+                var part = (int)((_read + frame) * Parts / _frames);
                 for (var channel = 0; channel < channels; channel++)
                 {
                     var sample = _chunk[frame * channels + channel];
-                    var at = channel * Buckets + bucket;
+                    var at = channel * Parts + part;
                     _minimums[at] = Math.Min(_minimums[at], sample);
                     _maximums[at] = Math.Max(_maximums[at], sample);
                 }
@@ -99,15 +99,16 @@ public sealed class SoundPeaks
 
             _read += got;
             frames -= got;
-            Volatile.Write(ref _bucketsRead, _read == _frames ? Buckets : (int)(_read * Buckets / _frames));
+            Volatile.Write(ref _partsRead, _read == _frames ? Parts : (int)(_read * Parts / _frames));
         }
 
         return _read < _frames;
     }
 
-    private void Finish()
+    /// <summary>No more is read: what was not is silence.</summary>
+    internal void Finish()
     {
         _read = _frames;
-        Volatile.Write(ref _bucketsRead, Buckets);
+        Volatile.Write(ref _partsRead, Parts);
     }
 }

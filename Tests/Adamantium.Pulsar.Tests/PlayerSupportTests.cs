@@ -90,10 +90,10 @@ public class PlayerSupportTests
         }
 
         using var decoder = SoundFile.Open(new MemoryStream(WavFiles.Floats(48000, 2, samples)));
-        var peaks = SoundPeaks.Of(decoder, 10);
+        var peaks = SoundWaveform.Of(decoder, 10);
         while (peaks.ReadOn(decoder, 300))
         {
-            Assert.That(peaks.BucketsRead, Is.LessThan(10));
+            Assert.That(peaks.PartsRead, Is.LessThan(10));
         }
 
         Assert.That(peaks.IsComplete, Is.True);
@@ -113,7 +113,7 @@ public class PlayerSupportTests
         var samples = Enumerable.Range(0, 1000).Select(frame => .5f + frame / 4000f).ToArray();
 
         using var decoder = SoundFile.Open(new MemoryStream(WavFiles.Floats(48000, 1, samples)));
-        var peaks = SoundPeaks.Of(decoder, 10);
+        var peaks = SoundWaveform.Of(decoder, 10);
         while (peaks.ReadOn(decoder, 1000))
         {
         }
@@ -126,7 +126,7 @@ public class PlayerSupportTests
     public void ThePeaksOfAPartOfNoFrames_AreZero()
     {
         using var decoder = SoundFile.Open(new MemoryStream(WavFiles.Floats(48000, 1, [.5f, .5f])));
-        var peaks = SoundPeaks.Of(decoder, 4);
+        var peaks = SoundWaveform.Of(decoder, 4);
         peaks.ReadOn(decoder, 10);
 
         Assert.That(peaks.MinimumOf(0, 1), Is.Zero);
@@ -139,7 +139,7 @@ public class PlayerSupportTests
     {
         using var decoder = SoundFile.Open(new MemoryStream(WavFiles.Floats(48000, 1, new float[100])));
 
-        Assert.Throws<ArgumentException>(() => new SoundPeaks(2, 10, 100).ReadOn(decoder, 100));
+        Assert.Throws<ArgumentException>(() => new SoundWaveform(2, 10, 100).ReadOn(decoder, 100));
     }
 
     // Most tools of Windows write an 8-bit code page there, not UTF-8.
