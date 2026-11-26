@@ -38,19 +38,3 @@ public sealed partial class SceneEnvironment
     [Bindable]
     public partial float Glow { get; set; }
 }
-
-/// <summary>A sky a scene can have, made by the engine itself.</summary>
-public enum SkyKind
-{
-    /// <summary>No sky: the frame's clear color behind the scene, its ambient light on it.</summary>
-    None,
-
-    /// <summary>A soft studio: light from above, a pale horizon, a darker floor below.</summary>
-    Studio,
-
-    /// <summary>Space: black, scattered with stars and a faint band of the galaxy.</summary>
-    Stars,
-
-    /// <summary>The same light from every side, as under an overcast.</summary>
-    Even
-}
