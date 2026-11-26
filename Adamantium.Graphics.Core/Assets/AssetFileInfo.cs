@@ -21,7 +21,7 @@ public sealed class AssetFileInfo
         { ".ttf", ".otf", ".ttc", ".otc", ".woff", ".woff2" };
 
     private static readonly HashSet<string> SoundExtensions = new(StringComparer.OrdinalIgnoreCase)
-        { ".wav", ".ogg", ".mp3", ".flac" };
+        { ".wav", ".ogg", ".oga", ".mp3", ".flac" };
 
     /// <summary>The extension of a scene file - the engine's <c>SceneFile.FileExtension</c>.</summary>
     public const string SceneExtension = ".ascene";

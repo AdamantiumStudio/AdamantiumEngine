@@ -2,7 +2,7 @@ using Adamantium.Pulsar.Decoding;
 
 namespace Adamantium.Pulsar;
 
-/// <summary>Sound files: WAV, FLAC and MP3, told apart by how they begin.</summary>
+/// <summary>Sound files: WAV, FLAC, MP3, and Ogg of Vorbis or FLAC, told apart by how they begin.</summary>
 public static class SoundFile
 {
     private const int FirstRead = 1 << 16;
@@ -31,6 +31,11 @@ public static class SoundFile
                     return new FlacDecoder(stream);
                 }
 
+                if (signature.SequenceEqual("OggS"u8))
+                {
+                    return OggFile.Open(stream);
+                }
+
                 // Some begin by zeros before the first frame.
                 if (signature.StartsWith("ID3"u8) || Mp3FrameHeader.TryRead(signature, out _) ||
                     signature.IndexOfAnyExcept((byte)0) < 0)
@@ -39,7 +44,7 @@ public static class SoundFile
                 }
             }
 
-            throw new InvalidDataException("It is no WAV, FLAC or MP3 file.");
+            throw new InvalidDataException("It is no WAV, FLAC, MP3 or Ogg file.");
         }
         catch (EndOfStreamException e)
         {
