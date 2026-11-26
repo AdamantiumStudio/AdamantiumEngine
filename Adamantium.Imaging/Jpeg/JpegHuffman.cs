@@ -49,7 +49,11 @@ internal sealed class JpegHuffman
             words[index] = words[index] with { Symbol = symbols[words[index].Symbol] };
         }
 
-        PrefixCode.TryCreate(words, PrefixBitOrder.HighFirst, out _code);
+        if (!PrefixCode.TryCreate(words, PrefixBitOrder.HighFirst, out _code))
+        {
+            throw new InvalidDataException("A JPEG Huffman table is no prefix code.");
+        }
+
         for (var bits = 0; bits < _withValue.Length; bits++)
         {
             var symbol = _code.Decode((ulong)bits << (64 - FastBits), out var length);

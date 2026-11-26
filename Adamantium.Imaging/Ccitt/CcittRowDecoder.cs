@@ -164,11 +164,11 @@ internal sealed class CcittRowDecoder
 
     private int ReadRun(ref CcittBitReader reader, bool black)
     {
-        var codes = black ? CcittCodes.Black : CcittCodes.White;
+        ref readonly var codes = ref black ? ref CcittCodes.Black : ref CcittCodes.White;
         var total = 0;
         while (true)
         {
-            var run = CcittCodes.Decode(codes, reader.Peek(CcittCodes.Bits), out var length);
+            var run = CcittCodes.Decode(in codes, reader.Peek(CcittCodes.Bits), out var length);
             if (run < 0)
             {
                 return -1;

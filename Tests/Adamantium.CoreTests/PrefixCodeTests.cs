@@ -74,6 +74,29 @@ public class PrefixCodeTests
         Assert.That(code.Shortest, Is.Zero);
     }
 
+    // A code a file gives as it likes: 2^14 codewords of 32 bits, apart from their 14th bit on. Each table is as big
+    // as what it holds needs, not 9 bits whatever it holds, which took 170 MB: some hundreds of bytes a codeword, as a
+    // tree of a node a bit takes.
+    [Test]
+    public void LongCodewordsApartEarly_TakeLittle()
+    {
+        var words = Enumerable.Range(0, 1 << 14)
+            .Select(index => new PrefixCodeWord((uint)index << 18 | 0x2AAAA, 32, index)).ToArray();
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        Assert.That(PrefixCode.TryCreate(words, PrefixBitOrder.HighFirst, out var code), Is.True);
+        var taken = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.That(taken, Is.LessThan(16 << 20), "bytes");
+        foreach (var word in words.Where((_, index) => index % 97 == 0))
+        {
+            Assert.That(code.Decode((ulong)word.Code << 32, out var length), Is.EqualTo(word.Symbol));
+            Assert.That(length, Is.EqualTo(32));
+        }
+
+        Assert.That(code.Decode((ulong)(words[5].Code ^ 1) << 32, out _), Is.EqualTo(-1));
+    }
+
     [Test]
     public void WhatIsNoPrefixCode_IsRefused()
     {

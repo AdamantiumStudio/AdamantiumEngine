@@ -17,14 +17,14 @@ internal static class Mp3Huffman
     public static int LinbitsOf(int table) => Linbits[table];
 
     /// <summary>x in the upper four bits, y in the lower; -1 for no code.</summary>
-    public static int DecodePair(ref Mp3Bits bits, int table) => Decode(ref bits, Codes[CodesOf(table)]);
+    public static int DecodePair(ref Mp3Bits bits, int table) => Decode(ref bits, in Codes[CodesOf(table)]);
 
     /// <summary>v, w, x and y, the highest first; -1 for no code.</summary>
-    public static int DecodeQuadruple(ref Mp3Bits bits) => Decode(ref bits, Codes[Quadruples]);
+    public static int DecodeQuadruple(ref Mp3Bits bits) => Decode(ref bits, in Codes[Quadruples]);
 
     private static int CodesOf(int table) => table >= 24 ? 24 : table >= 16 ? 16 : table;
 
-    private static int Decode(ref Mp3Bits bits, PrefixCode code)
+    private static int Decode(ref Mp3Bits bits, in PrefixCode code)
     {
         var value = code.Decode((ulong)bits.Peek() << 32, out var length);
         bits.Position += length;

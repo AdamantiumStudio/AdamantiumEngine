@@ -20,6 +20,8 @@ internal sealed class Jbig2BitReader
 
     public int End => _end;
 
+    public long RemainingBits => (long)_end * 8 - _bit;
+
     /// <summary>The byte the next bit is in, or the next byte after a byte boundary.</summary>
     public int BytePosition => (int)((_bit + 7) >> 3);
 

@@ -47,7 +47,9 @@ internal sealed class Jbig2HuffmanTable
         var line = _code.Decode(reader.Peek(), out var length);
         if (line < 0)
         {
-            throw new InvalidDataException("JBIG2 data has a code its Huffman table does not.");
+            throw new InvalidDataException(reader.RemainingBits < _code.Longest
+                ? "Huffman-coded JBIG2 data ends early."
+                : "JBIG2 data has a code its Huffman table does not.");
         }
 
         reader.Skip(length);

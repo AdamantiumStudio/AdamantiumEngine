@@ -68,7 +68,7 @@ internal static class CcittCodes
     ]);
 
     /// <summary>The symbol of the code the bits that come next begin by, and its length; -1 for none.</summary>
-    public static int Decode(PrefixCode code, int next, out int length) =>
+    public static int Decode(in PrefixCode code, int next, out int length) =>
         code.Decode((ulong)(uint)next << (64 - Bits), out length);
 
     private static PrefixCode Build(string[] terminating, string[] makeUp)

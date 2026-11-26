@@ -19,7 +19,10 @@ public readonly struct PrefixCode
     private const int TableBits = 9;
     private const int LengthBits = 6;
     private const int TableBitsBits = 4;
-    private const int MostSymbols = 1 << 24;
+    /// <summary>How many symbols there can be: 0 to one less.</summary>
+    public const int MostSymbols = 1 << 24;
+    // What a link can say where a table starts: 2^27, less room.
+    private const int MostEntries = 1 << 26;
 
     // A value and its codeword's whole length, of 1 or more: symbol << 6 | length. Another table: -1 - (its start << 4
     // | the bits it is looked up by). 0: no codeword begins so.
@@ -31,7 +34,8 @@ public readonly struct PrefixCode
     // The symbol of a code of one codeword of no bits; -1 for any other.
     private readonly int _onlySymbol;
 
-    private PrefixCode(int[] entries, int firstBits, PrefixBitOrder order, int shortest, bool isComplete, int onlySymbol)
+    private PrefixCode(int[] entries, int firstBits, PrefixBitOrder order, int shortest, int longest, bool isComplete,
+        int onlySymbol)
     {
         _entries = entries;
         _firstBits = firstBits;
@@ -40,6 +44,7 @@ public readonly struct PrefixCode
         _onlySymbol = onlySymbol;
         Order = order;
         Shortest = shortest;
+        Longest = longest;
         IsComplete = isComplete;
     }
 
@@ -47,6 +52,10 @@ public readonly struct PrefixCode
 
     /// <summary>The shortest codeword's length; <see cref="LongestCode"/> for none.</summary>
     public int Shortest { get; }
+
+    /// <summary>The longest codeword's length: where fewer bits are left and none is found, the data ended within a
+    /// codeword.</summary>
+    public int Longest { get; }
 
     /// <summary>Whether every run of bits begins with a codeword.</summary>
     public bool IsComplete { get; }
@@ -98,13 +107,14 @@ public readonly struct PrefixCode
     }
 
     /// <summary>The code of <paramref name="words"/>; false where one is a prefix of another, or one is not of 0 to
-    /// <see cref="LongestCode"/> bits or of a symbol from 0 to 2^24. A single codeword of no bits is a code of one
-    /// symbol, read in no bits.</summary>
+    /// <see cref="LongestCode"/> bits or of a symbol from 0 to 2^24, or the tables would be more than 2^26 entries.
+    /// A single codeword of no bits is a code of one symbol, read in no bits.</summary>
     public static bool TryCreate(ReadOnlySpan<PrefixCodeWord> words, PrefixBitOrder order, out PrefixCode code)
     {
         code = default;
         ulong space = 0;
         var shortest = LongestCode;
+        var longest = 0;
         foreach (var word in words)
         {
             if (word.Length is < 0 or > LongestCode || word.Symbol is < 0 or >= MostSymbols ||
@@ -116,6 +126,7 @@ public readonly struct PrefixCode
             // Of 2^32, the part of all bit runs that begin with it.
             space += 1UL << (LongestCode - word.Length);
             shortest = Math.Min(shortest, word.Length);
+            longest = Math.Max(longest, word.Length);
         }
 
         if (space > 1UL << LongestCode)
@@ -125,7 +136,7 @@ public readonly struct PrefixCode
 
         if (shortest == 0)
         {
-            code = new PrefixCode(new int[2], 1, order, 0, true, words[0].Symbol);
+            code = new PrefixCode(new int[2], 1, order, 0, 0, true, words[0].Symbol);
             return true;
         }
 
@@ -158,7 +169,7 @@ public readonly struct PrefixCode
             }
         }
 
-        code = new PrefixCode(entries.ToArray(), firstBits, order, shortest, space == 1UL << LongestCode, -1);
+        code = new PrefixCode(entries.ToArray(), firstBits, order, shortest, longest, space == 1UL << LongestCode, -1);
         return true;
     }
 
@@ -230,7 +241,20 @@ public readonly struct PrefixCode
             longest = Math.Max(longest, words[sorted[at]].Length - table.Consumed);
         }
 
+        // All of its words' bits, up to 9, at once; but a table further on that would be less than a 16th full looks
+        // up no more than its words need, so that a file's codes that part early make small tables, not one of 512
+        // entries each.
+        var count = table.To - table.From;
         bits = Math.Clamp(longest, 1, TableBits);
+        if (table.LinkAt >= 0 && 1 << bits > 16 * count)
+        {
+            bits = Math.Clamp(BitOperations.Log2((uint)count) + 2, 1, bits);
+        }
+        if (entries.Count + (1 << bits) > MostEntries)
+        {
+            return false;
+        }
+
         var start = entries.Add(1 << bits);
         if (table.LinkAt >= 0)
         {
@@ -316,6 +340,8 @@ public readonly struct PrefixCode
     {
         private int[] _items = new int[1 << (TableBits + 1)];
         private int _count;
+
+        public int Count => _count;
 
         public ref int this[int index] => ref _items[index];
 

@@ -26,6 +26,12 @@ internal static class PrcHuffmanDecoder
             return [];
         }
 
+        // Each leaf's index is its symbol.
+        if (leaves > PrefixCode.MostSymbols)
+        {
+            throw owner.CreateCorruptException($"the Huffman coded {what} has {leaves} leaves, more than {PrefixCode.MostSymbols}");
+        }
+
         var lengthWidth = (int)stream.Read(8);
         if (lengthWidth < 1 || lengthWidth > PrefixCode.LongestCode)
         {
@@ -75,7 +81,9 @@ internal static class PrcHuffmanDecoder
             var leaf = code.Decode(stream.Peek(), out var length);
             if (leaf < 0)
             {
-                throw owner.CreateCorruptException($"the Huffman coded {what} holds a code no leaf has");
+                throw owner.CreateCorruptException(stream.Remaining < code.Longest
+                    ? $"the Huffman coded {what} ends before its codes do"
+                    : $"the Huffman coded {what} holds a code no leaf has");
             }
 
             stream.Skip(length);

@@ -425,7 +425,10 @@ internal sealed class PrcBitReader
     {
         if (!PrcDoubleCodes.TryDecode(Peek(), out var entry))
         {
-            throw CreateCorruptException("a Double starts with no code of the table of frequent doubles and exponents");
+            // Within the bits of the longest code, the data ended.
+            throw RemainingBits < PrcDoubleCodes.LongestCode
+                ? CreateEndOfDataException()
+                : CreateCorruptException("a Double starts with no code of the table of frequent doubles and exponents");
         }
 
         if (entry.Length > RemainingBits)
