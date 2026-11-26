@@ -2,6 +2,7 @@ using Adamantium.Core.Events;
 using Adamantium.Mathematics;
 using Adamantium.Multiverse.Events;
 using Adamantium.Multiverse.Payloads;
+using Serilog;
 
 namespace Adamantium.Multiverse.Input;
 
@@ -16,11 +17,11 @@ public class GamepadHub
 
     private const float ThumbDeadZone = 0.2f;
 
-    /// <summary>How strongly a gamepad taken in says so: lightly, just to be felt.</summary>
-    public const float GreetingStrength = 0.3f;
+    /// <summary>How strongly a gamepad taken in says so: an Elite Series 2 barely makes out half strength.</summary>
+    public const float GreetingStrength = 0.7f;
 
     /// <summary>How long it says so.</summary>
-    public static readonly TimeSpan GreetingLength = TimeSpan.FromMilliseconds(150);
+    public static readonly TimeSpan GreetingLength = TimeSpan.FromMilliseconds(250);
 
     private readonly IGamepadBackend backend;
     private readonly IEventAggregator events;
@@ -116,6 +117,7 @@ public class GamepadHub
             states[slot] = default;
             slots[slot] = null;
             greetedAt[slot] = 0;
+            Log.Logger.Information("Gamepad '{Name}' left slot {Slot}", gamepad.Name, slot);
             events?.GetEvent<GamepadDisconnectedEvent>().Publish(new GamepadPayload(slot, gamepad));
         }
     }
@@ -137,6 +139,7 @@ public class GamepadHub
             }
 
             slots[slot] = gamepad;
+            Log.Logger.Information("Gamepad '{Name}' took slot {Slot}", gamepad.Name, slot);
             Greet(slot);
             events?.GetEvent<GamepadConnectedEvent>().Publish(new GamepadPayload(slot, gamepad));
         }
