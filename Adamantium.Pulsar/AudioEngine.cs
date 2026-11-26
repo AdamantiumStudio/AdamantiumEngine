@@ -140,7 +140,9 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
                 Bus = bus,
                 Sound = data as SoundData,
                 Stream = stream,
-                Settings = settings,
+                Settings = settings.Spatial is { } spatial
+                    ? settings with { Spatial = spatial with { Place = Directed(spatial.Place) } }
+                    : settings,
                 Frames = fade,
                 From = from,
             });
@@ -180,21 +182,23 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
     public void SetPlace(VoiceId voice, in VoicePlace place)
     {
         CheckPlace(place);
-        PostTo(voice, new Command { Kind = CommandKind.SetVoicePlace, Place = place });
+        PostTo(voice, new Command { Kind = CommandKind.SetVoicePlace, Place = Directed(place) });
     }
 
-    /// <summary>Who hears the voices placed in space; until said, one facing +Z with +X on the right, still.</summary>
+    /// <summary>Who hears the voices placed in space; until said, one with +X on the right, still.</summary>
     public void SetListener(in Listener listener)
     {
-        if (!IsFinite(listener.Forward) || !IsFinite(listener.Right) || !IsFinite(listener.Velocity) ||
-            listener.Forward == Vector3F.Zero || listener.Right == Vector3F.Zero)
+        if (!IsFinite(listener.Right) || !IsFinite(listener.Velocity) || listener.Right == Vector3F.Zero)
         {
-            throw new ArgumentOutOfRangeException(nameof(listener), listener, "A listener faces some way, and moves finitely.");
+            throw new ArgumentOutOfRangeException(nameof(listener), listener, "A listener has a right, and moves finitely.");
         }
 
         lock (_lock)
         {
-            Post(new Command { Kind = CommandKind.SetListener, Listener = listener });
+            Post(new Command
+            {
+                Kind = CommandKind.SetListener, Listener = listener with { Right = UnitOf(listener.Right) },
+            });
         }
     }
 
@@ -204,6 +208,17 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
         {
             throw new ArgumentOutOfRangeException(nameof(place), place, "A place is of finite numbers.");
         }
+    }
+
+    /// <summary>Its facing of length 1, or none: the mixer divides by no length.</summary>
+    internal static VoicePlace Directed(in VoicePlace place) =>
+        place.Facing == Vector3F.Zero ? place : place with { Facing = UnitOf(place.Facing) };
+
+    // In double: in float the shortest square to 0, and the longest to infinity.
+    private static Vector3F UnitOf(Vector3F vector)
+    {
+        var length = Math.Sqrt((double)vector.X * vector.X + (double)vector.Y * vector.Y + (double)vector.Z * vector.Z);
+        return new Vector3F((float)(vector.X / length), (float)(vector.Y / length), (float)(vector.Z / length));
     }
 
     /// <summary>Whether it has not ended: paused, unheard and yet to begin are playing too.</summary>

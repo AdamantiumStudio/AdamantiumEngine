@@ -12,7 +12,7 @@ public readonly record struct SoundCone()
     public float OuterGain { get; init; }
 
     /// <summary>The gain of a listener <paramref name="angle"/> degrees off where it faces.</summary>
-    public float GainAt(float angle)
+    internal float GainAt(float angle)
     {
         var inner = InnerAngle / 2;
         var outer = OuterAngle / 2;
@@ -26,7 +26,9 @@ public readonly record struct SoundCone()
 
     internal void Check()
     {
-        if (!(InnerAngle is >= 0 and <= 360 && OuterAngle >= InnerAngle && OuterAngle <= 360 && OuterGain is >= 0 and <= 1))
+        // One of no angle, as a cone left default, would be heard from nowhere.
+        if (!(InnerAngle is >= 0 and <= 360 && OuterAngle >= InnerAngle && OuterAngle is > 0 and <= 360 &&
+            OuterGain is >= 0 and <= 1))
         {
             throw new ArgumentOutOfRangeException(nameof(SoundCone), this, "No such cone.");
         }

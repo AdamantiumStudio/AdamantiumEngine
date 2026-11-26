@@ -378,11 +378,12 @@ internal sealed class Mixer
         }
 
         var toVoice = position / distance;
-        voice.SpacePan = Math.Clamp(Vector3F.Dot(toVoice, _listener.Right) / _listener.Right.Length(), -1, 1);
+        // The listener's right and the facing are of length 1, or the facing none.
+        voice.SpacePan = Math.Clamp(Vector3F.Dot(toVoice, _listener.Right), -1, 1);
         var facing = space.Place.Facing;
         if (facing != Vector3F.Zero)
         {
-            var cosine = Math.Clamp(-Vector3F.Dot(toVoice, facing) / facing.Length(), -1, 1);
+            var cosine = Math.Clamp(-Vector3F.Dot(toVoice, facing), -1, 1);
             voice.SpaceGain *= space.Settings.Cone.GainAt(MathF.Acos(cosine) * DegreesPerRadian);
         }
 

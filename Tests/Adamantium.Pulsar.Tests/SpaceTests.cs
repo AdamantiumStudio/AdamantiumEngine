@@ -74,9 +74,32 @@ public class SpaceTests
     public void TheListenerTurned_HearsItOnTheOtherSide()
     {
         // Turned to face +X, its right ear is to -Z.
-        _engine.SetListener(new Listener { Forward = Vector3F.UnitX, Right = new Vector3F(0, 0, -2) });
+        _engine.SetListener(new Listener { Right = new Vector3F(0, 0, -2) });
 
         Assert.That(HeardAt(new Vector3F(0, 0, 2)), Is.EqualTo(new[] { 0.5f, 0f }).Within(Exact));
+    }
+
+    // Their lengths are taken in double: in float the least go to 0 and the greatest to infinity.
+    [Test]
+    public void DirectionsOfAnyLength_AreDirections()
+    {
+        _engine.SetListener(new Listener { Right = new Vector3F(1e-23f, 0, 0) });
+        Assert.That(HeardAt(new Vector3F(2, 0, 0)), Is.EqualTo(new[] { 0f, 0.5f }).Within(Exact), "a short right");
+        Assert.That(HeardAt(new Vector3F(0, 0, 2)), Is.EqualTo(new[] { 0.5f * Middle, 0.5f * Middle }).Within(Exact),
+            "a short right, ahead");
+
+        _engine.SetListener(new Listener { Right = new Vector3F(-1e30f, 0, 0) });
+        Assert.That(HeardAt(new Vector3F(2, 0, 0)), Is.EqualTo(new[] { 0.5f, 0f }).Within(Exact), "a long right");
+
+        _engine.SetListener(new Listener());
+        var cone = new SoundCone { InnerAngle = 60, OuterAngle = 120, OuterGain = 0.25f };
+        foreach (var length in new[] { 1e-23f, 1e30f })
+        {
+            var away = new VoicePlace { Position = new Vector3F(0, 0, 1), Facing = new Vector3F(0, 0, length) };
+            _engine.Play(Constant(10), new VoiceSettings { Spatial = new SpatialSettings { Place = away, Cone = cone } });
+            Assert.That(Render(Block)[..2], Is.EqualTo(new[] { 0.25f * Middle, 0.25f * Middle }).Within(Exact),
+                $"facing away, {length} long");
+        }
     }
 
     [Test]
@@ -85,7 +108,7 @@ public class SpaceTests
         _engine.Play(Constant(1), new VoiceSettings { Pan = -1, Spatial = At(new Vector3F(1, 0, 0)) });
         Assert.That(Render(1), Is.EqualTo(new[] { 0f, 1f }).Within(Exact));
 
-        _engine = new AudioEngine();
+        Renew(new AudioEngineSettings());
         var stereo = _engine.AddSound(new SoundData(AudioFormat.Default, [.. Enumerable.Repeat(new[] { 1f, 0f }, 10).SelectMany(x => x)]));
         _engine.Play(stereo, new VoiceSettings { Spatial = At(new Vector3F(0, 0, 1)) });
 
@@ -102,7 +125,7 @@ public class SpaceTests
         _engine.Play(Constant(1), new VoiceSettings { Spatial = new SpatialSettings { Place = away, Cone = cone } });
         Assert.That(Render(1), Is.EqualTo(new[] { 0.25f * Middle, 0.25f * Middle }).Within(Exact));
 
-        _engine = new AudioEngine();
+        Renew(new AudioEngineSettings());
         _engine.Play(Constant(1), new VoiceSettings { Spatial = new SpatialSettings { Place = toward, Cone = cone } });
         Assert.That(Render(1), Is.EqualTo(new[] { Middle, Middle }).Within(Exact));
     }
@@ -176,7 +199,7 @@ public class SpaceTests
     [Test]
     public void OfVoicesInSpace_TheNearAreHeard_TheFarUnheard()
     {
-        _engine = new AudioEngine(new AudioEngineSettings { AudibleVoices = 1 });
+        Renew(new AudioEngineSettings { AudibleVoices = 1 });
         _engine.Play(Constant(Rate), new VoiceSettings { Volume = 1, Spatial = At(new Vector3F(500, 0, 0)) });
         _engine.Play(Constant(Rate), new VoiceSettings { Volume = 0.1f, Spatial = At(new Vector3F(-1, 0, 0)) });
 
@@ -195,6 +218,8 @@ public class SpaceTests
                 Throws.InstanceOf<ArgumentOutOfRangeException>(), "linear with no end");
             Assert.That(() => _engine.Play(sound, new VoiceSettings { Spatial = new SpatialSettings { Cone = new SoundCone { InnerAngle = 90, OuterAngle = 60 } } }),
                 Throws.InstanceOf<ArgumentOutOfRangeException>());
+            Assert.That(() => _engine.Play(sound, new VoiceSettings { Spatial = new SpatialSettings { Cone = default } }),
+                Throws.InstanceOf<ArgumentOutOfRangeException>(), "a cone of no angle");
             Assert.That(() => _engine.Play(sound, new VoiceSettings { Spatial = At(new Vector3F(float.NaN, 0, 0)) }),
                 Throws.InstanceOf<ArgumentOutOfRangeException>());
             Assert.That(() => _engine.Play(sound, new VoiceSettings { Spatial = new SpatialSettings { DopplerScale = -1 } }),
@@ -235,6 +260,12 @@ public class SpaceTests
         }
 
         Assert.That(least, Is.Zero);
+    }
+
+    private void Renew(AudioEngineSettings settings)
+    {
+        _engine.Dispose();
+        _engine = new AudioEngine(settings);
     }
 
     private static SpatialSettings At(Vector3F position) => new() { Place = new VoicePlace { Position = position } };

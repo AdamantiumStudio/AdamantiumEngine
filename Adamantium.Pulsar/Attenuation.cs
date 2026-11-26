@@ -17,7 +17,7 @@ public readonly record struct Attenuation()
     public float Rolloff { get; init; } = 1;
 
     /// <summary>The gain at <paramref name="distance"/> metres.</summary>
-    public float GainAt(float distance)
+    internal float GainAt(float distance)
     {
         var clamped = Math.Clamp(distance, Near, Far);
         return Curve switch
