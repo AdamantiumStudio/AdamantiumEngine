@@ -129,7 +129,7 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
 
             // One that begins past its end ends at once.
             var from = (int)Math.Min(data.Frames, data.Format.FramesIn(settings.From));
-            var stream = data is StreamedSound streamed ? new SoundStream(streamed, from, settings.Loops) : null;
+            var stream = data.IsStreamed ? new SoundStream(data, from, settings.Loops) : null;
             if (stream != null)
             {
                 _streamer.Add(stream);

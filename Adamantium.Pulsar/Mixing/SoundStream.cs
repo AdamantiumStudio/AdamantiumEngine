@@ -1,7 +1,9 @@
 namespace Adamantium.Pulsar.Mixing;
 
-/// <summary>The sound one voice plays, read ahead of it: filled on the streamer's thread, read on the output's.</summary>
-internal sealed class SoundStream(StreamedSound sound, int from, bool loops)
+/// <summary>The sound one voice plays, read ahead of it: filled on the streamer's thread, read on the output's. Of a
+/// sound that comes on (<see cref="Sound.ComesOn"/>), as much as there is each time: the voice waits in silence for the
+/// rest.</summary>
+internal sealed class SoundStream(Sound sound, int from, bool loops)
 {
     /// <summary>A power of two: 1.4 s at 48 kHz.</summary>
     public const int Capacity = 1 << 16;
@@ -85,9 +87,16 @@ internal sealed class SoundStream(StreamedSound sound, int from, bool loops)
         var at = (int)(_written & Capacity - 1);
         var wanted = (int)Math.Min(Math.Min(FillFrames, end - _next), Capacity - at);
         var channels = Format.Channels;
+        // Asked before the read: what came before it was said to be all is read by it.
+        var comesOn = sound.ComesOn;
         var got = wanted == 0 ? 0 : _decoder.Read(Samples.AsSpan(at * channels, wanted * channels));
         _next += got;
         Volatile.Write(ref _written, _written + got);
+        if (got < wanted && comesOn)
+        {
+            return false;
+        }
+
         if (got < wanted || (!loops && _next == end))
         {
             Finish();
@@ -113,7 +122,7 @@ internal sealed class SoundStream(StreamedSound sound, int from, bool loops)
 
     private void Begin()
     {
-        _decoder = SoundFile.Open(sound.Storage.Open());
+        _decoder = sound.OpenDecoder();
         if (_decoder.Format != Format)
         {
             throw new InvalidDataException("The sound file is another now than it was.");

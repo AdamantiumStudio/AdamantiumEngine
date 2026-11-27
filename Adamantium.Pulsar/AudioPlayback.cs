@@ -1,3 +1,4 @@
+using Adamantium.Pulsar.Live;
 using Adamantium.Pulsar.Playback;
 
 namespace Adamantium.Pulsar;
@@ -25,6 +26,9 @@ public sealed class AudioPlayback : IDisposable
     // it, at any volume.
     private readonly BusId _bus;
     private ISoundStorage _storage;
+    // Of a station: where it is, and what connects to it and reads it, from when it is opened or told to play again.
+    private Uri _address;
+    private LiveFeed _feed;
     private Sound _sound;
     private SoundId _soundId;
     private VoiceId _voice;
@@ -86,8 +90,23 @@ public sealed class AudioPlayback : IDisposable
     /// </summary>
     public event EventHandler StateChanged;
 
-    /// <summary>It played to the end, and stopped there: a player plays the next.</summary>
+    /// <summary>It played to the end, and stopped there: a player plays the next. A station does not end so: one that
+    /// stops by itself says why in <see cref="Problem"/>.</summary>
     public event EventHandler Ended;
+
+    /// <summary>A station's stream says another title.</summary>
+    public event EventHandler StreamTitleChanged;
+
+    /// <summary>What a station says plays now; null of a file, and until the station says.</summary>
+    public string StreamTitle { get; private set; }
+
+    /// <summary>Why a station stopped by itself - it could not be reached, sends what does not play, or did not come
+    /// back after a drop; null while nothing went wrong.</summary>
+    public string Problem { get; private set; }
+
+    /// <summary>Waited before each connection again after a station drops; null for 1, 2 and 4 s, five in all. For
+    /// tests, which do not wait so long.</summary>
+    internal IReadOnlyList<TimeSpan> ReconnectWaits { get; set; }
 
     public AudioPlaybackState State
     {
@@ -119,7 +138,7 @@ public sealed class AudioPlayback : IDisposable
                     return TimeSpan.Zero;
                 }
 
-                var frame = _state == AudioPlaybackState.Stopped ? _from : Math.Max(0, _engine.PositionOf(_voice));
+                var frame = _voice == default ? _from : Math.Max(0, _engine.PositionOf(_voice));
                 return _sound.Format.DurationOf(frame);
             }
         }
@@ -182,6 +201,33 @@ public sealed class AudioPlayback : IDisposable
         RaiseChanged(changed || ended, ended);
     }
 
+    /// <summary>Stops what played, and opens the station at <paramref name="address"/> - an Icecast or SHOUTcast stream
+    /// of MP3 over HTTP. It connects at once, in the background: <see cref="Info"/> says what it is once it did, and
+    /// <see cref="Play"/> plays it as soon as enough came to play without a gap. A drop is connected again while what came
+    /// plays on. <see cref="Stop"/> and <see cref="Close"/> end any wait.</summary>
+    /// <exception cref="ArgumentException">It is no http or https address.</exception>
+    public void Open(Uri address)
+    {
+        ArgumentNullException.ThrowIfNull(address);
+        if (!address.IsAbsoluteUri || address.Scheme != Uri.UriSchemeHttp && address.Scheme != Uri.UriSchemeHttps)
+        {
+            throw new ArgumentException("A station is at an http or https address.", nameof(address));
+        }
+
+        bool ended;
+        bool changed;
+        lock (_lock)
+        {
+            ObjectDisposedException.ThrowIf(_disposed, this);
+            ended = EndIfDone();
+            changed = Release();
+            _address = address;
+            Connect();
+        }
+
+        RaiseChanged(changed || ended, ended);
+    }
+
     /// <summary>Stops, and lets the sound go.</summary>
     public void Close()
     {
@@ -196,7 +242,9 @@ public sealed class AudioPlayback : IDisposable
         RaiseChanged(changed || ended, ended);
     }
 
-    /// <summary>From where it is: from the beginning, or where it was paused or sought to.</summary>
+    /// <summary>From where it is: from the beginning, or where it was paused or sought to. A station is connected to
+    /// again where it was stopped, and plays once enough came (<see cref="AudioPlaybackState.Connecting"/>); paused, it
+    /// goes on from where it was paused, as long as what came meanwhile lasts.</summary>
     /// <exception cref="InvalidOperationException">No sound is open, or the engine has no voice to spare.</exception>
     public void Play()
     {
@@ -205,16 +253,27 @@ public sealed class AudioPlayback : IDisposable
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            if (_sound == null)
+            if (_sound == null && _address == null)
             {
                 throw new InvalidOperationException("No sound is open to play.");
             }
 
             ended = EndIfDone();
-            changed = _state != AudioPlaybackState.Playing;
+            var before = _state;
             if (_state == AudioPlaybackState.Paused)
             {
                 _engine.SetPaused(_voice, false);
+                _state = AudioPlaybackState.Playing;
+            }
+            else if (_state == AudioPlaybackState.Stopped && _address != null)
+            {
+                if (_feed == null)
+                {
+                    Connect();
+                }
+
+                _state = AudioPlaybackState.Connecting;
+                StepLive();
             }
             else if (_state == AudioPlaybackState.Stopped)
             {
@@ -223,9 +282,11 @@ public sealed class AudioPlayback : IDisposable
                 {
                     throw new InvalidOperationException("The engine has no voice to spare.");
                 }
+
+                _state = AudioPlaybackState.Playing;
             }
 
-            _state = AudioPlaybackState.Playing;
+            changed = _state != before;
             _endCheck.Change(EndCheck, EndCheck);
         }
 
@@ -240,11 +301,17 @@ public sealed class AudioPlayback : IDisposable
         lock (_lock)
         {
             ended = EndIfDone();
-            changed = _state == AudioPlaybackState.Playing;
-            if (changed)
+            changed = _state is AudioPlaybackState.Playing or AudioPlaybackState.Connecting;
+            if (_state == AudioPlaybackState.Playing)
             {
                 _engine.SetPaused(_voice, true);
                 _state = AudioPlaybackState.Paused;
+                _endCheck.Change(Timeout.Infinite, Timeout.Infinite);
+            }
+            else if (_state == AudioPlaybackState.Connecting)
+            {
+                // Not played yet: it is not told to play, and what comes is kept for when it is.
+                _state = AudioPlaybackState.Stopped;
                 _endCheck.Change(Timeout.Infinite, Timeout.Infinite);
             }
         }
@@ -253,7 +320,7 @@ public sealed class AudioPlayback : IDisposable
         RaiseChanged(changed, ended: false);
     }
 
-    /// <summary>Stops, back at the beginning.</summary>
+    /// <summary>Stops, back at the beginning; a station's connection is let go, and made again when it plays.</summary>
     public void Stop()
     {
         bool ended;
@@ -262,6 +329,7 @@ public sealed class AudioPlayback : IDisposable
         {
             ended = EndIfDone();
             changed = StopVoice();
+            DropFeed();
             _from = 0;
         }
 
@@ -277,7 +345,8 @@ public sealed class AudioPlayback : IDisposable
         var failed = false;
         lock (_lock)
         {
-            if (_sound == null)
+            // A station plays as it comes.
+            if (_sound == null || _address != null)
             {
                 return;
             }
@@ -344,7 +413,8 @@ public sealed class AudioPlayback : IDisposable
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
-            storage = _storage ?? throw new InvalidOperationException("No sound is open.");
+            storage = _storage ?? throw new InvalidOperationException(
+                _address != null ? "A station has no waveform: it plays as it comes." : "No sound is open.");
             waveform = new SoundWaveform(_sound.Format.Channels, parts, _sound.Frames);
         }
 
@@ -408,15 +478,145 @@ public sealed class AudioPlayback : IDisposable
     private bool Release()
     {
         var changed = StopVoice();
+        DropFeed();
+        _address = null;
+        StreamTitle = null;
+        Problem = null;
         if (_sound != null)
         {
             _engine.RemoveSound(_soundId);
             _sound = null;
             _storage = null;
-            Info = null;
         }
 
+        Info = null;
         return changed;
+    }
+
+    // Under the lock: a feed of the station, listened to; what it tells of comes on its thread.
+    private void Connect()
+    {
+        Problem = null;
+        _feed = new LiveFeed(_address, ReconnectWaits);
+        _feed.Began += OnFeedBegan;
+        _feed.TitleChanged += OnFeedTitleChanged;
+        _feed.Ended += _ => Refresh();
+        _feed.Start();
+    }
+
+    // Under the lock: the station's connection and its sound let go; what it is, kept to be shown.
+    private void DropFeed()
+    {
+        if (_feed == null)
+        {
+            return;
+        }
+
+        _feed.Dispose();
+        _feed = null;
+        if (_sound != null)
+        {
+            _engine.RemoveSound(_soundId);
+            _sound = null;
+        }
+    }
+
+    private void OnFeedBegan(LiveFeed feed)
+    {
+        lock (_lock)
+        {
+            if (feed != _feed)
+            {
+                return;
+            }
+
+            _sound = new LiveSound(feed);
+            _soundId = _engine.AddSound(_sound);
+            Info = new SoundInfo(feed.Codec, feed.Format, TimeSpan.Zero, feed.Bitrate, default)
+            {
+                IsLive = true,
+                Station = feed.Station,
+            };
+        }
+
+        Raise(StateChanged);
+    }
+
+    private void OnFeedTitleChanged(LiveFeed feed, string title)
+    {
+        lock (_lock)
+        {
+            if (feed != _feed)
+            {
+                return;
+            }
+
+            StreamTitle = title;
+        }
+
+        Raise(StreamTitleChanged);
+    }
+
+    // Under the lock: of a station, plays once enough came, and goes on past six hours with a voice anew; one that will
+    // not come back stops once what came was played, and says why. Whether its state changed.
+    private bool StepLive()
+    {
+        if (_feed == null)
+        {
+            return false;
+        }
+
+        if (_state == AudioPlaybackState.Connecting)
+        {
+            if (_sound != null && _feed.IsReady)
+            {
+                return BeginLiveVoice();
+            }
+
+            if (_feed.HasEnded)
+            {
+                StopLive(_feed.Problem);
+                return true;
+            }
+
+            return false;
+        }
+
+        if (_state != AudioPlaybackState.Playing || _engine.IsPlaying(_voice))
+        {
+            return false;
+        }
+
+        if (_feed.HasEnded)
+        {
+            StopLive(_feed.Problem);
+            return true;
+        }
+
+        return !BeginLiveVoice();
+    }
+
+    // Under the lock: whether a voice of the station began.
+    private bool BeginLiveVoice()
+    {
+        _voice = TryPlayVoice(0, TimeSpan.Zero);
+        if (_voice == default)
+        {
+            StopLive("The engine has no voice to spare.");
+            return false;
+        }
+
+        _state = AudioPlaybackState.Playing;
+        return true;
+    }
+
+    private void StopLive(string problem)
+    {
+        _voice = default;
+        _state = AudioPlaybackState.Stopped;
+        _endCheck.Change(Timeout.Infinite, Timeout.Infinite);
+        DropFeed();
+        Problem = problem;
     }
 
 
@@ -428,7 +628,12 @@ public sealed class AudioPlayback : IDisposable
             return false;
         }
 
-        _engine.Stop(_voice, _state == AudioPlaybackState.Playing ? Fade : TimeSpan.Zero);
+        // Connecting, it has none yet.
+        if (_voice != default)
+        {
+            _engine.Stop(_voice, _state == AudioPlaybackState.Playing ? Fade : TimeSpan.Zero);
+        }
+
         _voice = default;
         _state = AudioPlaybackState.Stopped;
         _endCheck.Change(Timeout.Infinite, Timeout.Infinite);
@@ -438,18 +643,21 @@ public sealed class AudioPlayback : IDisposable
     private void Refresh()
     {
         bool ended;
+        bool changed;
         lock (_lock)
         {
             ended = EndIfDone();
+            changed = !_disposed && StepLive();
         }
 
-        RaiseChanged(ended, ended);
+        RaiseChanged(ended || changed, ended);
     }
 
     // Under the lock: whether the voice ended by itself, at the end of the sound; stopped then, back at the beginning.
+    // A station's does not end so.
     private bool EndIfDone()
     {
-        if (_disposed || _state != AudioPlaybackState.Playing || _engine.IsPlaying(_voice))
+        if (_disposed || _state != AudioPlaybackState.Playing || _address != null || _engine.IsPlaying(_voice))
         {
             return false;
         }

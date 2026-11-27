@@ -8,4 +8,8 @@ public enum AudioPlaybackState
     Playing,
 
     Paused,
+
+    /// <summary>Told to play a station, it connects, and gathers enough to play without a gap: it plays once it has.
+    /// </summary>
+    Connecting,
 }
