@@ -8,7 +8,8 @@ namespace Adamantium.Pulsar;
 /// where that has a <see cref="SynchronizationContext"/>.</summary>
 public sealed class AudioPlayback : IDisposable
 {
-    private static readonly TimeSpan OutputBuffer = TimeSpan.FromMilliseconds(100);
+    // Enough for a player, whose sound is not answered to a key as a game's is; half what a first play waited for.
+    private static readonly TimeSpan OutputBuffer = TimeSpan.FromMilliseconds(50);
     // Of a seek: the old place fades out, the new one in, without a click.
     private static readonly TimeSpan Fade = TimeSpan.FromMilliseconds(10);
     private static readonly TimeSpan EndCheck = TimeSpan.FromMilliseconds(50);
@@ -30,7 +31,6 @@ public sealed class AudioPlayback : IDisposable
     // Of the sound, the frame it plays from while stopped.
     private long _from;
     private float _volume = 1;
-    private bool _isOutputStarted;
     private AudioPlaybackState _state;
     private bool _disposed;
 
@@ -41,7 +41,8 @@ public sealed class AudioPlayback : IDisposable
     {
     }
 
-    /// <summary>To <paramref name="output"/>, started once it first plays, and disposed with it.</summary>
+    /// <summary>To <paramref name="output"/>, started at once - the first play is heard as soon as any - and disposed
+    /// with it.</summary>
     public AudioPlayback(IAudioOutput output)
         : this(new AudioEngine(), output)
     {
@@ -64,6 +65,21 @@ public sealed class AudioPlayback : IDisposable
         engine.KeepPlayed(_bus);
         _context = SynchronizationContext.Current;
         _endCheck = new Timer(_ => Refresh(), null, Timeout.Infinite, Timeout.Infinite);
+        // The device is kept until disposed: a play, a pause or a new sound is heard at once, and without a click.
+        if (output != null)
+        {
+            try
+            {
+                output.Start(engine);
+            }
+            catch
+            {
+                _endCheck.Dispose();
+                output.Dispose();
+                engine.Dispose();
+                throw;
+            }
+        }
     }
 
     /// <summary>Playing, paused or stopped; raised after a change, and when it ends by itself before <see cref="Ended"/>.
@@ -202,7 +218,6 @@ public sealed class AudioPlayback : IDisposable
             }
             else if (_state == AudioPlaybackState.Stopped)
             {
-                StartOutput();
                 _voice = TryPlayVoice(_from, TimeSpan.Zero);
                 if (_voice == default)
                 {
@@ -404,15 +419,6 @@ public sealed class AudioPlayback : IDisposable
         return changed;
     }
 
-    private void StartOutput()
-    {
-        // The device is kept until disposed: a pause or a new sound goes on at once, and without a click.
-        if (_output != null && !_isOutputStarted)
-        {
-            _output.Start(_engine);
-            _isOutputStarted = true;
-        }
-    }
 
     // Whether it was playing or paused.
     private bool StopVoice()
