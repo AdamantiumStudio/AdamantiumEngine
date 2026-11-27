@@ -30,6 +30,8 @@ internal sealed class VorbisDecoder : ISoundDecoder
     private readonly int[] _speakerOrder;
     private readonly int _audioPage;
     private readonly long _start;
+    // Of the stream, where its sound ends: never, of one read forward.
+    private readonly long _end;
     private readonly float[][] _spectra;
     private float[][] _previous;
     private float[][] _current;
@@ -161,9 +163,10 @@ internal sealed class VorbisDecoder : ISoundDecoder
             }
 
             _start = Math.Max(0, _ready.At);
-            var last = LastGranule();
-            Frames = Math.Max(0, last - _start);
-            Loop = comments.LoopWithin(Frames);
+            // Read forward, as a station is, how long it is is not known: it plays on as long as it comes.
+            Frames = _ogg.IsForward ? -1 : Math.Max(0, LastGranule() - _start);
+            Loop = _ogg.IsForward ? null : comments.LoopWithin(Frames);
+            _end = _ogg.IsForward ? long.MaxValue : _start + Frames;
             Tags = comments.Tags;
             _position = _start;
         }
@@ -189,7 +192,7 @@ internal sealed class VorbisDecoder : ISoundDecoder
 
     public int Read(Span<float> samples)
     {
-        var wanted = (int)Math.Min(samples.Length / _channels, _start + Frames - _position);
+        var wanted = (int)Math.Min(samples.Length / _channels, _end - _position);
         var done = 0;
         while (done < wanted)
         {
@@ -212,6 +215,11 @@ internal sealed class VorbisDecoder : ISoundDecoder
     // From a page whose granule is enough before the one sought; the samples before it, decoded, passed by.
     public void Seek(long frame)
     {
+        if (_ogg.IsForward)
+        {
+            throw new InvalidDataException("A Vorbis stream that comes as it plays is not sought in.");
+        }
+
         if (frame < 0 || frame > Frames)
         {
             throw new InvalidDataException($"The Vorbis stream has no frame {frame}.");
@@ -367,8 +375,7 @@ internal sealed class VorbisDecoder : ISoundDecoder
         }
 
         DecodePacket(packet);
-        var page = _ogg.NextPage - 1;
-        var isLast = _ogg.Pages[page].IsLast;
+        var isLast = _ogg.CurrentPage.IsLast;
         if (granule < 0 || _ready.IsPlaced && isLast)
         {
             return true;

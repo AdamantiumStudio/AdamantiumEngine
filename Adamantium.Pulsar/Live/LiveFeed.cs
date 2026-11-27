@@ -209,13 +209,33 @@ internal sealed class LiveFeed : IDisposable
         return false;
     }
 
+    // "Artist - Title", as ICY's titles are; the one where the other is not said.
+    private static string TitleOf(SoundTags tags) => (tags.Artist, tags.Title) switch
+    {
+        ({ Length: > 0 } artist, { Length: > 0 } title) => $"{artist} - {title}",
+        (_, { Length: > 0 } title) => title,
+        ({ Length: > 0 } artist, _) => artist,
+        _ => null,
+    };
+
     // Decodes what comes into the samples, waiting for room as they are taken, until the stream ends.
     private void ReadOn(ISoundDecoder decoder, CancellationToken token)
     {
         var channels = Format.Channels;
         var chunk = new float[ChunkFrames * channels];
+        var tags = default(SoundTags);
         while (!token.IsCancellationRequested)
         {
+            // An Ogg station says the song in the tags of each link of its chain, where others say it by ICY.
+            if (decoder.Tags != tags)
+            {
+                tags = decoder.Tags;
+                if (TitleOf(tags) is { } title)
+                {
+                    TitleChanged?.Invoke(this, title);
+                }
+            }
+
             while (Capacity - (_written - Volatile.Read(ref _read)) < ChunkFrames)
             {
                 if (token.WaitHandle.WaitOne(RoomWait))

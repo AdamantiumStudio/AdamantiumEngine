@@ -58,8 +58,9 @@ public static class SoundFile
         }
     }
 
-    /// <summary>The decoder of a stream read only forward, as it comes - a station's: of MP3; how long it is is not
-    /// known, and it is not sought in. It disposes the stream with itself.</summary>
+    /// <summary>The decoder of a stream read only forward, as it comes - a station's: of MP3, or Ogg of Vorbis or Opus,
+    /// its chain's links one after another; how long it is is not known, and it is not sought in. It disposes the
+    /// stream with itself.</summary>
     /// <exception cref="InvalidDataException">It is no stream of sound that can be played as it comes; the stream is
     /// disposed.</exception>
     internal static ISoundDecoder OpenForward(Stream stream)
@@ -71,6 +72,11 @@ public static class SoundFile
             if (reader.Has(4) && (reader.Ahead(4).SequenceEqual("RIFF"u8) || reader.Ahead(4).SequenceEqual("fLaC"u8)))
             {
                 throw new InvalidDataException("A WAV or FLAC stream is not played as it comes.");
+            }
+
+            if (reader.Has(4) && reader.Ahead(4).SequenceEqual("OggS"u8))
+            {
+                return new OggChainDecoder(reader);
             }
 
             return new Mp3StreamDecoder(reader);

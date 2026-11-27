@@ -49,6 +49,22 @@ public class LiveStreamTests
         Assert.That(_playback.Position, Is.GreaterThan(TimeSpan.Zero));
     }
 
+    // Its song said by the tags of its chain's link, as Icecast's Ogg stations say it; link after link played on.
+    [Test]
+    public void AnOggStation_IsHeard_AndSaysItsSong()
+    {
+        using var station = new StationServer(Resource("tags.tagged.opus")) { ContentType = "audio/ogg", SendsIcyTitles = false };
+
+        _playback.Open(station.Address);
+        _playback.Play();
+        WaitUntil(() => _playback.State == AudioPlaybackState.Playing);
+
+        Assert.That(_playback.Info.Codec, Is.EqualTo("Opus"));
+        Assert.That(_playback.StreamTitle, Does.Contain("Утро в лесу"));
+        Assert.That(Loudest(Render(50)), Is.GreaterThan(0.001f));
+        Assert.That(_playback.State, Is.EqualTo(AudioPlaybackState.Playing));
+    }
+
     // Told once each time the stream says another.
     [Test]
     public void TheTitles_AreTold()
@@ -177,9 +193,11 @@ public class LiveStreamTests
         Assert.Throws<ArgumentException>(() => _playback.Open(new Uri(address, UriKind.RelativeOrAbsolute)));
     }
 
-    private static byte[] Mp3(string name)
+    private static byte[] Mp3(string name) => Resource("mp3." + name + ".mp3");
+
+    private static byte[] Resource(string name)
     {
-        using var resource = typeof(LiveStreamTests).Assembly.GetManifestResourceStream("mp3." + name + ".mp3");
+        using var resource = typeof(LiveStreamTests).Assembly.GetManifestResourceStream(name);
         using var copy = new MemoryStream();
         resource.CopyTo(copy);
         return copy.ToArray();

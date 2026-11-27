@@ -34,6 +34,10 @@ internal sealed class StationServer : IDisposable
 
     public string ContentType { get; init; } = "audio/mpeg";
 
+    /// <summary>Whether it puts ICY's titles in when asked; an Ogg station says its songs in its links' tags instead.
+    /// </summary>
+    public bool SendsIcyTitles { get; init; } = true;
+
     /// <summary>Of each of the first <see cref="Drops"/> connections, the bytes sent before it is closed.</summary>
     public long DropAfter { get; init; } = long.MaxValue;
 
@@ -93,7 +97,7 @@ internal sealed class StationServer : IDisposable
                     return;
                 }
 
-                var withTitles = request.Contains("icy-metadata: 1", StringComparison.OrdinalIgnoreCase);
+                var withTitles = SendsIcyTitles && request.Contains("icy-metadata: 1", StringComparison.OrdinalIgnoreCase);
                 var headers = $"HTTP/1.1 200 OK\r\nContent-Type: {ContentType}\r\nicy-name: {Name}\r\nicy-br: 128\r\n" +
                     (withTitles ? $"icy-metaint: {Interval}\r\n" : "") + "Connection: close\r\n\r\n";
                 await stream.WriteAsync(Encoding.ASCII.GetBytes(headers), _stopping.Token);
