@@ -55,7 +55,8 @@ internal sealed class OggChainDecoder : ISoundDecoder
         _reader.Dispose();
     }
 
-    // The link after the one that ended, where one began and is of the same format: whether there is.
+    // The link after the one that ended, where one began and is of the same format and codec: whether there is. One of
+    // another is let go, the one that ended kept.
     private bool NextLink()
     {
         if (!_ogg.HasNextLink)
@@ -63,17 +64,25 @@ internal sealed class OggChainDecoder : ISoundDecoder
             return false;
         }
 
-        _link.Dispose();
+        ISoundDecoder next;
         try
         {
-            _link = OpenLink();
+            next = OpenLink();
         }
         catch (InvalidDataException)
         {
             return false;
         }
 
-        return _link.Format == Format;
+        if (next.Format != Format || next.Codec != Codec)
+        {
+            next.Dispose();
+            return false;
+        }
+
+        _link.Dispose();
+        _link = next;
+        return true;
     }
 
     // By its first page's body, ahead whole once the link is found: past the header of 27 bytes and its segments.

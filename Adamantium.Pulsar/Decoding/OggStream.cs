@@ -270,8 +270,9 @@ internal sealed class OggStream : IDisposable
     {
         while (TryPeekPage(_reader, out var page, out var serial))
         {
-            // A first page after this one's pages is the next link's, whatever its number.
-            if (page.IsFirst && (serial != Serial || _next > 0))
+            // A first page after this one's is the next link's - of a number of its own, or of this one's again - but
+            // where it comes right after this one's first: a grouped stream's first pages are all first (RFC 3533).
+            if (page.IsFirst && (serial == Serial ? _next > 0 : _next > 1))
             {
                 HasNextLink = true;
                 return false;

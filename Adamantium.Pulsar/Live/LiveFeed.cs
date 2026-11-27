@@ -25,6 +25,8 @@ internal sealed class LiveFeed : IDisposable
     private bool _hasEnded;
     private string _problem;
     private int _leaving;
+    // Of the feed's thread: the frames the connection now gave.
+    private long _cameThisConnection;
 
     /// <param name="waits">Before each connection again, after a drop; the default's are 1, 2 and 4 s, five in all.
     /// </param>
@@ -141,6 +143,7 @@ internal sealed class LiveFeed : IDisposable
         var problem = (string)null;
         while (!token.IsCancellationRequested)
         {
+            _cameThisConnection = 0;
             try
             {
                 using var connection = LiveConnection.Open(_address, title => TitleChanged?.Invoke(this, title), token);
@@ -150,8 +153,6 @@ internal sealed class LiveFeed : IDisposable
                     break;
                 }
 
-                // It came back: the next drop has all its tries.
-                tries = 0;
                 ReadOn(decoder, token);
                 problem = "The station stopped sending.";
             }
@@ -159,15 +160,23 @@ internal sealed class LiveFeed : IDisposable
             {
                 return;
             }
-            catch (Exception e) when (e is HttpRequestException or IOException or InvalidDataException or
-                OperationCanceledException)
+            catch (Exception e)
             {
+                // Whatever it was - the network, damage a decoder could not take, what one told of it did - it is a
+                // drop: this thread is the feed's alone, and takes no application down.
                 problem = e is OperationCanceledException ? "The station did not answer." : e.Message;
                 if (e is InvalidDataException && Format == default)
                 {
                     // What it sends is no sound that plays: connecting again sends the same.
                     break;
                 }
+            }
+
+            // It came back, as long as it plays on before it is ready: the next drop has all its tries. One that
+            // answers and closes again and again is not back.
+            if (_readyFrames > 0 && _cameThisConnection >= _readyFrames)
+            {
+                tries = 0;
             }
 
             if (token.IsCancellationRequested || tries == Waits.Count || token.WaitHandle.WaitOne(Waits[tries++]))
@@ -200,7 +209,7 @@ internal sealed class LiveFeed : IDisposable
             return true;
         }
 
-        if (decoder.Format == Format)
+        if (decoder.Format == Format && decoder.Codec == Codec)
         {
             return true;
         }
@@ -259,6 +268,7 @@ internal sealed class LiveFeed : IDisposable
             }
 
             Volatile.Write(ref _written, _written + got);
+            _cameThisConnection += got;
         }
     }
 }

@@ -141,6 +141,73 @@ public class LiveStreamTests
         Assert.That(station.Connections, Is.EqualTo(1));
     }
 
+    // Opened and not played, it connects: one that can not be reached is said all the same.
+    [Test]
+    public void NoStationThere_OpenedAndNotPlayed_IsSaid()
+    {
+        var station = new StationServer(Mp3("cbr128"));
+        var address = station.Address;
+        station.Dispose();
+        var changes = 0;
+        _playback.StateChanged += (_, _) => Interlocked.Increment(ref changes);
+
+        _playback.Open(address);
+        WaitUntil(() => _playback.Problem != null);
+
+        Assert.That(SpinWait.SpinUntil(() => Volatile.Read(ref changes) > 0, Patience), Is.True);
+        Assert.That(_playback.State, Is.EqualTo(AudioPlaybackState.Stopped));
+    }
+
+    // One that answers and closes within a second, again and again, does not come back as it should: it is given up.
+    [Test]
+    public void AStationThatClosesEachConnectionSoon_IsGivenUp()
+    {
+        using var station = new StationServer(Mp3("cbr128")) { Drops = int.MaxValue, DropAfter = 12_000 };
+
+        _playback.Open(station.Address);
+        _playback.Play();
+        RenderInTimeUntil(() => _playback.State == AudioPlaybackState.Stopped);
+
+        Assert.That(_playback.Problem, Is.Not.Null);
+    }
+
+    // Another opened, the song of the one before is said to be gone.
+    [Test]
+    public void AnotherOpened_TheTitleIsCleared()
+    {
+        using var station = new StationServer(Mp3("cbr128"));
+        _playback.Open(station.Address);
+        _playback.Play();
+        WaitUntil(() => _playback.StreamTitle != null);
+        var cleared = new ManualResetEventSlim();
+        _playback.StreamTitleChanged += (_, _) =>
+        {
+            if (_playback.StreamTitle == null)
+            {
+                cleared.Set();
+            }
+        };
+
+        _playback.Open(Mp3Storage());
+
+        Assert.That(cleared.Wait(Patience), Is.True);
+    }
+
+    // What an application does when told is its own: a handler that throws does not end the application.
+    [Test]
+    public void AHandlerThatThrows_DoesNotEndTheApplication()
+    {
+        using var station = new StationServer(Mp3("cbr128"));
+        _playback.StreamTitleChanged += (_, _) => throw new InvalidOperationException("The application's own.");
+
+        _playback.Open(station.Address);
+        _playback.Play();
+        WaitUntil(() => _playback.StreamTitle != null);
+        Thread.Sleep(500);
+
+        Assert.That(_playback.State, Is.Not.EqualTo(AudioPlaybackState.Stopped).Or.Property(nameof(AudioPlayback.Problem)).Not.Null);
+    }
+
     [Test]
     public void NoStationThere_IsSaid()
     {
@@ -195,6 +262,8 @@ public class LiveStreamTests
 
     private static byte[] Mp3(string name) => Resource("mp3." + name + ".mp3");
 
+    private static SoundMemoryStorage Mp3Storage() => new(Mp3("cbr128"));
+
     private static byte[] Resource(string name)
     {
         using var resource = typeof(LiveStreamTests).Assembly.GetManifestResourceStream(name);
@@ -220,6 +289,19 @@ public class LiveStreamTests
         }
 
         return all;
+    }
+
+    // As a device takes blocks, in time: the station's waits between connections are of the clock.
+    private void RenderInTimeUntil(Func<bool> condition)
+    {
+        var clock = System.Diagnostics.Stopwatch.StartNew();
+        while (!condition() && clock.Elapsed < Patience)
+        {
+            Render(1);
+            Thread.Sleep(2);
+        }
+
+        Assert.That(condition(), Is.True);
     }
 
     private void RenderUntil(Func<bool> condition)

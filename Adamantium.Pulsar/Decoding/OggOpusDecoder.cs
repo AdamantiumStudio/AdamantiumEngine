@@ -29,9 +29,11 @@ internal sealed class OggOpusDecoder : ISoundDecoder
     private readonly DecodedSamples _ready;
     private long _position;
     private bool _isPlaced;
-    // Read forward, the first granule was on the first page of sound: the link is heard from its beginning, pre-skip and
-    // all, not joined in its middle.
+    // Read forward, the first granule was on the page right after the headers, by their numbers: the link is heard from
+    // its beginning, pre-skip and all, not joined in its middle, as a station's listener is sent the headers and then
+    // the page that plays now.
     private bool _isFromItsBeginning;
+    private readonly uint _headersEnd;
 
     /// <param name="ogg">At its first packet; disposed with it, or where it is refused.</param>
     public OggOpusDecoder(OggStream ogg)
@@ -81,6 +83,7 @@ internal sealed class OggOpusDecoder : ISoundDecoder
 
             var comments = VorbisComments.Read(tags[8..]);
             _audioPage = ogg.NextPage;
+            _headersEnd = ogg.CurrentPage.Sequence;
             _preSkip = preSkip;
             Tags = comments.Tags;
             _ready = new DecodedSamples(_channels, LongestPacket);
@@ -249,7 +252,7 @@ internal sealed class OggOpusDecoder : ISoundDecoder
             // cut and not. A continued one's, after a loss, are placed as if none were cut.
             // Read forward, no page before is kept to say it.
             var info = _ogg.CurrentPage;
-            _isFromItsBeginning = _ogg.IsForward && _ogg.NextPage - 1 == _audioPage;
+            _isFromItsBeginning = _ogg.IsForward && info.Sequence == _headersEnd + 1;
             var before = info.IsLast && !info.IsContinued && !_ogg.IsForward ? GranuleBefore(_ogg.NextPage - 1, false) : -1;
             _ready.Place(before > granule - _ready.Count && before <= granule ? before : granule - _ready.Count);
         }

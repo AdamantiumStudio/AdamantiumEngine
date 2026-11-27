@@ -73,6 +73,51 @@ public class OggStreamTests
         Assert.That(streamed.Max(Math.Abs), Is.GreaterThan(0.01f));
     }
 
+    // A grouped stream has its streams' first pages all first (RFC 3533): another's first page after the one played is
+    // not the next link.
+    [Test]
+    public void AnotherStreamsFirstPage_InAGroup_IsNoNextLink()
+    {
+        var file = Read("ogg.stereo44.ogg");
+        var other = Read("ogg.mono22.ogg");
+        var otherFirst = other.AsSpan(0, OggPages.Of(other)[1]).ToArray();
+        BinaryPrimitives.WriteUInt32LittleEndian(otherFirst.AsSpan(14), 0x5EED1234);
+        OggPages.Seal(otherFirst, 0);
+        var second = OggPages.Of(file)[1];
+        byte[] grouped = [.. file.AsSpan(0, second), .. otherFirst, .. file.AsSpan(second)];
+
+        var streamed = ReadAll(SoundFile.OpenForward(new ForwardOnlyStream(grouped)), out var format);
+
+        Assert.That(streamed.Length / format.Channels, Is.GreaterThanOrEqualTo(SoundFile.Read(file).Frames));
+    }
+
+    // Icecast sends a joining listener the headers, then the page that plays now, numbered as it is: what is heard
+    // begins where that page's packets do, nothing of them cut as a link's beginning is.
+    [Test]
+    public void AnOpusStreamJoinedInTheMiddle_CutsNothingOfIt()
+    {
+        // Of ffmpeg: three seconds of a sine at 32 kbit/s, a page each 40 ms.
+        var file = Read("opus.paged32.opus");
+        var pages = OggPages.Of(file);
+        var firstAudio = pages.First(page => OggPages.GranuleOf(file, page) > 0);
+        var index = pages.Count / 2;
+        while ((file[pages[index] + 5] & 1) != 0)
+        {
+            index++;
+        }
+
+        Assert.That(pages[index], Is.GreaterThan(pages[pages.IndexOf(firstAudio) + 1]), "joined in the middle");
+
+        var whole = ReadAll(SoundFile.OpenForward(new ForwardOnlyStream(file)), out var format);
+        var joined = ReadAll(SoundFile.OpenForward(new ForwardOnlyStream(
+            [.. file.AsSpan(0, firstAudio), .. file.AsSpan(pages[index])])), out _);
+
+        // The whole begins after its pre-skip, at granule 312 of a stream begun at 0; the joined at the page before's.
+        var preSkip = BinaryPrimitives.ReadUInt16LittleEndian(file.AsSpan(pages[0] + 28 + 10));
+        var before = OggPages.GranuleOf(file, pages[index - 1]);
+        Assert.That(joined.Length / format.Channels, Is.EqualTo(whole.Length / format.Channels - (before - preSkip)));
+    }
+
     [Test]
     public void AnOggStream_IsNotSoughtIn()
     {

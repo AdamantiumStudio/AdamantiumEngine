@@ -190,7 +190,7 @@ public sealed class AudioPlayback : IDisposable
             ObjectDisposedException.ThrowIf(_disposed, this);
             // Another may have been opened meanwhile.
             ended = EndIfDone();
-            changed = Release();
+            changed = Release(out _);
             _storage = storage;
             _sound = sound;
             _soundId = _engine.AddSound(sound);
@@ -201,10 +201,11 @@ public sealed class AudioPlayback : IDisposable
         RaiseChanged(changed || ended, ended);
     }
 
-    /// <summary>Stops what played, and opens the station at <paramref name="address"/> - an Icecast or SHOUTcast stream
-    /// of MP3 over HTTP. It connects at once, in the background: <see cref="Info"/> says what it is once it did, and
-    /// <see cref="Play"/> plays it as soon as enough came to play without a gap. A drop is connected again while what came
-    /// plays on. <see cref="Stop"/> and <see cref="Close"/> end any wait.</summary>
+    /// <summary>Stops what played, and opens the station at <paramref name="address"/> - an Icecast or SHOUTcast v2
+    /// stream over HTTP of MP3, or of Ogg Vorbis or Opus. It connects at once, in the background: <see cref="Info"/> says
+    /// what it is once it did, and <see cref="Play"/> plays it as soon as enough came to play without a gap. A drop is
+    /// connected again while what came plays on; one that can not be reached is said by <see cref="Problem"/>.
+    /// <see cref="Stop"/> and <see cref="Close"/> end any wait.</summary>
     /// <exception cref="ArgumentException">It is no http or https address.</exception>
     public void Open(Uri address)
     {
@@ -216,16 +217,18 @@ public sealed class AudioPlayback : IDisposable
 
         bool ended;
         bool changed;
+        bool titleCleared;
         lock (_lock)
         {
             ObjectDisposedException.ThrowIf(_disposed, this);
             ended = EndIfDone();
-            changed = Release();
+            changed = Release(out titleCleared);
             _address = address;
             Connect();
         }
 
         RaiseChanged(changed || ended, ended);
+        RaiseTitleCleared(titleCleared);
     }
 
     /// <summary>Stops, and lets the sound go.</summary>
@@ -233,13 +236,15 @@ public sealed class AudioPlayback : IDisposable
     {
         bool ended;
         bool changed;
+        bool titleCleared;
         lock (_lock)
         {
             ended = EndIfDone();
-            changed = Release();
+            changed = Release(out titleCleared);
         }
 
         RaiseChanged(changed || ended, ended);
+        RaiseTitleCleared(titleCleared);
     }
 
     /// <summary>From where it is: from the beginning, or where it was paused or sought to. A station is connected to
@@ -260,6 +265,7 @@ public sealed class AudioPlayback : IDisposable
 
             ended = EndIfDone();
             var before = _state;
+            var problem = Problem;
             if (_state == AudioPlaybackState.Paused)
             {
                 _engine.SetPaused(_voice, false);
@@ -286,8 +292,12 @@ public sealed class AudioPlayback : IDisposable
                 _state = AudioPlaybackState.Playing;
             }
 
-            changed = _state != before;
-            _endCheck.Change(EndCheck, EndCheck);
+            // A station that could not be played at once is said as a change, though it stays stopped.
+            changed = _state != before || Problem != problem;
+            if (_state is AudioPlaybackState.Playing or AudioPlaybackState.Connecting)
+            {
+                _endCheck.Change(EndCheck, EndCheck);
+            }
         }
 
         RaiseChanged(ended, ended);
@@ -431,7 +441,7 @@ public sealed class AudioPlayback : IDisposable
                 return;
             }
 
-            Release();
+            Release(out _);
             _disposed = true;
         }
 
@@ -474,10 +484,12 @@ public sealed class AudioPlayback : IDisposable
         return _engine.Play(_soundId, new VoiceSettings { From = from, FadeIn = fadeIn, Bus = _bus });
     }
 
-    // Stops, and lets the sound go; whether it was playing or paused.
-    private bool Release()
+    // Stops, and lets the sound go; whether that changed what is said - it was playing or paused, or a station was said -
+    // and whether a station's title was said, now cleared.
+    private bool Release(out bool titleCleared)
     {
-        var changed = StopVoice();
+        var changed = StopVoice() || _address != null && (Info != null || Problem != null);
+        titleCleared = StreamTitle != null;
         DropFeed();
         _address = null;
         StreamTitle = null;
@@ -564,6 +576,18 @@ public sealed class AudioPlayback : IDisposable
         if (_feed == null)
         {
             return false;
+        }
+
+        // Opened and not played - or no longer told to play - it will not come back: said all the same.
+        if (_state == AudioPlaybackState.Stopped)
+        {
+            if (!_feed.HasEnded)
+            {
+                return false;
+            }
+
+            StopLive(_feed.Problem);
+            return true;
         }
 
         if (_state == AudioPlaybackState.Connecting)
@@ -679,6 +703,14 @@ public sealed class AudioPlayback : IDisposable
         if (ended)
         {
             Raise(Ended);
+        }
+    }
+
+    private void RaiseTitleCleared(bool cleared)
+    {
+        if (cleared)
+        {
+            Raise(StreamTitleChanged);
         }
     }
 
