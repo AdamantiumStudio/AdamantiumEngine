@@ -246,6 +246,59 @@ public class PlayerSupportTests
         }
     }
 
+    // A full-scale sine is about 0.707 loud on average, whatever its peaks; a square of half scale, 0.5.
+    [Test]
+    public void TheLoudnessOfEachPart_IsTheRootOfItsMeanSquare()
+    {
+        var samples = new float[2 * 4800];
+        for (var frame = 0; frame < 4800; frame++)
+        {
+            samples[2 * frame] = MathF.Sin(frame * 2 * MathF.PI / 48);
+            samples[2 * frame + 1] = frame % 2 == 0 ? .5f : -.5f;
+        }
+
+        using var decoder = SoundFile.Open(new MemoryStream(WavFiles.Floats(48000, 2, samples)));
+        var waveform = SoundWaveform.Of(decoder, 4);
+        while (waveform.ReadOn(decoder, 1000))
+        {
+        }
+
+        for (var part = 0; part < 4; part++)
+        {
+            Assert.That(waveform.LoudnessOf(0, part), Is.EqualTo(1 / MathF.Sqrt(2)).Within(1e-3));
+            Assert.That(waveform.LoudnessOf(1, part), Is.EqualTo(.5f).Within(1e-6));
+        }
+    }
+
+    // A part not read yet, or of no frames, is silent.
+    [Test]
+    public void TheLoudnessOfAPartOfNoFrames_IsZero()
+    {
+        using var decoder = SoundFile.Open(new MemoryStream(WavFiles.Floats(48000, 1, [.5f, .5f])));
+        var waveform = SoundWaveform.Of(decoder, 4);
+        Assert.That(waveform.LoudnessOf(0, 2), Is.Zero);
+        waveform.ReadOn(decoder, 10);
+
+        Assert.That(waveform.LoudnessOf(0, 1), Is.Zero);
+        Assert.That(waveform.LoudnessOf(0, 2), Is.EqualTo(.5f));
+    }
+
+    // Shorter than it said: the rest of the part cut short is silence, not more of what was read.
+    [Test]
+    public void ThePartCutShort_IsAsLoudAsItsSilenceMakesIt()
+    {
+        var samples = Enumerable.Repeat(1f, 1300).ToArray();
+        using var decoder = new ShortDecoder(SoundFile.Open(new MemoryStream(WavFiles.Floats(48000, 1, samples))), 4800);
+        var waveform = SoundWaveform.Of(decoder, 4);
+        while (waveform.ReadOn(decoder, 1000))
+        {
+        }
+
+        Assert.That(waveform.LoudnessOf(0, 0), Is.EqualTo(1f));
+        Assert.That(waveform.LoudnessOf(0, 1), Is.EqualTo(MathF.Sqrt(100f / 1200)).Within(1e-6));
+        Assert.That(waveform.LoudnessOf(0, 3), Is.Zero);
+    }
+
     // The least of a part all above zero is above zero too.
     [Test]
     public void ThePeaksOfAPartOfOneSign_AreItsOwn()
