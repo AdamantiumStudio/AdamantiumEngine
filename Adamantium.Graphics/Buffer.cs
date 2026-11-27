@@ -241,12 +241,12 @@ namespace Adamantium.Graphics
         }
 
         /// <summary>
-        /// Copies the content of this buffer from GPU memory to an array of data on CPU memory using a specific staging resource.
+        /// Copies the content of this buffer from GPU memory to a structure on CPU memory.
         /// </summary>
         /// <typeparam name="TData">The type of the T data.</typeparam>
-        /// <param name="stagingTexture">The staging buffer used to transfer the buffer.</param>
         /// <param name="toData">To data.</param>
-        /// <exception cref="System.ArgumentException">When strides is different from optimal strides, and TData is not the same size as the pixel format, or Width * Height != toData.Length</exception>
+        /// <exception cref="System.ArgumentException"><typeparamref name="TData"/> is larger than the buffer.</exception>
+        /// <exception cref="System.InvalidOperationException">The buffer is not host-visible.</exception>
         /// <remarks>
         /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>.
         /// </remarks>
@@ -258,12 +258,12 @@ namespace Adamantium.Graphics
         }
 
         /// <summary>
-        /// Copies the content of this buffer from GPU memory to an array of data on CPU memory using a specific staging resource.
+        /// Copies the content of this buffer from GPU memory to an array of data on CPU memory.
         /// </summary>
         /// <typeparam name="TData">The type of the T data.</typeparam>
-        /// <param name="stagingTexture">The staging buffer used to transfer the buffer.</param>
         /// <param name="toData">To data.</param>
-        /// <exception cref="System.ArgumentException">When strides is different from optimal strides, and TData is not the same size as the pixel format, or Width * Height != toData.Length</exception>
+        /// <exception cref="System.ArgumentException"><paramref name="toData"/> is larger than the buffer.</exception>
+        /// <exception cref="System.InvalidOperationException">The buffer is not host-visible.</exception>
         /// <remarks>
         /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>.
         /// </remarks>
@@ -275,11 +275,11 @@ namespace Adamantium.Graphics
         }
 
         /// <summary>
-        /// Copies the content of this buffer from GPU memory to a CPU memory using a specific staging resource.
+        /// Copies the content of this buffer from GPU memory to a CPU memory.
         /// </summary>
-        /// <param name="stagingTexture">The staging buffer used to transfer the buffer.</param>
         /// <param name="toData">To data pointer.</param>
-        /// <exception cref="System.ArgumentException">When strides is different from optimal strides, and TData is not the same size as the pixel format, or Width * Height != toData.Length</exception>
+        /// <exception cref="System.ArgumentException"><paramref name="toData"/> is larger than the buffer.</exception>
+        /// <exception cref="System.InvalidOperationException">The buffer is not host-visible.</exception>
         /// <remarks>
         /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>.
         /// </remarks>
@@ -310,7 +310,7 @@ namespace Adamantium.Graphics
         /// <typeparam name="TData">The type of the T data.</typeparam>
         /// <param name="fromData">The data to copy from.</param>
         /// <param name="offsetInBytes">The offset in bytes to write to.</param>
-        /// <exception cref="System.ArgumentException"></exception>
+        /// <exception cref="System.ArgumentException">The data and the offset reach past the buffer's end.</exception>
         public void SetData<TData>(ref TData fromData, uint offsetInBytes = 0) where TData : struct
         {
             GCHandle handle = GCHandle.Alloc(fromData, GCHandleType.Pinned);
@@ -326,7 +326,7 @@ namespace Adamantium.Graphics
         /// <param name="startIndex">The starting index to begin setting data from.</param>
         /// <param name="elementCount">The number of elements to set.</param>
         /// <param name="offsetInBytes">The offset in bytes to write to.</param>
-        /// <exception cref="System.ArgumentException"></exception>
+        /// <exception cref="System.ArgumentException">The data and the offset reach past the buffer's end.</exception>
         public unsafe void SetData<TData>(TData[] fromData, uint startIndex = 0, uint elementCount = 0, uint offsetInBytes = 0) where TData : struct
         {
             GCHandle handle = GCHandle.Alloc(fromData, GCHandleType.Pinned);
@@ -359,11 +359,9 @@ namespace Adamantium.Graphics
         /// <summary>
         /// Copies the content an array of data on CPU memory to this buffer into GPU memory.
         /// </summary>
-        /// <param name="device">The <see cref="GraphicsDevice"/>.</param>
         /// <param name="fromData">A data pointer.</param>
         /// <param name="offsetInBytes">The offset in bytes to write to.</param>
-        /// <param name="options">Buffer data behavior.</param>
-        /// <exception cref="System.ArgumentException"></exception>
+        /// <exception cref="System.ArgumentException">The data and the offset reach past the buffer's end.</exception>
         public void SetData(DataPointer fromData, ulong offsetInBytes = 0)
         {
             if ((fromData.Size + offsetInBytes) > TotalSize)
@@ -398,6 +396,8 @@ namespace Adamantium.Graphics
         /// </summary>
         /// <param name="device">The <see cref="GraphicsDevice"/>.</param>
         /// <param name="description">The description of the buffer.</param>
+        /// <param name="count">How many elements the buffer holds.</param>
+        /// <param name="memoryFlags">The memoryFlags.</param>
         /// <returns>An instance of a new <see cref="Adamantium.Graphics.Buffer" /></returns>
         public static Buffer New(IGraphicsDevice device, BufferCreateInfo description, uint count, MemoryPropertyFlags memoryFlags = MemoryPropertyFlags.DeviceLocal)
         {
@@ -452,6 +452,7 @@ namespace Adamantium.Graphics
         /// <param name="elementSize">Size of an element in the buffer.</param>
         /// <param name="bufferFlags">The buffer flags to specify the type of buffer.</param>
         /// <param name="memoryFlags">The memoryFlags.</param>
+        /// <param name="sharingMode">Sharing mode</param>
         /// <returns>An instance of a new <see cref="Adamantium.Graphics.Buffer" /></returns>
         public static Buffer New(IGraphicsDevice device, ulong bufferSize, int elementSize, BufferUsageFlags bufferFlags, MemoryPropertyFlags memoryFlags = MemoryPropertyFlags.DeviceLocal, SharingMode sharingMode = SharingMode.Exclusive)
         {
@@ -522,6 +523,7 @@ namespace Adamantium.Graphics
         /// <param name="initialValue">The initial value of this buffer.</param>
         /// <param name="bufferFlags">The buffer flags to specify the type of buffer.</param>
         /// <param name="memoryFlags">The memoryFlags.</param>
+        /// <param name="sharingMode">Sharing mode</param>
         /// <returns>An instance of a new <see cref="Adamantium.Graphics.Buffer" /></returns>
         public static Buffer<T> New<T>(IGraphicsDevice device, T[] initialValue, BufferUsageFlags bufferFlags, MemoryPropertyFlags memoryFlags = MemoryPropertyFlags.DeviceLocal, SharingMode sharingMode = SharingMode.Exclusive) where T : struct
         {
@@ -585,6 +587,7 @@ namespace Adamantium.Graphics
         /// <param name="dataPointer">The data pointer.</param>
         /// <param name="bufferFlags">The buffer flags to specify the type of buffer.</param>
         /// <param name="memoryFlags">The memoryFlags.</param>
+        /// <param name="sharingMode">Sharing mode</param>
         /// <returns>An instance of a new <see cref="Adamantium.Graphics.Buffer" /></returns>
         public static Buffer New(IGraphicsDevice device, DataPointer dataPointer, BufferUsageFlags bufferFlags, MemoryPropertyFlags memoryFlags = MemoryPropertyFlags.DeviceLocal, SharingMode sharingMode = SharingMode.Exclusive)
         {

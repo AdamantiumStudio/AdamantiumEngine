@@ -16,8 +16,8 @@ internal sealed class ContactSolver
 
     private readonly List<Contact> _active = [];
 
-    /// <summary>The contacts solved this step, until the next <see cref="Prepare"/>: a span, read only, no enumerator.
-    /// </summary>
+    /// <summary>The contacts solved this step, until the next
+    /// <see cref="Prepare(BodyState[], List{Contact}, List{Contact})"/>: a span, read only, no enumerator.</summary>
     public ReadOnlySpan<Contact> Active => CollectionsMarshal.AsSpan(_active);
 
     /// <summary>Takes the touching contacts with a moving body, of convex parts and with surfaces' triangles, and works

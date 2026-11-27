@@ -11,7 +11,7 @@ public static class TextShaper
 {
     /// <summary>The features shaping applies to all text without being asked - the required ones (<c>ccmp</c>,
     /// <c>locl</c>, <c>rlig</c>…) and those on by default (<c>calt</c>, <c>liga</c>, <c>kern</c>…); a
-    /// <see cref="FontFeature"/> of value 0 turns one off. Any other feature applies only when asked for.</summary>
+    /// <see cref="Core.Shared.Fonts.Shaping.FontFeature"/> of value 0 turns one off. Any other feature applies only when asked for.</summary>
     public static IReadOnlyList<string> DefaultFeatures { get; } = Array.AsReadOnly(ShapePlan.DefaultFeatures);
 
     /// <summary>Whether shaping sets a space separator in <paramref name="font"/>: by its own glyph, or by the font's

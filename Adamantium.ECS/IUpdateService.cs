@@ -12,7 +12,7 @@ public interface IUpdateService : IContentable
     void Update(AppTime appTime);
 
     /// <summary>
-    /// Gets a value indicating whether the application component's Update method should be called by <see cref="SystemManager.Update"/>.
+    /// Gets a value indicating whether <see cref="Update"/> should be called.
     /// </summary>
     /// <value><c>true</c> if update is enabled; otherwise, <c>false</c>.</value>
     bool Enabled { get; set; }

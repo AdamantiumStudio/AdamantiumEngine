@@ -52,7 +52,7 @@ namespace Adamantium.Core.Collections
         }
 
         /// <summary>
-        /// Raises the <see cref="PropertyChanged"/> event when the <see cref="Count"/> property
+        /// Raises the <see cref="PropertyChanged"/> event when the <see cref="AdamantiumCollection{T}.Count"/> property
         /// changes.
         /// </summary>
         private void NotifyCountChanged()

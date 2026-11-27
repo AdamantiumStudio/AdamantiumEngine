@@ -15,6 +15,11 @@ public sealed class PdfSampledFunction : PdfFunction
     private readonly float[] _samples;
     private readonly int _outputs;
 
+    /// <param name="domain">The inputs' range, a pair for each input.</param>
+    /// <param name="range">The outputs' range, a pair for each output.</param>
+    /// <param name="size">How many samples there are along each input.</param>
+    /// <param name="encode">How each input maps onto its samples' indices, a pair for each input.</param>
+    /// <param name="decode">How each sample maps onto its output's range, a pair for each output.</param>
     /// <param name="samples">Each sample scaled to 0 to 1, outputs innermost, the first input next.</param>
     public PdfSampledFunction(double[] domain, double[] range, int[] size, double[] encode, double[] decode,
         float[] samples) : base(domain, range)

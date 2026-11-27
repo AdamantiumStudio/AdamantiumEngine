@@ -57,7 +57,7 @@ public partial class SceneData
    /// <summary>
    /// Removes a <see cref="Model"/> and all its sub meshes
    /// </summary>
-   /// <param name="mesh"></param>
+   /// <param name="mesh">The model removed.</param>
    public void RemoveMesh(Model mesh)
    {
       lock (this)
@@ -116,9 +116,8 @@ public partial class SceneData
    }
 
    /// <summary>
-   /// Rebuilds state that is skipped during serialization: re-links each <see cref="Model.Parent"/> and
-   /// <see cref="Joint.ParentJoint"/> back-reference by walking the hierarchies, and repopulates the mesh
-   /// lookup tables. Call after deserializing a <see cref="SceneData"/> (see <see cref="SceneDataSerializer"/>).
+   /// Rebuilds state that is skipped during serialization: re-links each <see cref="Model.Parent"/> back-reference by
+   /// walking the hierarchies, and repopulates the mesh lookup tables. Call after deserializing a <see cref="SceneData"/> (see <see cref="SceneDataSerializer"/>).
    /// </summary>
    public void RebuildHierarchy()
    {

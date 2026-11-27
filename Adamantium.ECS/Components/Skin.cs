@@ -281,7 +281,7 @@ public class Skin : Component
     /// as the skin puts it now; the distance in lengths of the ray's direction.</summary>
     public bool Intersect(Mesh mesh, Ray<float> ray, out float distance) => Intersect(mesh, ray, null, out distance);
 
-    /// <summary>As <see cref="Intersect(Mesh, Ray, out float)"/>, from the world matrices the transforms were worked out
+    /// <summary>As <see cref="Intersect(Mesh, Ray{float}, out float)"/>, from the world matrices the transforms were worked out
     /// with for <paramref name="camera"/> this frame.</summary>
     public bool Intersect(Mesh mesh, Ray<float> ray, CameraBase camera, out float distance)
     {

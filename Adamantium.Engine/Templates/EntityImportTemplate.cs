@@ -33,6 +33,8 @@ public class EntityImportTemplate : IEntityTemplate
         //this.camera = camera;
     }
         
+    /// <param name="sceneData">The imported model.</param>
+    /// <param name="assetService">Where the model's assets are found.</param>
     /// <param name="initialPosition">Where the model's own origin is placed, as the file has it: the root's position is
     /// its position in the file plus this, the model is not moved to put its center there, and it scales and turns about
     /// that origin. Each part below it turns about its own center.</param>

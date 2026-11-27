@@ -4,7 +4,8 @@ using System.Collections.Generic;
 namespace Adamantium.Mathematics.Triangulation;
 
 /// <summary>
-/// <see cref="GeometryOverlay.Combine"/> for rings that keep clear of one another (<see cref="RingContacts.AnyMeet"/>).
+/// <see cref="GeometryOverlay.Combine(RingArea, RingArea, AreaCombineMode)"/> for rings that keep clear of one another
+/// (<see cref="RingContacts.AnyMeet(IReadOnlyList{Vector2{double}[]})"/>).
 /// The ring straight around each (<see cref="NestingSweep"/>) gives the windings just outside it, its own turn the ones
 /// just inside; a ring bounds the result where the mode keeps one side of it and not the other.
 /// </summary>

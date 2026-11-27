@@ -39,8 +39,13 @@ internal sealed class SilkDecoder
 
     /// <summary>silk_Decode: the next SILK frame of the Opus frame into <paramref name="output"/> at 48 kHz, its
     /// channels side by side; how many samples a channel.</summary>
+    /// <param name="decoder">The Opus frame's range decoder.</param>
+    /// <param name="isLost">Whether the frame was lost and is concealed instead.</param>
     /// <param name="isFirst">The first of the Opus frame, whose header bits are read before it.</param>
+    /// <param name="rate">The SILK frame's internal sample rate.</param>
+    /// <param name="streamChannels">How many channels the stream has.</param>
     /// <param name="milliseconds">The Opus frame's length: 10, 20, 40 or 60.</param>
+    /// <param name="output">Where the samples go.</param>
     public int Decode(ref OpusRangeDecoder decoder, bool isLost, bool isFirst, int rate, int streamChannels,
         int milliseconds, Span<float> output)
     {

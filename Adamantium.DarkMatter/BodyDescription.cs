@@ -3,7 +3,8 @@ using Adamantium.DarkMatter.Shapes;
 namespace Adamantium.DarkMatter;
 
 /// <summary>What a body is when it is added to a world: its shape, how it moves, where it stands and what it is made
-/// of. Read once by <see cref="IPhysicsWorld.Add"/>, so one description can add many bodies.</summary>
+/// of. Read once by <see cref="IPhysicsWorld.Add(BodyDescription)"/>, so one description can add many
+/// bodies.</summary>
 internal sealed class BodyDescription
 {
     /// <summary>How the body moves.</summary>

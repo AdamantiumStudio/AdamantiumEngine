@@ -129,9 +129,9 @@ public struct TextureDescription
     }
 
     /// <summary>
-    /// Performs an explicit conversion from <see cref="Texture2DDescription"/> to <see cref="TextureDescription"/>.
+    /// Performs an implicit conversion from <see cref="ImageCreateInfo"/> to <see cref="TextureDescription"/>.
     /// </summary>
-    /// <param name="description">The texture description.</param>
+    /// <param name="description">The image's create info.</param>
     /// <returns>The result of the conversion.</returns>
     public static implicit operator TextureDescription(ImageCreateInfo description)
     {
@@ -155,9 +155,8 @@ public struct TextureDescription
     }
 
     /// <summary>
-    /// Performs an explicit conversion from <see cref="TextureDescription"/> to <see cref="Texture2DDescription"/>.
+    /// The <see cref="ImageCreateInfo"/> this description makes.
     /// </summary>
-    /// <param name="description">The texture description.</param>
     /// <returns>The result of the conversion.</returns>
     public ImageCreateInfo ToImageCreateInfo()
     {

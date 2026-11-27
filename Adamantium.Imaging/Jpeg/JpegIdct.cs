@@ -59,7 +59,7 @@ internal static class JpegIdct
         return transposed;
     }
 
-    /// <summary>The bits of <paramref name="rows"/> for a nonzero AC coefficient at natural position
+    /// <summary>The bits of a block's rows mask for a nonzero AC coefficient at natural position
     /// <paramref name="at"/>: its row in the low byte, its column in the next.</summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static int Mask(int at) => (1 << (at >> 3)) | (256 << (at & 7));

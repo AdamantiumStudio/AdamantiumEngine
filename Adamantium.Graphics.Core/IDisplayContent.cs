@@ -1,7 +1,7 @@
 ﻿namespace Adamantium.Graphics.Core;
 
 /// <summary>
-/// An interface for a drawable component that is called by the <see cref="SystemManager.DisplayContent"/> to output rendered content to screen class.
+/// An interface for a drawable component that is called to output rendered content to the screen.
 /// </summary>
 public interface IDisplayContent
 {

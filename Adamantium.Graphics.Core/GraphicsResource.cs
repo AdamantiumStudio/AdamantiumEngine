@@ -25,8 +25,9 @@ public abstract class GraphicsResource: DisposableObject
    /// <summary>
    /// Constructor for <see cref="GraphicsResource"/>
    /// </summary>
-   /// <param name="graphicsDevice"></param>
-   /// <exception cref="ArgumentNullException"></exception>
+   /// <param name="graphicsDevice">The device the resource lives on.</param>
+   /// <param name="name">The resource's name, for debugging.</param>
+   /// <exception cref="ArgumentNullException"><paramref name="graphicsDevice"/> is null.</exception>
    protected GraphicsResource(IGraphicsDevice graphicsDevice, string name = "")
    {
       ArgumentNullException.ThrowIfNull(graphicsDevice);

@@ -17,6 +17,8 @@ public sealed class SoundWaveform
     private long _read;
     private int _partsRead;
 
+    /// <param name="channels">The sound's channels.</param>
+    /// <param name="parts">How many parts the waveform is cut into.</param>
     /// <param name="frames">The sound's frames, as its decoder says; more than 0.</param>
     internal SoundWaveform(int channels, int parts, long frames)
     {

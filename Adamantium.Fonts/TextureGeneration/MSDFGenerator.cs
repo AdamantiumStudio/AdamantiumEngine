@@ -253,15 +253,6 @@ namespace Adamantium.Fonts.TextureGeneration
             return textureData;
         }
 
-        /// <summary>
-        /// Generates MSDF texture
-        /// </summary>
-        /// <param name="glyph">glyph to process</param>
-        /// <param name="originalSize">Width and height of MSDF texture</param>
-        /// <param name="pxRange">Pixel range for generation</param>
-        /// <param name="unitsPerEm">Size of glyph width and height in em</param>
-        /// <param name="margin"></param>
-        /// <returns>MSDF color data in for of single-dimension array</returns>
         internal static List<MsdfGlyphSegment> MsdfSegments(List<LineSegment2D> glyphSegments)
         {
             var segments = new List<MsdfGlyphSegment>(glyphSegments.Count);
@@ -296,6 +287,14 @@ namespace Adamantium.Fonts.TextureGeneration
         private static bool IsNear(Vector2<double> point, Vector2<double> other) =>
             Math.Abs(point.X - other.X) < VertexTolerance && Math.Abs(point.Y - other.Y) < VertexTolerance;
 
+        /// <summary>Generates the MSDF texture of a glyph: a bitmap as tight as the glyph's outline, with
+        /// <paramref name="margin"/> on each side.</summary>
+        /// <param name="glyph">The glyph to process.</param>
+        /// <param name="originalSize">The em's size in pixels.</param>
+        /// <param name="pxRange">Pixel range for generation.</param>
+        /// <param name="unitsPerEm">The font's units per em.</param>
+        /// <param name="margin">The empty border round the glyph, in texels.</param>
+        /// <returns>The glyph's texture data; null for a glyph with no outline.</returns>
         public static GlyphTextureData GenerateDirectMSDF(
             this Glyph glyph,
             uint originalSize,
@@ -305,6 +304,11 @@ namespace Adamantium.Fonts.TextureGeneration
             GenerateDirectMSDF(glyph, originalSize, pxRange, unitsPerEm, margin, true);
 
         /// <summary>Generates the MSDF texture as the overload without <paramref name="rowsInParallel"/> does.</summary>
+        /// <param name="glyph">The glyph to process.</param>
+        /// <param name="originalSize">The em's size in pixels.</param>
+        /// <param name="pxRange">Pixel range for generation.</param>
+        /// <param name="unitsPerEm">The font's units per em.</param>
+        /// <param name="margin">The empty border round the glyph, in texels.</param>
         /// <param name="rowsInParallel">Whether the glyph's rows are computed in bands on several threads: for a glyph
         /// made alone. A caller that makes many glyphs at once makes them in parallel instead - bands inside each of
         /// those would put every core's worth of bands behind every other glyph's.</param>

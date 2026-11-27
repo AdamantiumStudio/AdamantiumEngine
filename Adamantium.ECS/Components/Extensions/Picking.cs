@@ -16,6 +16,10 @@ public static class Picking
     private static readonly Comparer<TriangleCandidate> NearestEntryFirst =
         Comparer<TriangleCandidate>.Create((a, b) => a.Entry.CompareTo(b.Entry));
 
+    /// <summary>The nearest hit of <paramref name="ray"/> over <paramref name="root"/> and everything under it.</summary>
+    /// <param name="root">The entity picked over, with its subtree.</param>
+    /// <param name="ray">The ray, in the world.</param>
+    /// <param name="mode">What the pick tests.</param>
     /// <param name="aperture">How close a line has to pass, in pixels.</param>
     /// <param name="withDisabled">Whether a disabled entity and what is under it are picked too.</param>
     public static PickHit Pick(this Entity root, in PickRay ray, PickMode mode, float aperture = 0, bool withDisabled = false)
@@ -34,6 +38,11 @@ public static class Picking
         }
     }
 
+    /// <summary>The nearest hit of <paramref name="ray"/> over <paramref name="roots"/> and everything under
+    /// them.</summary>
+    /// <param name="roots">The entities picked over, each with its subtree.</param>
+    /// <param name="ray">The ray, in the world.</param>
+    /// <param name="mode">What the pick tests.</param>
     /// <param name="aperture">How close a line has to pass, in pixels.</param>
     /// <param name="withDisabled">Whether a disabled entity and what is under it are picked too.</param>
     public static PickHit Pick(IReadOnlyList<Entity> roots, in PickRay ray, PickMode mode, float aperture = 0, bool withDisabled = false)

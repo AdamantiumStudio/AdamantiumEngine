@@ -13,7 +13,7 @@ namespace Adamantium.Graphics
             private static BufferUsageFlags BufferUsage = BufferUsageFlags.TransferDst | BufferUsageFlags.IndexBuffer;
 
             /// <summary>
-            /// Creates a new index buffer with <see cref="MemoryPropertyFlags.Default"/> memoryFlags by default.
+            /// Creates a new index buffer with <see cref="MemoryPropertyFlags.DeviceLocal"/> memoryFlags by default.
             /// </summary>
             /// <param name="device">The <see cref="GraphicsDevice"/>.</param>
             /// <param name="size">The size in bytes.</param>
@@ -25,7 +25,7 @@ namespace Adamantium.Graphics
             }
 
             /// <summary>
-            /// Creates a new index buffer with <see cref="MemoryPropertyFlags.Default"/> memoryFlags by default.
+            /// Creates a new index buffer with <see cref="MemoryPropertyFlags.DeviceLocal"/> memoryFlags by default.
             /// </summary>
             /// <typeparam name="T">Type of the index buffer to get the sizeof from</typeparam>
             /// <param name="device">The <see cref="GraphicsDevice"/>.</param>
@@ -38,7 +38,7 @@ namespace Adamantium.Graphics
             }
 
             /// <summary>
-            /// Creates a new index buffer with <see cref="MemoryPropertyFlags.Immutable"/> memoryFlags by default.
+            /// Creates a new index buffer with <see cref="MemoryPropertyFlags.DeviceLocal"/> memoryFlags by default.
             /// </summary>
             /// <typeparam name="T">Type of the index buffer to get the sizeof from</typeparam>
             /// <param name="device">The <see cref="GraphicsDevice"/>.</param>
@@ -51,7 +51,7 @@ namespace Adamantium.Graphics
             }
 
             /// <summary>
-            /// Creates a new index buffer with <see cref="MemoryPropertyFlags.Immutable"/> memoryFlags by default.
+            /// Creates a new index buffer with <see cref="MemoryPropertyFlags.DeviceLocal"/> memoryFlags by default.
             /// </summary>
             /// <typeparam name="T">Type of the index buffer to get the sizeof from</typeparam>
             /// <param name="device">The <see cref="GraphicsDevice"/>.</param>
@@ -64,7 +64,7 @@ namespace Adamantium.Graphics
             }
 
             /// <summary>
-            /// Creates a new index buffer with <see cref="MemoryPropertyFlags.Immutable"/> memoryFlags by default.
+            /// Creates a new index buffer with <see cref="MemoryPropertyFlags.DeviceLocal"/> memoryFlags by default.
             /// </summary>
             /// <param name="device">The <see cref="GraphicsDevice"/>.</param>
             /// <param name="value">The value to initialize the index buffer.</param>
@@ -77,7 +77,7 @@ namespace Adamantium.Graphics
             }
 
             /// <summary>
-            /// Creates a new index buffer with <see cref="MemoryPropertyFlags.Immutable"/> memoryFlags by default.
+            /// Creates a new index buffer with <see cref="MemoryPropertyFlags.DeviceLocal"/> memoryFlags by default.
             /// </summary>
             /// <param name="device">The <see cref="GraphicsDevice"/>.</param>
             /// <param name="value">The value to initialize the index buffer.</param>

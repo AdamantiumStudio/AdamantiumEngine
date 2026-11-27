@@ -266,7 +266,7 @@ public static class Vector3
         /// <summary>Writes each point kept as <paramref name="x"/>, <paramref name="y"/>, <paramref name="z"/> projected
         /// by <paramref name="transform"/> into <paramref name="destinationX"/>, <paramref name="destinationY"/>,
         /// <paramref name="destinationZ"/> - many points at a time in SIMD, each the same number as
-        /// <see cref="TransformCoordinate(Vector3{T}, Matrix4x4{T})"/> gives it, only a NaN maybe another NaN. A
+        /// <c>TransformCoordinate(Vector3&lt;T&gt;, Matrix4x4&lt;T&gt;)</c> gives it, only a NaN maybe another NaN. A
         /// destination may be any of the very same spans as the sources.</summary>
         /// <exception cref="ArgumentException">The sources differ in length, or the spans overlap other than in place.</exception>
         /// <exception cref="ArgumentOutOfRangeException">A destination is shorter than the sources.</exception>
@@ -280,7 +280,7 @@ public static class Vector3
         /// <summary>Writes each direction kept as <paramref name="x"/>, <paramref name="y"/>, <paramref name="z"/> times
         /// <paramref name="transform"/>, without translation, into <paramref name="destinationX"/>,
         /// <paramref name="destinationY"/>, <paramref name="destinationZ"/> - many at a time in SIMD, each the same
-        /// number as <see cref="TransformNormal(Vector3{T}, Matrix4x4{T})"/> gives it, only a NaN maybe another NaN. A
+        /// number as <c>TransformNormal(Vector3&lt;T&gt;, Matrix4x4&lt;T&gt;)</c> gives it, only a NaN maybe another NaN. A
         /// destination may be any of the very same spans as the sources.</summary>
         /// <exception cref="ArgumentException">The sources differ in length, or the spans overlap other than in place.</exception>
         /// <exception cref="ArgumentOutOfRangeException">A destination is shorter than the sources.</exception>

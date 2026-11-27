@@ -25,7 +25,7 @@ internal readonly struct BodyHandle : IEquatable<BodyHandle>
     public int Generation { get; }
 
     /// <summary>Whether the handle is not a default one; whether its body is still there, its world's
-    /// <see cref="IPhysicsWorld.Contains"/> says.</summary>
+    /// <see cref="IPhysicsWorld.Contains(BodyHandle)"/> says.</summary>
     public bool IsValid => World != null && Generation != 0;
 
     public bool Equals(BodyHandle other) =>

@@ -33,7 +33,7 @@ public sealed unsafe class HostFrameReader : IDisposable
 
     /// <summary>The newest frame of <paramref name="width"/> by <paramref name="height"/> finished after
     /// <paramref name="after"/>, in <paramref name="slot"/>; false when none is. Its pixels stay the producer's to
-    /// overwrite only once <see cref="GiveBack"/> says it was read; a slot already given back - the producer may be
+    /// overwrite only once <see cref="GiveBack(ulong)"/> says it was read; a slot already given back - the producer may be
     /// writing it - is not taken.</summary>
     public bool TryTakeNewest(ulong after, uint width, uint height, out int slot, out ulong frame)
     {

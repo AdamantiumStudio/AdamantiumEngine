@@ -12,6 +12,8 @@ internal sealed class PdfCidMetrics
     private readonly List<(uint First, uint Last, uint Origin, double[] Values, bool Each)> _runs = [];
     private readonly int _size;
 
+    /// <param name="value">The <c>/W</c> or <c>/W2</c> array.</param>
+    /// <param name="document">The document its references are resolved in.</param>
     /// <param name="size">Numbers each CID has: 1 for <c>/W</c>, 3 for <c>/W2</c>.</param>
     public PdfCidMetrics(PdfObject value, PdfDocument document, int size)
     {

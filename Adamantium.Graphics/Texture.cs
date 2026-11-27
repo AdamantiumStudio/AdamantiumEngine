@@ -796,8 +796,9 @@ public unsafe class Texture : GraphicsResource, ITexture
     /// </summary>
     /// <param name="graphicsDevice">The graphics device.</param>
     /// <param name="description">The description.</param>
+    /// <param name="name">The texture's name, for debugging.</param>
     /// <returns>A Texture instance, either a RenderTarget or DepthStencilBuffer or Texture, depending on Binding flags.</returns>
-    /// <exception cref="ArgumentNullException"></exception>
+    /// <exception cref="ArgumentNullException"><paramref name="graphicsDevice"/> is null.</exception>
     public static Texture New(IGraphicsDevice graphicsDevice, TextureDescription description, string name = "")
     {
         ArgumentNullException.ThrowIfNull(graphicsDevice);

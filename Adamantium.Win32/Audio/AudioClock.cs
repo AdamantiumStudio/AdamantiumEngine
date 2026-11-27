@@ -27,6 +27,7 @@ public readonly unsafe struct AudioClock
         return result;
     }
 
+    /// <param name="position">The device's position, in the clock's units.</param>
     /// <param name="time">When the position was read, in units of 100 nanoseconds.</param>
     public int GetPosition(out ulong position, out ulong time)
     {

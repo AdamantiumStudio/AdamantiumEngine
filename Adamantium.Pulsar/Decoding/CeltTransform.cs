@@ -15,6 +15,9 @@ internal sealed class CeltTransform
 
     /// <summary>The block of <paramref name="lines"/>' lines, every <paramref name="stride"/>th from the first, into
     /// <paramref name="output"/>, 120 samples before where the block's first is.</summary>
+    /// <param name="lines">The spectral lines.</param>
+    /// <param name="stride">How far apart the block's lines are.</param>
+    /// <param name="output">Where the samples go.</param>
     /// <param name="shift">0 for 960 lines, 3 for 120.</param>
     public void Inverse(ReadOnlySpan<float> lines, int stride, Span<float> output, int shift)
     {

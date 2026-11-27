@@ -892,8 +892,8 @@ public sealed class EntityManager
     /// <summary>
     /// Return first entity with given name
     /// </summary>
-    /// <param name="name"><see cref="IName.Name"/></param>
-    /// <returns></returns>
+    /// <param name="name">The entity's name.</param>
+    /// <returns>The entity, or null when none has that name.</returns>
     public Entity FindEntity(string name)
     {
         lock (syncObject)
@@ -913,8 +913,8 @@ public sealed class EntityManager
     /// <summary>
     /// Return all entities with given name
     /// </summary>
-    /// <param name="name"><see cref="IName.Name"/></param>
-    /// <returns></returns>
+    /// <param name="name">The entities' name.</param>
+    /// <returns>The entities; empty when none has that name.</returns>
     public Entity[] FindEntities(string name)
     {
         lock (syncObject)

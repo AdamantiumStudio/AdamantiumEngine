@@ -8,7 +8,7 @@ namespace Adamantium.DarkMatter;
 /// an answer - <see cref="Into"/>, <see cref="Count"/>, <see cref="Any"/>, <see cref="First"/>, an aggregate, a
 /// <c>foreach</c> - in actions on every body found, each the simulation's own, or goes on as an order, a grouping, a
 /// projection or a join. Nothing is allocated, but by a lambda's closure. It walks in no order kept; an order is told by
-/// <see cref="OrderBy{TKey}"/> or <see cref="NearestTo"/>.
+/// <see cref="OrderBy{TKey}(Func{BodyView, TKey})"/> or <see cref="NearestTo"/>.
 /// </summary>
 public readonly ref struct BodyFinder<TFilter>
     where TFilter : IBodyFilter

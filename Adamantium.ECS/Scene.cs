@@ -7,7 +7,7 @@ namespace Adamantium.ECS;
 /// <summary>
 /// One scene of a world: its own roots, cameras and one-of-a-kind objects. A world holds any number of them; whatever
 /// shows or runs a scene - an output and its processor - works with that one alone, and nothing walks every scene.
-/// Made by <see cref="EntityWorld.CreateScene"/>; a world always has its <see cref="EntityWorld.MainScene"/>.
+/// Made by <see cref="EntityWorld.CreateScene(string)"/>; a world always has its <see cref="EntityWorld.MainScene"/>.
 /// </summary>
 public sealed class Scene
 {

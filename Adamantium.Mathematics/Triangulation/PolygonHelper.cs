@@ -35,8 +35,9 @@ namespace Adamantium.Mathematics.Triangulation
         /// <summary>
         /// Creates a collection of segments from a collection of points
         /// </summary>
-        /// <param name="inPoints"></param>
-        /// <param name="isContourClosed"></param>
+        /// <param name="parent">The contour the segments belong to.</param>
+        /// <param name="inPoints">The points, in order.</param>
+        /// <param name="isContourClosed">Whether a segment joins the last point back to the first.</param>
         /// <returns>Collection of segments if at least 2 points present in collection, otherwise null</returns>
         public static List<GeometrySegment> SplitOnSegments(MeshContour parent, IEnumerable<Vector2<double>> inPoints, bool isContourClosed = true)
         {
@@ -93,8 +94,9 @@ namespace Adamantium.Mathematics.Triangulation
         /// <summary>
         /// Creates a collection of segments from a collection of points
         /// </summary>
-        /// <param name="inPoints"></param>
-        /// <param name="isContourClosed"></param>
+        /// <param name="parent">The contour the segments belong to.</param>
+        /// <param name="inPoints">The points, in order.</param>
+        /// <param name="isContourClosed">Whether a segment joins the last point back to the first.</param>
         /// <returns>Collection of segments if at least 2 points present in collection, otherwise null</returns>
         public static List<GeometrySegment> SplitOnSegments(MeshContour parent, IEnumerable<Vector3<double>> inPoints, bool isContourClosed = true)
         {
@@ -204,7 +206,7 @@ namespace Adamantium.Mathematics.Triangulation
         }
 
         /// <summary>
-        /// Check does collection of points forms a concave <see cref="PolygonItem"/>
+        /// Check does collection of points forms a concave polygon
         /// </summary>
         /// <param name="points">Collection of points to check</param>
         /// <returns>True if polygon is concave, otherwise false</returns>
@@ -232,7 +234,7 @@ namespace Adamantium.Mathematics.Triangulation
         }
 
         /// <summary>
-        /// Check does collection of segments forms a concave <see cref="PolygonItem"/>
+        /// Check does collection of segments forms a concave polygon
         /// </summary>
         /// <param name="segments">Collection of segments to check</param>
         /// <returns>True if polygon is concave, otherwise false</returns>
