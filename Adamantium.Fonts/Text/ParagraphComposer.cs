@@ -42,7 +42,8 @@ public static class ParagraphComposer
         return Run(items, lineWidths, tolerance, 0, false, hyphenLimit);
     }
 
-    /// <summary>The breaks of <see cref="Break"/> as TeX's last pass finds them: every line may be as loose as it must,
+    /// <summary>The breaks of <see cref="Break(IReadOnlyList{ComposerItem}, double, double, int)"/> as
+    /// TeX's last pass finds them: every line may be as loose as it must,
     /// each glue stretching by <paramref name="emergencyStretch"/> more, and where nothing fits a line, as a word wider
     /// than it, the line overflows.</summary>
     public static int[] BreakAnyway(IReadOnlyList<ComposerItem> items, double lineWidth, double emergencyStretch,

@@ -15,6 +15,8 @@ public sealed class SoundFileStorage : ISoundStorage
     {
     }
 
+    /// <param name="path">The file.</param>
+    /// <param name="offset">Where in it the sound starts.</param>
     /// <param name="length">-1 for the rest of the file.</param>
     public SoundFileStorage(string path, long offset, long length)
     {

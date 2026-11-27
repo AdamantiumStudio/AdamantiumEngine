@@ -142,7 +142,7 @@ public sealed class FontCollection
         return Vary(Load(face), face, weight, stretch, style);
     }
 
-    /// <summary>The face at a weight and width, as <see cref="Load(FontFace, FontWeight, FontStretch)"/> gives it, when
+    /// <summary>The face at a weight and width, as <see cref="Load(FontFace, FontWeight, FontStretch, FontStyle)"/> gives it, when
     /// its file is already parsed; otherwise false, and the file is parsed on a worker
     /// (<see cref="TypefaceStore.LoadInBackground"/>), which raises <see cref="TypefaceStore.Loaded"/> when done. Never
     /// waits.</summary>

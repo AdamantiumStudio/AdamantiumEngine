@@ -3,7 +3,7 @@
 namespace Adamantium.Graphics.Core;
 
 /// <summary>
-/// An interface for a drawable component that is called by the <see cref="SystemManager.Draw"/> class.
+/// An interface for a drawable component that is called to draw a frame.
 /// </summary>
 public interface IDrawable
 {
@@ -25,7 +25,7 @@ public interface IDrawable
     void EndDraw();
 
     /// <summary>
-    /// Gets a value indicating whether the <see cref="Draw"/> method should be called by <see cref="SystemManager.Draw"/>.
+    /// Gets a value indicating whether the <see cref="Draw"/> method should be called.
     /// </summary>
     /// <value><c>true</c> if this drawable component is visible; otherwise, <c>false</c>.</value>
     bool IsVisible { get; set; }

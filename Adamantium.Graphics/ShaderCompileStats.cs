@@ -186,6 +186,7 @@ public sealed class ShaderCompileStats
         e.LastOutcome = "Skipped: " + reason;
     }
 
+    /// <param name="name">The effect's name.</param>
     /// <param name="stage">The shader being created when the process died; an effect holds many.</param>
     public void RecordDeath(string name, string stage = null)
     {

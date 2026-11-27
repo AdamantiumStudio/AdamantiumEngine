@@ -7,7 +7,7 @@ namespace Adamantium.Win32.Ole;
 /// <summary>
 /// OLE <c>IDropTarget</c> - the window-side half of a native drag. A managed implementation is handed to
 /// <c>RegisterDragDrop</c>; the OS then calls it (on the window's own thread, inside the drag source's modal loop) as
-/// the pointer travels over the window. <paramref name="effect"/> is in/out: in = what the source ALLOWS, out = what we
+/// the pointer travels over the window. A method's <c>effect</c> is in/out: in = what the source ALLOWS, out = what we
 /// will do (which is what the user sees on the cursor).
 /// </summary>
 [ComImport]

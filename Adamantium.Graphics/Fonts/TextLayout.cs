@@ -662,7 +662,7 @@ public class TextLayout : DisposableObject
         _textUpdated = true;
     }
 
-    /// <summary>A frozen copy of the shaped glyphs (call after <see cref="Update"/>), so the render thread never reads
+    /// <summary>A frozen copy of the shaped glyphs (call after <see cref="Update(IGraphicsDevice)"/>), so the render thread never reads
     /// this layout while it is reshaped.</summary>
     public FrozenGlyphRun SnapshotGlyphs() => _quads.Snapshot(FontSize);
 

@@ -17,7 +17,7 @@ public readonly record struct VoiceSettings()
     /// <summary>Of more voices than are heard, those of a higher priority are; among equals the louder.</summary>
     public int Priority { get; init; }
 
-    /// <summary>Whether the sound's <see cref="SoundData.Loop"/> repeats until the voice is stopped.</summary>
+    /// <summary>Whether the sound's <see cref="Sound.Loop"/> repeats until the voice is stopped.</summary>
     public bool Loops { get; init; }
 
     /// <summary>Where in the sound it begins.</summary>

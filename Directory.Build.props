@@ -26,10 +26,6 @@
     <PublishDocumentationFile>false</PublishDocumentationFile>
     <PublishReferencesDocumentationFiles>false</PublishReferencesDocumentationFiles>
     <NoWarn>$(NoWarn);CS1591</NoWarn>
-    <!-- Comments that do not read as XML documentation yet - a cref that resolves to nothing or to several members, a
-         malformed tag, a parameter left out: warned of, not failing the build, and mended as the types they document
-         get their pages. -->
-    <MSBuildWarningsNotAsErrors>$(MSBuildWarningsNotAsErrors);CS0419;CS1570;CS1572;CS1573;CS1574;CS1734</MSBuildWarningsNotAsErrors>
   </PropertyGroup>
 
   <!-- One identity for every assembly and package of the engine, the same as in QuantumBinding and AdamantiumVulkan. -->

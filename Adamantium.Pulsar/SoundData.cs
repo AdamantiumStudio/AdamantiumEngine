@@ -3,6 +3,7 @@ namespace Adamantium.Pulsar;
 /// <summary>A sound whole in memory. Its samples must not be changed once an engine has them.</summary>
 public sealed class SoundData : Sound
 {
+    /// <param name="format">The samples' format.</param>
     /// <param name="samples">-1 to 1, the channels of a frame side by side.</param>
     /// <param name="loop">What repeats where it is looped; the whole of it if not said.</param>
     public SoundData(AudioFormat format, float[] samples, SoundLoop? loop = null)

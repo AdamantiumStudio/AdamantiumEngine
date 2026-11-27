@@ -189,7 +189,7 @@ internal sealed class JpegStream
     }
 
     /// <summary>The quantization and Huffman tables of an abbreviated stream that holds only them (B.5), for
-    /// <see cref="Decode(ReadOnlySpan{byte}, bool, JpegStream)"/>.</summary>
+    /// <see cref="Decode(ReadOnlySpan{byte}, bool, JpegStream, bool)"/>.</summary>
     public static JpegStream Tables(ReadOnlySpan<byte> data)
     {
         var stream = new JpegStream(false, null);

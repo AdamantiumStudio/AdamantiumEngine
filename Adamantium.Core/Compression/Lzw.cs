@@ -23,6 +23,8 @@ public static class Lzw
 
     /// <summary>Unpacks most-significant-bit-first codes into <paramref name="output"/> and returns the bytes written.
     /// Stops at the end code, a full output or the end of the input; a full output may mean more was left.</summary>
+    /// <param name="input">The packed codes.</param>
+    /// <param name="output">Where the unpacked bytes go.</param>
     /// <param name="earlyChange">Whether the code width grows one code early, as TIFF 6.0 and PDF's default do.</param>
     public static int Decode(ReadOnlySpan<byte> input, Span<byte> output, bool earlyChange = true)
     {

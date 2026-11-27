@@ -23,7 +23,9 @@ public readonly unsafe struct AudioClient
 
     private void** Table => (void**)*_self;
 
+    /// <param name="flags">How the stream is opened.</param>
     /// <param name="bufferDuration">In units of 100 nanoseconds.</param>
+    /// <param name="format">The stream's format.</param>
     public int Initialize(AudioClientFlags flags, long bufferDuration, in WaveFormatExtensible format)
     {
         fixed (WaveFormatExtensible* formatPointer = &format)

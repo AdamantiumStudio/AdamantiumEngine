@@ -6,6 +6,7 @@ namespace Adamantium.Pulsar;
 /// <param name="Duration">Zero where the file does not say it, as a damaged one may not.</param>
 /// <param name="Bitrate">Bits a second, of the whole file over its duration: as players show it; 0 where that is not
 /// known.</param>
+/// <param name="Tags">What the file says of what it holds: title, artist, album and the like.</param>
 public sealed record SoundInfo(string Codec, AudioFormat Format, TimeSpan Duration, int Bitrate, SoundTags Tags)
 {
     /// <inheritdoc cref="Read(ISoundStorage)"/>
@@ -16,6 +17,7 @@ public sealed record SoundInfo(string Codec, AudioFormat Format, TimeSpan Durati
     /// <exception cref="InvalidDataException">It is no sound file, or one that can not be read.</exception>
     public static SoundInfo Read(ISoundStorage storage) => Read(storage, out _);
 
+    /// <param name="storage">Where the file is.</param>
     /// <param name="length">The file's bytes.</param>
     internal static SoundInfo Read(ISoundStorage storage, out long length)
     {

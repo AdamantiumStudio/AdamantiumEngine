@@ -462,7 +462,7 @@ namespace Adamantium.ECS.Components
         }
 
         /// <summary>Which way the <see cref="Subject"/> FACES: -Z, as <c>Matrix4x4F.Forward</c> states and the models
-        /// are authored. Not <see cref="Vector3.ForwardLH"/> (+Z), which is about VIEW space depth.</summary>
+        /// are authored. Not <see cref="Vector3{T}.ForwardLH"/> (+Z), which is about VIEW space depth.</summary>
         public Vector3F SubjectForward => EntityRotationMatrix.Forward;
     }
 }

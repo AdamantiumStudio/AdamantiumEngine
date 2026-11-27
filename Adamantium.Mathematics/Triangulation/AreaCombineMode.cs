@@ -1,6 +1,7 @@
 namespace Adamantium.Mathematics.Triangulation;
 
-/// <summary>Which points of two areas <see cref="GeometryOverlay.Combine"/> keeps.</summary>
+/// <summary>Which points of two areas
+/// <see cref="GeometryOverlay.Combine(RingArea, RingArea, AreaCombineMode, double)"/> keeps.</summary>
 public enum AreaCombineMode
 {
     /// <summary>What is in either area.</summary>

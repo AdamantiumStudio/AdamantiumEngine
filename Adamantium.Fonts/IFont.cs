@@ -92,7 +92,8 @@ namespace Adamantium.Fonts
         /// none.</summary>
         public string ElidedFallbackName { get; }
 
-        /// <summary>The axis values of an instance (<see cref="GetInstance"/>); empty for a font as its file has it.</summary>
+        /// <summary>The axis values of an instance (<see cref="GetInstance(IReadOnlyList{FontVariation})"/>); empty for
+        /// a font as its file has it.</summary>
         public IReadOnlyList<FontVariation> Variations { get; }
 
         /// <summary>This variable font at the axis values given, with its own outlines and advances; an axis not given

@@ -92,7 +92,7 @@ public struct Thickness
          a.Bottom / value);
    }
 
-   /// <summary>Field-by-field, the way <see cref="ProceduralGeometry.CornerRadius"/> does it. Declared rather than left
+   /// <summary>Field-by-field, the way <c>ProceduralGeometry.CornerRadius</c> does it. Declared rather than left
    /// to <c>ValueType.Equals</c>: without it a boxed comparison falls back to the reflective path (a struct of doubles
    /// gets no bitwise fast track), and this type is compared on the property system's write path - twice per write.
    /// Measured at 385 ns reflective against 26 ns declared.</summary>

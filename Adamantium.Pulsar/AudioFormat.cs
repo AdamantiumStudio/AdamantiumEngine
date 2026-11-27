@@ -14,6 +14,8 @@ public readonly record struct AudioFormat
 
     private const Speakers AllSpeakers = (Speakers)0x3FFFF;
 
+    /// <param name="sampleRate">Frames a second.</param>
+    /// <param name="channels">How many channels a frame has.</param>
     /// <param name="speakers">One for each channel; where not said, the usual of their number.</param>
     public AudioFormat(int sampleRate, int channels, Speakers speakers = Speakers.None)
     {

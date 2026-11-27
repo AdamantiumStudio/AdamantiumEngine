@@ -17,6 +17,8 @@ internal sealed class ReopenedFileStream : Stream
     private long _aheadAt;
     private int _aheadLength;
 
+    /// <param name="path">The file.</param>
+    /// <param name="offset">Where in it the stream starts.</param>
     /// <param name="length">-1 for the rest of the file.</param>
     public ReopenedFileStream(string path, long offset, long length)
     {

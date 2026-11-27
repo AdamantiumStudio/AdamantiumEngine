@@ -76,7 +76,7 @@ public class SpriteBatch : DisposableObject
         SaveState(screenSize, sortMode, null, effect, Matrix4x4F.Identity);
     }
 
-    /// <summary>Begins a batch as <see cref="Begin(Vector2, SpriteSortMode, Effect)"/> does, sampled with
+    /// <summary>Begins a batch as <see cref="Begin(Vector2{double}, SpriteSortMode, Effect)"/> does, sampled with
     /// <paramref name="samplerState"/> - anisotropic and repeated for null.</summary>
     public void Begin(
         Vector2<double> screenSize,
@@ -87,7 +87,7 @@ public class SpriteBatch : DisposableObject
         SaveState(screenSize, sortMode, samplerState, effect, Matrix4x4F.Identity);
     }
 
-    /// <summary>Begins a batch as <see cref="Begin(Vector2, SpriteSortMode, SamplerState, Effect)"/> does, every
+    /// <summary>Begins a batch as <see cref="Begin(Vector2{double}, SpriteSortMode, SamplerState, Effect)"/> does, every
     /// sprite moved by <paramref name="transformationMatrix"/> before it is drawn.</summary>
     public void Begin(
         Vector2<double> screenSize,

@@ -45,7 +45,8 @@ public interface IDrawableDevice
     
     void DrawIndexed(IBuffer vertexBuffer, IBuffer indexBuffer, uint instanceCount = 1, uint indexCount = 0);
 
-    /// <summary>Draws what <see cref="SetVertexBuffers"/> and <see cref="SetIndexBuffer"/> bound.</summary>
+    /// <summary>Draws what <see cref="IDynamicStateDevice.SetVertexBuffers"/> and
+    /// <see cref="IDynamicStateDevice.SetIndexBuffer"/> bound.</summary>
     void DrawIndexed(uint indexCount, uint instanceCount = 1, uint firstIndex = 0, int vertexOffset = 0,
         uint firstInstance = 0);
 
@@ -305,10 +306,12 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
     Result SubmitAside(Action<CommandBuffer> record, Semaphore wait, PipelineStageFlagBits2 waitStage, ulong waitValue,
         IReadOnlyList<(Semaphore Semaphore, ulong Value)> signals);
 
-    /// <summary>Register a semaphore the next <see cref="Submit"/> must wait on (timelineValue=0 for binary).</summary>
+    /// <summary>Register a semaphore the next <see cref="IDrawableDevice.Submit"/> must wait on (timelineValue=0 for
+    /// binary).</summary>
     void AddWaitSemaphore(Semaphore semaphore, PipelineStageFlagBits2 stage, ulong timelineValue = 0);
 
-    /// <summary>Register a semaphore the next <see cref="Submit"/> must signal (timelineValue=0 for binary).</summary>
+    /// <summary>Register a semaphore the next <see cref="IDrawableDevice.Submit"/> must signal (timelineValue=0 for
+    /// binary).</summary>
     void AddSignalSemaphore(Semaphore semaphore, ulong timelineValue = 0);
 
     nuint MapMemory(DeviceMemory memory, ulong offset, ulong size, MemoryMapFlagBits flags);
@@ -317,6 +320,7 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
     
     public IEffectPass CurrentEffectPass { get; set; }
 
+    /// <param name="shaderCreateInfo">What the shader is made from.</param>
     /// <param name="name">Readable identity of the shader (effect.technique.pass.stage) - names its binary-cache file.</param>
     ShaderEXT CreateShader(ShaderCreateInfoEXT shaderCreateInfo, string name = null);
 
@@ -370,7 +374,8 @@ public unsafe interface IGraphicsDevice : IDrawableDevice, IDynamicStateDevice, 
     /// <summary>The structure of each vertex buffer, as <see cref="SetVertexTypes"/> was given them.</summary>
     ReadOnlySpan<Type> VertexTypes { get; }
 
-    /// <summary>A vertex structure for each buffer of <see cref="SetVertexBuffers"/>, in their order - a mesh's vertices and,
+    /// <summary>A vertex structure for each buffer of <see cref="IDynamicStateDevice.SetVertexBuffers"/>, in their
+    /// order - a mesh's vertices and,
     /// marked <see cref="Vertices.PerInstanceDataAttribute"/>, what differs between its instances. The shader's inputs are
     /// the fields of the first, then of the next.</summary>
     void SetVertexTypes(params ReadOnlySpan<Type> vertexTypes);

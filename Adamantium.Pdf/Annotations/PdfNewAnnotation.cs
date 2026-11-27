@@ -89,7 +89,7 @@ public sealed class PdfNewAnnotation
     /// </summary>
     public PdfStream Appearance { get; init; }
 
-    /// <summary>The external data it is associated with (<c>ExData</c>), as <see cref="ThreeD.PdfMarkup3D.ToDictionary"/>
+    /// <summary>The external data it is associated with (<c>ExData</c>), as <see cref="View3D.PdfMarkup3D.ToDictionary"/>
     /// makes for a comment on a view of 3D artwork; null for none.</summary>
     public PdfDictionary ExternalData { get; init; }
 

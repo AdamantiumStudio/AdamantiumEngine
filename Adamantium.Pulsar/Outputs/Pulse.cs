@@ -53,6 +53,7 @@ internal static unsafe partial class Pulse
     [LibraryImport(Library, EntryPoint = "pa_mainloop_get_api")]
     public static partial IntPtr ApiOf(IntPtr loop);
 
+    /// <param name="loop">The main loop.</param>
     /// <param name="timeout">The longest <see cref="Poll"/> waits, in microseconds.</param>
     [LibraryImport(Library, EntryPoint = "pa_mainloop_prepare")]
     public static partial int Prepare(IntPtr loop, int timeout);

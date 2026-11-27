@@ -126,7 +126,7 @@ public sealed class DBusWriter
 
     public byte[] ToArray() => buffer.AsSpan(0, Length).ToArray();
 
-    /// <summary>Any single complete type, from what <see cref="DBusReader.ReadValue"/> gives: lists or sequences for
+    /// <summary>Any single complete type, from what <see cref="DBusReader.ReadValue(string)"/> gives: lists or sequences for
     /// arrays, dictionaries for dictionaries, object arrays for structs.</summary>
     public void WriteValue(string signature, object value)
     {

@@ -40,8 +40,7 @@ namespace Adamantium.Graphics
         /// </summary>
         /// <param name="fromData">The data to copy from.</param>
         /// <param name="offsetInBytes">The offset in bytes to write to.</param>
-        /// <param name="options">Buffer data behavior.</param>
-        /// <exception cref="System.ArgumentException"></exception>
+        /// <exception cref="System.ArgumentException">The data and the offset reach past the buffer's end.</exception>
         /// <remarks>
         /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>.
         /// </remarks>
@@ -57,7 +56,6 @@ namespace Adamantium.Graphics
         /// <param name="startIndex">Index to start copying from.</param>
         /// <param name="elementCount">Number of elements to copy.</param>
         /// <param name="offsetInBytes">The offset in bytes to write to.</param>
-        /// <param name="options">Buffer data behavior.</param>
         /// <remarks>
         /// This method is only working when called from the main thread that is accessing the main <see cref="GraphicsDevice"/>.
         /// </remarks>

@@ -37,7 +37,7 @@ internal sealed class PdfIccProfiles
     }
 
     /// <summary>The transform of the profile <paramref name="data"/> holds - one embedded in an image - or null, as
-    /// <see cref="Of"/>.</summary>
+    /// <see cref="Of(PdfStream, int)"/>.</summary>
     public static IccTransform Of(ReadOnlySpan<byte> data, int components) => Fits(Transform(data), components);
 
     /// <summary>The transform of the output intent's profile, when it has <paramref name="components"/> components.

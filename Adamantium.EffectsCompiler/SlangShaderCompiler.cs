@@ -9,6 +9,9 @@ internal sealed class SlangShaderCompiler : IDisposable
 {
     private SlangCompiler compiler;
 
+    /// <param name="source">The shader's Slang source.</param>
+    /// <param name="entryPoint">The function compiled.</param>
+    /// <param name="stage">The stage it is compiled for.</param>
     /// <param name="resolveInclude">Maps an <c>#include</c> path to file contents (null = not found).</param>
     public ShaderCompilationResult Compile(string source, string entryPoint, SlangcStage stage,
         Func<string, string> resolveInclude)
