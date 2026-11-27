@@ -11,6 +11,18 @@ internal sealed class HighestRanked(int room)
 
     public void Clear() => Count = 0;
 
+    /// <summary>How many of those kept rank above <paramref name="rank"/>.</summary>
+    public int CountAbove(long rank)
+    {
+        var count = 0;
+        for (var index = 0; index < Count; index++)
+        {
+            count += _ranks[index] > rank ? 1 : 0;
+        }
+
+        return count;
+    }
+
     /// <summary>The slot there is no room for, the one added or another; -1 where there was room.</summary>
     public int Add(long rank, int slot)
     {

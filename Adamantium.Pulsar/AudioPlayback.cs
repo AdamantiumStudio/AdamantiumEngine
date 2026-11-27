@@ -109,7 +109,7 @@ public sealed class AudioPlayback : IDisposable
         }
     }
 
-    /// <summary>0 is silence, 1 as it is.</summary>
+    /// <summary>0 is silence, 1 as it is. Set after disposal, it is kept and plays nothing.</summary>
     public float Volume
     {
         get => _volume;
