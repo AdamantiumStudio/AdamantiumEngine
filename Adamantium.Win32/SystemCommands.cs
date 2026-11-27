@@ -10,7 +10,7 @@
 
       /// <summary>
       /// Changes the cursor to a question mark with a pointer. If the user then clicks a control in the dialog box,
-      //the control receives a WM_HELP message.
+      /// the control receives a WM_HELP message.
       /// </summary>
       CONTEXTHELP = 0xF180,
 
