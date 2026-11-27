@@ -33,6 +33,8 @@ public static unsafe class NSSavePanel
     private static readonly IntPtr IsKindOfClassSelector = ObjCRuntime.RegisterSelector("isKindOfClass:");
     private static readonly IntPtr RunModalSelector = ObjCRuntime.RegisterSelector("runModal");
     private static readonly IntPtr UrlSelector = ObjCRuntime.RegisterSelector("URL");
+    private static readonly IntPtr UrlsSelector = ObjCRuntime.RegisterSelector("URLs");
+    private static readonly IntPtr SetAllowsManySelector = ObjCRuntime.RegisterSelector("setAllowsMultipleSelection:");
     private static readonly IntPtr TypeWithExtensionSelector = ObjCRuntime.RegisterSelector("typeWithFilenameExtension:");
 
     /// <summary>A new dialog that saves, autoreleased.</summary>
@@ -92,6 +94,27 @@ public static unsafe class NSSavePanel
 
         NSObject.Send(panel, SetContentTypesSelector, NSArray.Create(CollectionsMarshal.AsSpan(types)));
         NSObject.Send(panel, SetAllowsOtherTypesSelector, true);
+    }
+
+    /// <summary>Lets an open dialog choose several files at once; read them by <see cref="RunForMany"/>.</summary>
+    public static void SetAllowsMany(IntPtr panel, bool many) => NSObject.Send(panel, SetAllowsManySelector, many);
+
+    /// <summary>Shows an open dialog and waits for it; the paths chosen, none when it was canceled.</summary>
+    public static string[] RunForMany(IntPtr panel)
+    {
+        if (NSObject.SendForInteger(panel, RunModalSelector) != Accepted)
+        {
+            return [];
+        }
+
+        var urls = NSObject.Send(panel, UrlsSelector);
+        var paths = new string[NSArray.CountOf(urls)];
+        for (var index = 0; index < paths.Length; index++)
+        {
+            paths[index] = NSURL.PathOf(NSArray.ObjectAt(urls, index));
+        }
+
+        return paths;
     }
 
     /// <summary>Shows the dialog and waits for it; the path chosen, null when it was canceled.</summary>
