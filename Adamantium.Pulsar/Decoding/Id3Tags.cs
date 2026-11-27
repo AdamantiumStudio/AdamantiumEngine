@@ -7,10 +7,19 @@ namespace Adamantium.Pulsar.Decoding;
 /// TPE1, TALB, or TT2, TP1, TAL), else of an ID3v1 tag in its last 128 bytes.</summary>
 internal static class Id3Tags
 {
-    private const int HeaderLength = 10;
+    public const int HeaderLength = 10;
     private const int V1Length = 128;
     // Of a tag, as much as is read: its text frames come before its pictures.
     private const int LongestRead = 1 << 18;
+
+    /// <summary>The whole length of the ID3v2 tag whose header <paramref name="header"/> begins by - its footer too,
+    /// where it says it has one; -1 of no tag.</summary>
+    public static int LengthOf(ReadOnlySpan<byte> header) =>
+        header.Length >= HeaderLength && header.StartsWith("ID3"u8) &&
+        ((header[6] | header[7] | header[8] | header[9]) & 0x80) == 0
+            ? HeaderLength + (header[6] << 21 | header[7] << 14 | header[8] << 7 | header[9]) +
+              ((header[5] & 0x10) != 0 ? HeaderLength : 0)
+            : -1;
 
     /// <summary>Of the tags from <paramref name="from"/> to <paramref name="to"/>, where the frames begin.</summary>
     public static SoundTags Read(Stream stream, long from, long to)

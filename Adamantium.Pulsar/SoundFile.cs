@@ -58,6 +58,30 @@ public static class SoundFile
         }
     }
 
+    /// <summary>The decoder of a stream read only forward, as it comes - a station's: of MP3; how long it is is not
+    /// known, and it is not sought in. It disposes the stream with itself.</summary>
+    /// <exception cref="InvalidDataException">It is no stream of sound that can be played as it comes; the stream is
+    /// disposed.</exception>
+    internal static ISoundDecoder OpenForward(Stream stream)
+    {
+        ArgumentNullException.ThrowIfNull(stream);
+        var reader = new ForwardReader(stream);
+        try
+        {
+            if (reader.Has(4) && (reader.Ahead(4).SequenceEqual("RIFF"u8) || reader.Ahead(4).SequenceEqual("fLaC"u8)))
+            {
+                throw new InvalidDataException("A WAV or FLAC stream is not played as it comes.");
+            }
+
+            return new Mp3StreamDecoder(reader);
+        }
+        catch
+        {
+            reader.Dispose();
+            throw;
+        }
+    }
+
     /// <summary>The whole of the file.</summary>
     /// <exception cref="InvalidDataException">It is no sound file, or one that can not be read.</exception>
     public static SoundData Read(byte[] file)
