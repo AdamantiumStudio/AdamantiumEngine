@@ -93,4 +93,19 @@ public interface IFileOpenDialog
     /// whatever shape the last one was dragged into is the shape the next one gets.</summary>
     [PreserveSig]
     int SetClientGuid(ref Guid guid);
+
+    [PreserveSig]
+    int ClearClientData();
+
+    /// <summary>Not called here; present because the slot is, as <see cref="Close"/>.</summary>
+    [PreserveSig]
+    int SetFilter(IntPtr filter);
+
+    /// <summary>What the user chose, of a dialog let choose several (<see cref="ShellDialog.AllowMultiSelect"/>). Valid
+    /// only after <see cref="Show"/> returned S_OK.</summary>
+    [PreserveSig]
+    int GetResults(out IShellItemArray items);
+
+    [PreserveSig]
+    int GetSelectedItems(out IShellItemArray items);
 }

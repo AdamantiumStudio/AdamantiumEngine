@@ -35,6 +35,10 @@ public static class ShellDialog
     /// <summary>FOS_PICKFOLDERS - an open dialog chooses a folder instead of a file.</summary>
     public const uint PickFolders = 0x00000020;
 
+    /// <summary>FOS_ALLOWMULTISELECT - an open dialog lets several files be chosen at once; read them by GetResults.
+    /// </summary>
+    public const uint AllowMultiSelect = 0x00000200;
+
     /// <summary>SIGDN_FILESYSPATH - the full path on disk, which is the only name we ever want back.</summary>
     public const uint SigdnFileSysPath = 0x80058000;
 
