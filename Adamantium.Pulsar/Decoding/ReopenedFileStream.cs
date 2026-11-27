@@ -1,14 +1,21 @@
 namespace Adamantium.Pulsar.Decoding;
 
 /// <summary>A part of a file, open only while it is read: Windows lets no one replace an open file, and music plays for
-/// minutes. One replaced meanwhile is read no more.</summary>
+/// minutes. One replaced meanwhile is read no more, from the next part read of it. Small reads come of a part read
+/// ahead: a decoder looking through frame headers would open the file for each of them.</summary>
 internal sealed class ReopenedFileStream : Stream
 {
+    private const int AheadLength = 1 << 16;
+
     private readonly string _path;
     private readonly long _offset;
     private readonly long _fileLength;
     private readonly DateTime _written;
     private long _position;
+    private byte[] _ahead;
+    // Of the part, where what was read ahead begins, and how much there is.
+    private long _aheadAt;
+    private int _aheadLength;
 
     /// <param name="length">-1 for the rest of the file.</param>
     public ReopenedFileStream(string path, long offset, long length)
@@ -53,14 +60,23 @@ internal sealed class ReopenedFileStream : Stream
             return 0;
         }
 
-        using var file = OpenFile();
-        if (file.Length != _fileLength || File.GetLastWriteTimeUtc(file.SafeFileHandle) != _written)
+        // A large one would read ahead much it is not asked for.
+        if (buffer.Length >= AheadLength / 2)
         {
-            throw new IOException($"{_path} was written anew while its sound played.");
+            var direct = ReadFile(_position, buffer);
+            _position += direct;
+            return direct;
         }
 
-        file.Position = _offset + _position;
-        var read = file.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
+        if (_position < _aheadAt || _position + buffer.Length > _aheadAt + _aheadLength)
+        {
+            _ahead ??= new byte[AheadLength];
+            _aheadAt = _position;
+            _aheadLength = ReadFile(_position, _ahead.AsSpan(0, (int)Math.Min(AheadLength, Length - _position)));
+        }
+
+        var read = (int)Math.Min(buffer.Length, _aheadAt + _aheadLength - _position);
+        _ahead.AsSpan((int)(_position - _aheadAt), read).CopyTo(buffer);
         _position += read;
         return read;
     }
@@ -80,7 +96,19 @@ internal sealed class ReopenedFileStream : Stream
 
     public override void Write(byte[] buffer, int offset, int count) => throw new NotSupportedException();
 
-    // Unbuffered: what is asked for is large.
+    private int ReadFile(long at, Span<byte> buffer)
+    {
+        using var file = OpenFile();
+        if (file.Length != _fileLength || File.GetLastWriteTimeUtc(file.SafeFileHandle) != _written)
+        {
+            throw new IOException($"{_path} was written anew while its sound played.");
+        }
+
+        file.Position = _offset + at;
+        return file.ReadAtLeast(buffer, buffer.Length, throwOnEndOfStream: false);
+    }
+
+    // Unbuffered: what is read ahead is the buffer.
     private FileStream OpenFile() =>
         new(_path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, bufferSize: 0);
 }
