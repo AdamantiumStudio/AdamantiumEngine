@@ -342,6 +342,16 @@ public class AudioPlaybackTests
         Assert.Throws<InvalidOperationException>(() => _playback.Play());
     }
 
+    // Its device runs from the start: a first play waits for no device to start.
+    [Test]
+    public void ItsOwnOutput_RunsAsSoonAsItIsMade()
+    {
+        var output = AudioOutput.CreateSilent(TimeSpan.FromMilliseconds(20));
+        using var playback = new AudioPlayback(output);
+
+        Assert.That(output.State, Is.EqualTo(AudioOutputState.Running));
+    }
+
     // Of its own engine, to an output of its own.
     [Test]
     public void APlaybackOfItsOwn_PlaysToItsOutput()
