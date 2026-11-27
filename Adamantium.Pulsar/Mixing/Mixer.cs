@@ -120,6 +120,9 @@ internal sealed class Mixer
             case CommandKind.SetBusPaused:
                 _buses[command.Slot].Paused = command.Flag;
                 break;
+            case CommandKind.KeepBusPlayed:
+                _buses[command.Slot].Played = command.Played;
+                break;
         }
     }
 
@@ -227,12 +230,14 @@ internal sealed class Mixer
             bus.Loudness = bus.Volume.Highest;
             bus.IsPaused = bus.Paused;
             bus.IsSolo = bus.Solo || !anySolo;
+            bus.IsKept = bus.Played != null;
             if (bus.Parent >= 0)
             {
                 ref var parent = ref _buses[bus.Parent];
                 bus.Loudness *= parent.Loudness;
                 bus.IsPaused |= parent.IsPaused;
                 bus.IsSolo |= parent.IsSolo;
+                bus.IsKept |= parent.IsKept;
                 bus.Removing |= parent.Removing;
             }
 
@@ -264,7 +269,10 @@ internal sealed class Mixer
             var loudness = voice.Volume.Highest * voice.Fade.Highest * bus.Loudness * (voice.Selected ? KeepHeard : 1) *
                 (voice.IsSpatial ? voice.SpaceGain : 1);
             voice.IsReady = voice.Stream == null || voice.Stream.IsReady;
-            voice.Selected = loudness > LeastHeard && bus.IsSolo && !voice.Paused && !bus.IsPaused &&
+            // Of a bus whose frames are kept, mixed however quiet, to be shown; ranked by how loud it is heard, so a
+            // silent one is the first to give its place up.
+            voice.Selected = (loudness > LeastHeard || bus.IsKept && !bus.Removing) && bus.IsSolo && !voice.Paused &&
+                !bus.IsPaused &&
                 (voice.Started || (voice.StartFrame < _frame + BlockFrames && voice.IsReady));
             if (voice.Selected)
             {
@@ -445,6 +453,8 @@ internal sealed class Mixer
         for (var index = _busCount - 1; index >= 0; index--)
         {
             ref var bus = ref _buses[_busOrder[index]];
+            // What went into it before its gain: its children were added into it before it.
+            bus.Played?.Keep(bus.HasSamples ? bus.Samples : default, BlockFrames);
             var gain = bus.Muted || bus.Removing ? 0 : bus.Volume.Value;
             if (!bus.HadSamples)
             {

@@ -44,10 +44,10 @@ internal sealed class SpectrumAnalyzer
     }
 
     /// <summary>Each band 0 (<see cref="Floor"/> or quieter) to 1 (full scale), of what <paramref name="engine"/> mixed
-    /// last.</summary>
-    public void Analyze(AudioEngine engine, Span<float> bands)
+    /// last into <paramref name="bus"/>, before its volume.</summary>
+    public void Analyze(AudioEngine engine, BusId bus, Span<float> bands)
     {
-        var count = engine.CopyPlayed(_played);
+        var count = engine.CopyPlayed(bus, _played);
         _played.AsSpan(2 * count).Clear();
         for (var n = 0; n < Size; n++)
         {

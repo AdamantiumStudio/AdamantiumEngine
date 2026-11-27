@@ -31,4 +31,7 @@ internal struct Command
     public VoicePlace Place;
 
     public Listener Listener;
+
+    /// <summary>Where a bus's frames are kept.</summary>
+    public PlayedFrames Played;
 }

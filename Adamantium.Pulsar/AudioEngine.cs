@@ -20,9 +20,8 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
     private readonly Stack<int> _freeSounds = [];
     // 1 while the commands are applied or a block is rendered.
     private int _mixing;
-    // The last frames mixed, round, and how many were ever.
-    private readonly float[] _played = new float[2 * PlayedCapacity];
-    private long _playedEnd;
+    // Of each bus whose frames are kept, the last before its volume.
+    private readonly PlayedFrames[] _busPlayed;
     private bool _disposed;
 
     public AudioEngine()
@@ -45,6 +44,7 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
         _buses = new SlotTable(settings.Buses);
         _busParents = new int[settings.Buses];
         Array.Fill(_busParents, -1);
+        _busPlayed = new PlayedFrames[settings.Buses];
         _endedVoices = new SlotReturns(settings.Voices);
         _removedBuses = new SlotReturns(settings.Buses);
         _mixer = new Mixer(settings, _streamer, _endedVoices, _removedBuses);
@@ -293,6 +293,7 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
                 if (LeadsTo(other, slot))
                 {
                     _buses.Retire(other);
+                    _busPlayed[other] = null;
                 }
             }
 
@@ -337,7 +338,6 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
         {
             ApplyCommands();
             _mixer.Render(samples);
-            KeepPlayed(samples);
         }
         finally
         {
@@ -345,34 +345,39 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
         }
     }
 
-    /// <summary>The last frames mixed, as many as <paramref name="frames"/> holds (stereo, side by side), up to
-    /// <see cref="PlayedCapacity"/>; how many there were. For what shows the sound - a spectrum, a level meter: read on
-    /// any thread without a lock, a block mixed meanwhile may be in part of them.</summary>
-    internal int CopyPlayed(Span<float> frames)
+    /// <summary>Of a bus whose frames are kept (<see cref="KeepPlayed"/>), the last mixed into it, before its volume and
+    /// its mute, as many as <paramref name="frames"/> holds (stereo, side by side), up to <see cref="PlayedCapacity"/>;
+    /// how many there were. For what shows the sound - a spectrum, a level meter. None of a bus that keeps none, or is
+    /// gone.</summary>
+    internal int CopyPlayed(BusId bus, Span<float> frames)
     {
-        var end = Volatile.Read(ref _playedEnd);
-        var count = (int)Math.Min(Math.Min(frames.Length / 2, PlayedCapacity), end);
-        var from = (int)((end - count) % PlayedCapacity);
-        var first = Math.Min(count, PlayedCapacity - from);
-        _played.AsSpan(2 * from, 2 * first).CopyTo(frames);
-        _played.AsSpan(0, 2 * (count - first)).CopyTo(frames[(2 * first)..]);
-        return count;
+        lock (_lock)
+        {
+            TakeReturns();
+            return _buses.Holds(bus.Slot, bus.Generation) && _busPlayed[bus.Slot] is { } played ? played.CopyTo(frames) : 0;
+        }
+    }
+
+    /// <summary>From now on, the frames mixed into <paramref name="bus"/> are kept before its volume, and what plays
+    /// through it is mixed however quiet it is heard - silent, but there to be shown; ranked by how loud it is heard,
+    /// it gives its place up first.</summary>
+    internal void KeepPlayed(BusId bus)
+    {
+        lock (_lock)
+        {
+            var slot = SlotOf(bus);
+            if (slot == 0 || _busPlayed[slot] != null)
+            {
+                return;
+            }
+
+            _busPlayed[slot] = new PlayedFrames();
+            Post(new Command { Kind = CommandKind.KeepBusPlayed, Slot = slot, Played = _busPlayed[slot] });
+        }
     }
 
     /// <summary>The most frames <see cref="CopyPlayed"/> gives: 85 ms.</summary>
-    internal const int PlayedCapacity = 4096;
-
-    private void KeepPlayed(ReadOnlySpan<float> samples)
-    {
-        var frames = samples.Length / 2;
-        var kept = samples[(2 * Math.Max(0, frames - PlayedCapacity))..];
-        var count = kept.Length / 2;
-        var at = (int)((_playedEnd + frames - count) % PlayedCapacity);
-        var first = Math.Min(count, PlayedCapacity - at);
-        kept[..(2 * first)].CopyTo(_played.AsSpan(2 * at));
-        kept[(2 * first)..].CopyTo(_played);
-        Volatile.Write(ref _playedEnd, _playedEnd + frames);
-    }
+    internal const int PlayedCapacity = PlayedFrames.Capacity;
 
     /// <summary>Stops reading streamed sounds. An output that still plays it plays out what there is.</summary>
     public void Dispose()
