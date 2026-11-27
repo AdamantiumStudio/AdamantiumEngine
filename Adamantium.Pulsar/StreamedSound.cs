@@ -14,6 +14,10 @@ public sealed class StreamedSound : Sound
 
     internal ISoundStorage Storage { get; }
 
+    internal override bool IsStreamed => true;
+
+    internal override ISoundDecoder OpenDecoder() => SoundFile.Open(Storage.Open());
+
     /// <summary>Reads what the file says of itself, and leaves the samples.</summary>
     /// <exception cref="InvalidDataException">It is no sound file, or one that can not be streamed.</exception>
     public static StreamedSound Open(ISoundStorage storage)

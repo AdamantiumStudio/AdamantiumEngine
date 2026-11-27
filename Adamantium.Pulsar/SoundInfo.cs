@@ -8,6 +8,12 @@ namespace Adamantium.Pulsar;
 /// known.</param>
 public sealed record SoundInfo(string Codec, AudioFormat Format, TimeSpan Duration, int Bitrate, SoundTags Tags)
 {
+    /// <summary>A station's, which plays as it comes: of no length, not sought in.</summary>
+    public bool IsLive { get; init; }
+
+    /// <summary>The station's name, as it says it; null where it does not, and of a file.</summary>
+    public string Station { get; init; }
+
     /// <inheritdoc cref="Read(ISoundStorage)"/>
     public static SoundInfo Read(string path) => Read(new SoundFileStorage(path));
 

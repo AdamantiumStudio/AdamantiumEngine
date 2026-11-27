@@ -12,26 +12,21 @@ internal sealed class Mp3Decoder : ISoundDecoder
     private const int LongestFrame = 1441;
     // How far a stream's first frame is looked for, past its tags.
     private const int LongestSearch = 1 << 16;
-    // A frame takes this much of the frames before: main_data_begin's most.
-    private const int LongestReservoir = 511;
     // Of the lower rates', of 8 bits.
     private const int LongestLowerReservoir = 255;
     private const int VbriAt = Mp3FrameHeader.Length + 32;
     private const int Id3v1Length = 128;
     private const int ApeFooterLength = 32;
-    private const int ReservoirCapacity = 4096;
 
     private readonly Stream _stream;
-    private readonly Mp3Layer3 _layer3 = new();
+    private readonly Mp3FrameDecoder _frames = new();
     private readonly Mp3FrameHeader _first;
     private readonly long[] _frameAt;
     // Where the frames end: before the tags at the end of the file.
     private readonly long _end;
     private readonly int _startSkip;
     private readonly byte[] _frame = new byte[LongestFrame];
-    private readonly byte[] _reservoir = new byte[ReservoirCapacity];
     private readonly float[] _decoded;
-    private int _reservoirLength;
     // The frame of the file decoded next.
     private int _next;
     private int _decodedFrames;
@@ -132,14 +127,13 @@ internal sealed class Mp3Decoder : ISoundDecoder
         var sample = frame + _startSkip;
         var target = (int)Math.Min(sample / _first.Samples, _frameAt.Length);
         var from = Math.Max(0, target - (_first.IsFirst ? 1 : 2));
-        var reservoir = _first.IsFirst ? LongestReservoir : LongestLowerReservoir;
+        var reservoir = _first.IsFirst ? Mp3FrameDecoder.LongestReservoir : LongestLowerReservoir;
         for (var bytes = 0; from > 0 && bytes < reservoir; from--)
         {
             bytes += MainDataOf(from - 1);
         }
 
-        _layer3.Reset();
-        _reservoirLength = 0;
+        _frames.Reset();
         _next = from;
         _decodedFrames = _decodedRead = 0;
         _drop = sample - (long)from * _first.Samples;
@@ -159,18 +153,19 @@ internal sealed class Mp3Decoder : ISoundDecoder
     private static long SkipTags(Stream stream)
     {
         var at = stream.Position;
-        Span<byte> tag = stackalloc byte[10];
+        Span<byte> tag = stackalloc byte[Id3Tags.HeaderLength];
         while (true)
         {
             stream.Position = at;
-            if (stream.ReadAtLeast(tag, tag.Length, throwOnEndOfStream: false) < tag.Length || !tag.StartsWith("ID3"u8) ||
-                ((tag[6] | tag[7] | tag[8] | tag[9]) & 0x80) != 0)
+            var length = stream.ReadAtLeast(tag, tag.Length, throwOnEndOfStream: false) == tag.Length
+                ? Id3Tags.LengthOf(tag)
+                : -1;
+            if (length < 0)
             {
                 return at;
             }
 
-            var length = tag[6] << 21 | tag[7] << 14 | tag[8] << 7 | tag[9];
-            at += 10 + length + ((tag[5] & 0x10) != 0 ? 10 : 0);
+            at += length;
         }
     }
 
@@ -340,44 +335,7 @@ internal sealed class Mp3Decoder : ISoundDecoder
         _stream.ReadExactly(_frame.AsSpan(0, length));
         _decodedFrames = header.Samples;
         _decodedRead = 0;
-        var decoded = _decoded.AsSpan(0, header.Samples * header.Channels);
-        var sideEnd = header.SideInfoAt + header.SideInfoLength;
-        if (!_layer3.ReadSideInfo(header, _frame.AsSpan(header.SideInfoAt, header.SideInfoLength), out var begin) ||
-            sideEnd > length)
-        {
-            _decoded.AsSpan(0, header.Samples * Format.Channels).Clear();
-            _reservoirLength = 0;
-            return true;
-        }
-
-        // The main data begins that far back in the frames before; what is kept of them is no more than it takes.
-        var mainData = _frame.AsSpan(sideEnd, length - sideEnd);
-        var keep = Math.Min(_reservoirLength, LongestReservoir);
-        _reservoir.AsSpan(_reservoirLength - keep, keep).CopyTo(_reservoir);
-        _reservoirLength = keep;
-        var hasMainData = begin <= _reservoirLength;
-        var mainStart = _reservoirLength - begin;
-        mainData.CopyTo(_reservoir.AsSpan(_reservoirLength));
-        _reservoirLength += mainData.Length;
-        if (hasMainData)
-        {
-            _layer3.Decode(header, _reservoir.AsSpan(mainStart, _reservoirLength - mainStart), decoded);
-        }
-        else
-        {
-            decoded.Clear();
-        }
-
-        // A frame of one channel in a stream of two: from the last sample back, each in both.
-        if (header.Channels < Format.Channels)
-        {
-            _layer3.ShareFirstChannel();
-            for (var sample = header.Samples - 1; sample >= 0; sample--)
-            {
-                _decoded[sample * 2 + 1] = _decoded[sample * 2] = _decoded[sample];
-            }
-        }
-
+        _frames.Decode(header, _frame.AsSpan(0, length), _decoded, Format.Channels);
         return true;
     }
 }

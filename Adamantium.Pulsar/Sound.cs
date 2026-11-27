@@ -50,4 +50,14 @@ public abstract class Sound
 
     /// <summary>What the file it was read from says of it.</summary>
     public SoundTags Tags { get; internal init; }
+
+    /// <summary>Read while it plays, a voice's stream filling ahead of it, not held in memory.</summary>
+    internal virtual bool IsStreamed => false;
+
+    /// <summary>A read that gave fewer frames than asked is not its end: more come later, as a station's do.</summary>
+    internal virtual bool ComesOn => false;
+
+    /// <summary>The decoder a voice of it reads, from its beginning: one of its own.</summary>
+    internal virtual ISoundDecoder OpenDecoder() =>
+        throw new InvalidOperationException("A sound in memory is not decoded as it plays.");
 }

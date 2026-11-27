@@ -20,11 +20,20 @@ internal sealed class OggOpusDecoder : ISoundDecoder
     private readonly int[] _outputOrder;
     private readonly float _gain;
     private readonly int _audioPage;
-    // Of the stream, in granules: where its first packet begins, and where its sound does, after pre-skip.
+    // Of the stream, in granules: where its first packet begins, and where its sound does, after pre-skip; where it
+    // ends, never of one read forward. Read forward, the first granule places them, as no page before is read.
     private readonly long _first;
     private readonly long _start;
+    private readonly long _end;
+    private readonly int _preSkip;
     private readonly DecodedSamples _ready;
     private long _position;
+    private bool _isPlaced;
+    // Read forward, the first granule was on the page right after the headers, by their numbers: the link is heard from
+    // its beginning, pre-skip and all, not joined in its middle, as a station's listener is sent the headers and then
+    // the page that plays now.
+    private bool _isFromItsBeginning;
+    private readonly uint _headersEnd;
 
     /// <param name="ogg">At its first packet; disposed with it, or where it is refused.</param>
     public OggOpusDecoder(OggStream ogg)
@@ -74,14 +83,28 @@ internal sealed class OggOpusDecoder : ISoundDecoder
 
             var comments = VorbisComments.Read(tags[8..]);
             _audioPage = ogg.NextPage;
-            _first = FirstGranule();
-            _start = _first + preSkip;
-            Frames = Math.Max(0, LastGranule() - _start);
-            Loop = comments.LoopWithin(Frames);
+            _headersEnd = ogg.CurrentPage.Sequence;
+            _preSkip = preSkip;
             Tags = comments.Tags;
             _ready = new DecodedSamples(_channels, LongestPacket);
-            Restart(_audioPage, _first);
-            _position = _start;
+            if (ogg.IsForward)
+            {
+                // As long as it comes; placed by its first granule.
+                Frames = -1;
+                _end = long.MaxValue;
+                Restart(_audioPage, -1);
+            }
+            else
+            {
+                _first = FirstGranule();
+                _start = _first + preSkip;
+                Frames = Math.Max(0, LastGranule() - _start);
+                Loop = comments.LoopWithin(Frames);
+                _end = _start + Frames;
+                Restart(_audioPage, _first);
+                _position = _start;
+                _isPlaced = true;
+            }
         }
         catch
         {
@@ -115,7 +138,7 @@ internal sealed class OggOpusDecoder : ISoundDecoder
 
     public int Read(Span<float> samples)
     {
-        var wanted = (int)Math.Min(samples.Length / _channels, _start + Frames - _position);
+        var wanted = (int)Math.Min(samples.Length / _channels, _end - _position);
         var done = 0;
         while (done < wanted)
         {
@@ -129,6 +152,13 @@ internal sealed class OggOpusDecoder : ISoundDecoder
                 continue;
             }
 
+            // Read forward, the sound begins where the first granule placed it, past the pre-skip of a link begun there.
+            if (!_isPlaced)
+            {
+                _position = _ready.At + (_isFromItsBeginning ? _preSkip : 0);
+                _isPlaced = true;
+            }
+
             done += _ready.Take(samples[(done * _channels)..], ref _position, wanted - done);
         }
 
@@ -138,6 +168,11 @@ internal sealed class OggOpusDecoder : ISoundDecoder
     // From a page that begins a packet, its granule before the sample sought by 80 ms at least.
     public void Seek(long frame)
     {
+        if (_ogg.IsForward)
+        {
+            throw new InvalidDataException("An Opus stream that comes as it plays is not sought in.");
+        }
+
         if (frame < 0 || frame > Frames)
         {
             throw new InvalidDataException($"The Opus stream has no frame {frame}.");
@@ -166,7 +201,8 @@ internal sealed class OggOpusDecoder : ISoundDecoder
     public void Dispose() => _ogg.Dispose();
 
     // Decoding from the first packet that begins on the page, with the decoders as at the beginning: placed at
-    // <paramref name="start"/>, where the page before ended, the stream's start for the first.
+    // <paramref name="start"/>, where the page before ended, the stream's start for the first; -1 to be placed by the
+    // next granule.
     private void Restart(int page, long start)
     {
         _ogg.SeekToPage(page);
@@ -176,7 +212,10 @@ internal sealed class OggOpusDecoder : ISoundDecoder
         }
 
         _ready.Clear();
-        _ready.Place(start);
+        if (start >= 0)
+        {
+            _ready.Place(start);
+        }
     }
 
     // The next packet's samples after those ready; false past the last.
@@ -211,9 +250,10 @@ internal sealed class OggOpusDecoder : ISoundDecoder
             // The last page's granule may cut the end; where it begins a packet, its packets begin where the page
             // before ended - by that one's granule, a damaged page's too where it is between where they would begin
             // cut and not. A continued one's, after a loss, are placed as if none were cut.
-            var page = _ogg.NextPage - 1;
-            var info = _ogg.Pages[page];
-            var before = info.IsLast && !info.IsContinued ? GranuleBefore(page, false) : -1;
+            // Read forward, no page before is kept to say it.
+            var info = _ogg.CurrentPage;
+            _isFromItsBeginning = _ogg.IsForward && info.Sequence == _headersEnd + 1;
+            var before = info.IsLast && !info.IsContinued && !_ogg.IsForward ? GranuleBefore(_ogg.NextPage - 1, false) : -1;
             _ready.Place(before > granule - _ready.Count && before <= granule ? before : granule - _ready.Count);
         }
 
@@ -281,7 +321,7 @@ internal sealed class OggOpusDecoder : ISoundDecoder
             if (granule >= 0)
             {
                 var start = granule - samples;
-                if (start < 0 && !_ogg.Pages[_ogg.NextPage - 1].IsLast)
+                if (start < 0 && !_ogg.CurrentPage.IsLast)
                 {
                     throw Damaged("its first page says fewer samples than its packets have");
                 }
