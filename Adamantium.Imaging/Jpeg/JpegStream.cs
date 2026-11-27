@@ -1180,10 +1180,10 @@ internal sealed class JpegStream
         return rows;
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     /// <summary>A block's <paramref name="coefficients"/> (natural order; <paramref name="rows"/> the
     /// <see cref="JpegIdct.Mask"/> of its AC terms) into <paramref name="component"/>'s samples, its block
     /// <paramref name="across"/> and <paramref name="down"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     internal void Store(JpegComponent component, ReadOnlySpan<short> coefficients, int rows, int across, int down)
     {
         var quantization = component.Quantization;

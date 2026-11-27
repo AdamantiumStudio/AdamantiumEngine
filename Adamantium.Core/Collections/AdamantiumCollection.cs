@@ -207,12 +207,6 @@ namespace Adamantium.Core.Collections
         public bool IsFixedSize { get; }
 
         /// <summary>
-        /// Gets or sets a validation routine that can be used to validate items before they are
-        /// added.
-        /// </summary>
-        //public Action<T> Validate { get; set; }
-
-        /// <summary>
         /// Determines whether the <see cref="AdamantiumCollection{T}"/> contains a specific value.
         /// </summary>
         /// <returns>
