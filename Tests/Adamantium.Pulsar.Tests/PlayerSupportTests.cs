@@ -144,6 +144,25 @@ public class PlayerSupportTests
         Assert.That(block[^1], Is.EqualTo(0.2f).Within(1e-6f));
     }
 
+    // Whatever the priorities: one heard of a low priority keeps its place over one not heard.
+    [Test]
+    public void AVoiceOfASilentKeptBus_GivesPlaceToOneOfLowerPriority()
+    {
+        using var engine = new AudioEngine(new AudioEngineSettings { AudibleVoices = 1 });
+        var bus = engine.AddBus(BusId.Master);
+        engine.KeepPlayed(bus);
+        engine.SetVolume(bus, 0);
+        var sound = engine.AddSound(new SoundData(AudioFormat.Default, Enumerable.Repeat(0.4f, 2 * 4800).ToArray()));
+        engine.Play(sound, new VoiceSettings { Bus = bus });
+        engine.Play(sound, new VoiceSettings { Priority = -1 });
+        var block = new float[2 * 512];
+        engine.Render(block, AudioFormat.Default);
+        engine.Render(block, AudioFormat.Default);
+
+        Assert.That(block[^1], Is.EqualTo(0.4f).Within(1e-6f));
+        Assert.That(engine.AudibleVoices, Is.EqualTo(1));
+    }
+
     // Of a muted master, the kept bus's sound is still there to be shown.
     [Test]
     public void AKeptBusUnderAMutedMaster_KeepsItsFrames()
@@ -178,17 +197,25 @@ public class PlayerSupportTests
         }
 
         engine.Play(engine.AddSound(new SoundData(AudioFormat.Default, samples)), new VoiceSettings { Bus = bus });
-        var block = new float[2 * 1000];
+        // Whole blocks of the mixer's, so what is kept is what was rendered.
+        var block = new float[2 * 1024];
         for (var round = 0; round < 5; round++)
         {
             engine.Render(block, AudioFormat.Default);
         }
 
-        // Whole blocks are mixed: what is kept may be a little ahead of what was asked for.
         var played = new float[2 * 300];
         Assert.That(engine.CopyPlayed(bus, played), Is.EqualTo(300));
-        Assert.That(played, Is.Ordered);
-        Assert.That(played[^2], Is.GreaterThanOrEqualTo(block[^2]));
+        Assert.That(played[^2], Is.EqualTo(block[^2]));
+        Assert.That(played[0], Is.EqualTo(block[2 * (1024 - 300)]));
+        // 5120 frames kept round 4096: the last of them run across the ring's end.
+        var all = new float[2 * AudioEngine.PlayedCapacity];
+        engine.CopyPlayed(bus, all);
+        Assert.That(all[^2], Is.EqualTo(block[^2]));
+        for (var frame = 0; frame < AudioEngine.PlayedCapacity; frame++)
+        {
+            Assert.That(all[2 * frame], Is.EqualTo((5120 - AudioEngine.PlayedCapacity + frame) / 6000f).Within(1e-6f));
+        }
         Assert.That(engine.CopyPlayed(bus, new float[2 * 10000]), Is.EqualTo(AudioEngine.PlayedCapacity));
     }
 

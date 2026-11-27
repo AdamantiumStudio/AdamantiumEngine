@@ -347,8 +347,8 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
 
     /// <summary>Of a bus whose frames are kept (<see cref="KeepPlayed"/>), the last mixed into it, before its volume and
     /// its mute, as many as <paramref name="frames"/> holds (stereo, side by side), up to <see cref="PlayedCapacity"/>;
-    /// how many there were. For what shows the sound - a spectrum, a level meter. None of a bus that keeps none, or is
-    /// gone.</summary>
+    /// how many there were. For what shows the sound - a spectrum, a level meter. None of a bus that keeps none, is
+    /// gone, or is no bus of this engine's.</summary>
     internal int CopyPlayed(BusId bus, Span<float> frames)
     {
         lock (_lock)

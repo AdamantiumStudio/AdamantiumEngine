@@ -9,6 +9,8 @@ internal sealed class Mixer
 {
     // 5 ms: how finely a gain moves, and how fast one with no time of its own does.
     private const int BlockFrames = 256;
+    // The rank of a voice mixed only to be shown: below every one heard, whatever its priority.
+    private const long NotHeard = long.MinValue;
     private const int Channels = 2;
     // -80 dB.
     private const float LeastHeard = 0.0001f;
@@ -276,8 +278,10 @@ internal sealed class Mixer
                 (voice.Started || (voice.StartFrame < _frame + BlockFrames && voice.IsReady));
             if (voice.Selected)
             {
-                // A positive float's bits are in its order.
-                var rank = ((long)voice.Priority << 32) + BitConverter.SingleToInt32Bits(loudness);
+                // A positive float's bits are in its order, and more than 0: one heard ranks above NotHeard.
+                var rank = loudness > LeastHeard
+                    ? ((long)voice.Priority << 32) + BitConverter.SingleToInt32Bits(loudness)
+                    : NotHeard;
                 var dropped = _loudest.Add(rank, _active[index]);
                 if (dropped >= 0)
                 {
@@ -286,7 +290,8 @@ internal sealed class Mixer
             }
         }
 
-        Volatile.Write(ref _heard, _loudest.Count);
+        // Those mixed only to be shown are not heard.
+        Volatile.Write(ref _heard, _loudest.CountAbove(NotHeard));
     }
 
     private void MixVoice(ref Voice voice)
