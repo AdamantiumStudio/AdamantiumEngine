@@ -18,8 +18,11 @@ public sealed record PhysicsSettings
     /// </summary>
     public int Substeps { get; init; } = 4;
 
-    /// <summary>The most points a contact between two shapes keeps. Four hold any shape still on a flat face; the
-    /// limit is for one pair of shapes, not for a body.</summary>
+    /// <summary>The most <see cref="MaxContactPointsPerPair"/> can be: as many points as a contact holds.</summary>
+    public const int MostContactPointsPerPair = ManifoldBuffer.Capacity;
+
+    /// <summary>The most points a contact between two shapes keeps, from 1 to <see cref="MostContactPointsPerPair"/>.
+    /// Four hold any shape still on a flat face; the limit is for one pair of shapes, not for a body.</summary>
     public int MaxContactPointsPerPair { get; init; } = 4;
 
     /// <summary>How close, in meters, two shapes are found touching before they touch, so a fast body stops at the
@@ -61,7 +64,7 @@ public sealed record PhysicsSettings
             return PhysicsSettingsProblem.NoSteps;
         if (Substeps <= 0)
             return PhysicsSettingsProblem.NoSubsteps;
-        if (MaxContactPointsPerPair <= 0 || MaxContactPointsPerPair > ManifoldBuffer.Capacity)
+        if (MaxContactPointsPerPair <= 0 || MaxContactPointsPerPair > MostContactPointsPerPair)
             return PhysicsSettingsProblem.ContactPointsOutOfRange;
         if (MaxStepsPerAdvance <= 0)
             return PhysicsSettingsProblem.NoStepsPerAdvance;
