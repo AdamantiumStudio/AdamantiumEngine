@@ -617,6 +617,39 @@ public class TextLayout : DisposableObject
         set => Revise(ref _glyphReflection, value);
     }
 
+    /// <summary>Whether any glyph of the text wears an outline, a shadow, a glow or a reflection that draws - the
+    /// layout's own, or one a stretch of it sets.</summary>
+    public bool HasGlyphEffects
+    {
+        get
+        {
+            if (DrawsAny(GlyphOutline, GlyphShadow, GlyphGlow, GlyphReflection))
+            {
+                return true;
+            }
+
+            if (_laid?.Glyphs is not { } glyphs)
+            {
+                return false;
+            }
+
+            foreach (var word in glyphs)
+            {
+                if (word.Attributes is { } attributes &&
+                    DrawsAny(attributes.Outline, attributes.Shadow, attributes.Glow, attributes.Reflection))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    private static bool DrawsAny(GlyphOutline outline, GlyphShadow shadow, GlyphGlow glow, GlyphReflection reflection) =>
+        GlyphQuadBuilder.Draws(outline) || GlyphQuadBuilder.Draws(shadow) || GlyphQuadBuilder.Draws(glow) ||
+        GlyphQuadBuilder.Draws(reflection);
+
     private void Revise<T>(ref T field, T value) where T : class
     {
         if (Equals(field, value))

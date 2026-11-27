@@ -15,4 +15,13 @@ public sealed class FrozenGlyphRun(FontItem[] glyphs, int count, FontAtlas atlas
     /// <summary>Glyphs have landed in the atlas since the run was built: what each holder of a run of a layout shared
     /// with others rebuilds on.</summary>
     public bool IsStale => Atlas != null && (Atlas.IsDisposed || Atlas.Version != AtlasVersion);
+
+    /// <summary>How many of the first <see cref="Glyphs"/> are the glyphs' effects - reflections, shadows, glows and
+    /// outlines - drawn under the glyphs that follow them.</summary>
+    public int EffectsCount { get; init; }
+
+    /// <summary>This run with its effects alone, the glyphs left out: what a print lays under glyphs it draws as vector.
+    /// Shares this run's items.</summary>
+    public FrozenGlyphRun EffectsOnly() =>
+        new(Glyphs, EffectsCount, Atlas, FontSize) { AtlasVersion = AtlasVersion, EffectsCount = EffectsCount };
 }

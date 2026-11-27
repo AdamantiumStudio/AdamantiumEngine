@@ -82,7 +82,60 @@ public class GlyphOutlineShadowTests
         Assert.That(shadows, Is.EqualTo(new[] { 3, 4 }));
     }
 
+    // A print draws the text as vector and lays its effects under it as a picture: the run says how many of its first
+    // items are effects, and gives them alone.
+    [Test]
+    public void TheEffects_AreCountedFirst_AndGivenAlone()
+    {
+        var plain = Run(null, null);
+        var effects = Run(null, layout =>
+        {
+            layout.GlyphShadow = new GlyphShadow(Colors.Black, 3, 4, 2);
+            layout.GlyphGlow = new GlyphGlow(Colors.Yellow, 3);
+        });
+
+        var alone = effects.EffectsOnly();
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(plain.EffectsCount, Is.Zero);
+            Assert.That(effects.EffectsCount, Is.EqualTo(2 * plain.Count), "a shadow and a glow of each glyph");
+            Assert.That(alone.Count, Is.EqualTo(effects.EffectsCount), "the glyphs left out");
+            Assert.That(alone.Glyphs, Is.SameAs(effects.Glyphs), "sharing the items");
+        });
+    }
+
+    [Test]
+    public void ALayoutSays_WhetherItsGlyphsWearEffects_ItsOwnOrAStretchs()
+    {
+        var plain = Layout(null, null);
+        var stretch = Layout(new AttributedText("ab cd")
+            .Apply(3, 2, new TextAttributes { Glow = new GlyphGlow(Colors.Yellow, 2) }), null);
+        var own = Layout(null, layout => layout.GlyphOutline = new GlyphOutline(Colors.Red, 1));
+        var none = Layout(null, layout =>
+        {
+            layout.GlyphOutline = new GlyphOutline(Colors.Red, 0);
+            layout.GlyphGlow = new GlyphGlow(Colors.Yellow, 0);
+        });
+
+        Assert.Multiple(() =>
+        {
+            Assert.That(plain.HasGlyphEffects, Is.False);
+            Assert.That(stretch.HasGlyphEffects, Is.True);
+            Assert.That(own.HasGlyphEffects, Is.True);
+            Assert.That(none.HasGlyphEffects, Is.False, "an outline and a glow of no width draw nothing");
+        });
+    }
+
     private static FrozenGlyphRun Run(AttributedText attributed, System.Action<TextLayout> setUp)
+    {
+        var layout = Layout(attributed, setUp);
+        var device = GpuFixture.CreateRenderDevice();
+        FontAtlasStore.SynchronousFill = true;
+        return layout.BuildGlyphRun(device, null);
+    }
+
+    private static TextLayout Layout(AttributedText attributed, System.Action<TextLayout> setUp)
     {
         var typeface = Typeface.LoadFont(Path.Combine(TestContext.CurrentContext.TestDirectory, "Fonts", "SourceSans3-Regular.ttf"));
         var layout = new TextLayout(typeface, typeface.Fonts[0]) { Fallback = null };
@@ -98,8 +151,6 @@ public class GlyphOutlineShadowTests
                 HorizontalTextAlignment.Left, VerticalTextAlignment.Top);
         }
 
-        var device = GpuFixture.CreateRenderDevice();
-        FontAtlasStore.SynchronousFill = true;
-        return layout.BuildGlyphRun(device, null);
+        return layout;
     }
 }
