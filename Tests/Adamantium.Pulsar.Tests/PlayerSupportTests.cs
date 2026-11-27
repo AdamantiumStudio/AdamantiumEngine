@@ -118,33 +118,78 @@ public class PlayerSupportTests
     {
         using var engine = new AudioEngine();
         var bus = engine.AddBus(BusId.Master);
+        var removed = engine.AddBus(BusId.Master);
+        engine.KeepPlayed(removed);
+        engine.RemoveBus(removed);
 
         Assert.That(engine.CopyPlayed(bus, new float[20]), Is.Zero);
+        Assert.That(engine.CopyPlayed(removed, new float[20]), Is.Zero);
     }
 
-    // The last frames mixed, the newest last, across the end of the ring too.
+    // A silent bus's voice is mixed to be shown, but ranks as silent: it takes no heard voice's place.
+    [Test]
+    public void AVoiceOfASilentKeptBus_TakesNoHeardOnesPlace()
+    {
+        using var engine = new AudioEngine(new AudioEngineSettings { AudibleVoices = 1 });
+        var bus = engine.AddBus(BusId.Master);
+        engine.KeepPlayed(bus);
+        engine.SetVolume(bus, 0);
+        var sound = engine.AddSound(new SoundData(AudioFormat.Default, Enumerable.Repeat(0.4f, 2 * 4800).ToArray()));
+        engine.Play(sound, new VoiceSettings { Bus = bus });
+        engine.Play(sound, new VoiceSettings { Volume = 0.5f });
+        var block = new float[2 * 480];
+        engine.Render(block, AudioFormat.Default);
+        engine.Render(block, AudioFormat.Default);
+
+        Assert.That(block[^1], Is.EqualTo(0.2f).Within(1e-6f));
+    }
+
+    // Of a muted master, the kept bus's sound is still there to be shown.
+    [Test]
+    public void AKeptBusUnderAMutedMaster_KeepsItsFrames()
+    {
+        using var engine = new AudioEngine();
+        var bus = engine.AddBus(BusId.Master);
+        engine.KeepPlayed(bus);
+        engine.SetMuted(BusId.Master, true);
+        engine.Play(engine.AddSound(new SoundData(AudioFormat.Default, Enumerable.Repeat(0.4f, 2 * 4800).ToArray())),
+            new VoiceSettings { Bus = bus });
+        var block = new float[2 * 480];
+        engine.Render(block, AudioFormat.Default);
+        engine.Render(block, AudioFormat.Default);
+
+        var kept = new float[2 * 100];
+        engine.CopyPlayed(bus, kept);
+        Assert.That(kept, Is.All.EqualTo(0.4f).Within(1e-6f));
+        Assert.That(block, Is.All.Zero);
+    }
+
+    // A bus's last frames, the newest last, across the end of the ring too.
     [Test]
     public void ThePlayedFrames_AreTheLastMixed()
     {
         using var engine = new AudioEngine();
+        var bus = engine.AddBus(BusId.Master);
+        engine.KeepPlayed(bus);
         var samples = new float[2 * 6000];
         for (var frame = 0; frame < 6000; frame++)
         {
             samples[2 * frame] = samples[2 * frame + 1] = frame / 6000f;
         }
 
-        engine.Play(engine.AddSound(new SoundData(AudioFormat.Default, samples)));
+        engine.Play(engine.AddSound(new SoundData(AudioFormat.Default, samples)), new VoiceSettings { Bus = bus });
         var block = new float[2 * 1000];
         for (var round = 0; round < 5; round++)
         {
             engine.Render(block, AudioFormat.Default);
         }
 
+        // Whole blocks are mixed: what is kept may be a little ahead of what was asked for.
         var played = new float[2 * 300];
-        Assert.That(engine.CopyPlayed(played), Is.EqualTo(300));
-        Assert.That(played[^2], Is.EqualTo(block[^2]));
-        Assert.That(played[0], Is.EqualTo(block[2 * 700]));
-        Assert.That(engine.CopyPlayed(new float[2 * 10000]), Is.EqualTo(AudioEngine.PlayedCapacity));
+        Assert.That(engine.CopyPlayed(bus, played), Is.EqualTo(300));
+        Assert.That(played, Is.Ordered);
+        Assert.That(played[^2], Is.GreaterThanOrEqualTo(block[^2]));
+        Assert.That(engine.CopyPlayed(bus, new float[2 * 10000]), Is.EqualTo(AudioEngine.PlayedCapacity));
     }
 
     [Test]

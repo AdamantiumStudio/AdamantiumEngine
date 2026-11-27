@@ -122,9 +122,12 @@ public sealed class AudioPlayback : IDisposable
 
             lock (_lock)
             {
-                ObjectDisposedException.ThrowIf(_disposed, this);
                 _volume = value;
-                _engine.SetVolume(_bus, value, Fade);
+                // Disposed, its bus is gone: a slider's last word after the window closed is kept, and no more.
+                if (!_disposed)
+                {
+                    _engine.SetVolume(_bus, value, Fade);
+                }
             }
         }
     }

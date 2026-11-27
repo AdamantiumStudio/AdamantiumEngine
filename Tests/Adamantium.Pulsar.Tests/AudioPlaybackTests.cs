@@ -292,6 +292,16 @@ public class AudioPlaybackTests
         Assert.That(Render(1).Max(sample => Math.Abs(sample)), Is.Zero);
     }
 
+    // A slider's last word after the window closed.
+    [Test]
+    public void AVolumeSetAfterDisposal_IsKeptQuietly()
+    {
+        _playback.Dispose();
+
+        Assert.DoesNotThrow(() => _playback.Volume = 0.5f);
+        Assert.That(_playback.Volume, Is.EqualTo(0.5f));
+    }
+
     // Another sound of the engine, 8 kHz, is not in it.
     [Test]
     public void TheSpectrum_IsOfThisPlaybacksSoundOnly()

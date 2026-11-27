@@ -30,7 +30,9 @@ internal struct Bus
     /// <summary>It or a parent is, or none at all.</summary>
     public bool IsSolo;
 
-    /// <summary>Where its frames are kept before its volume; null where they are not. What plays through a bus that
-    /// keeps them is mixed whatever its volume or mute.</summary>
+    /// <summary>Where its frames are kept before its volume; null where they are not.</summary>
     public PlayedFrames Played;
+
+    /// <summary>It or a parent keeps its frames: what plays through it is mixed however quiet it is heard.</summary>
+    public bool IsKept;
 }

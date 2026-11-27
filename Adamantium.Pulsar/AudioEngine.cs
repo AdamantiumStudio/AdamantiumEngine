@@ -20,8 +20,7 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
     private readonly Stack<int> _freeSounds = [];
     // 1 while the commands are applied or a block is rendered.
     private int _mixing;
-    // The last frames mixed; and of each bus whose frames are kept, those before its volume.
-    private readonly PlayedFrames _played = new();
+    // Of each bus whose frames are kept, the last before its volume.
     private readonly PlayedFrames[] _busPlayed;
     private bool _disposed;
 
@@ -339,7 +338,6 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
         {
             ApplyCommands();
             _mixer.Render(samples);
-            _played.Keep(samples, samples.Length / 2);
         }
         finally
         {
@@ -347,23 +345,22 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
         }
     }
 
-    /// <summary>The last frames mixed, as many as <paramref name="frames"/> holds (stereo, side by side), up to
-    /// <see cref="PlayedCapacity"/>; how many there were. For what shows the sound - a spectrum, a level meter: read on
-    /// any thread without a lock, a block mixed meanwhile may be in part of them.</summary>
-    internal int CopyPlayed(Span<float> frames) => _played.CopyTo(frames);
-
     /// <summary>Of a bus whose frames are kept (<see cref="KeepPlayed"/>), the last mixed into it, before its volume and
-    /// its mute: what plays through it, at any volume; as <see cref="CopyPlayed(Span{float})"/>. None of another.</summary>
+    /// its mute, as many as <paramref name="frames"/> holds (stereo, side by side), up to <see cref="PlayedCapacity"/>;
+    /// how many there were. For what shows the sound - a spectrum, a level meter. None of a bus that keeps none, or is
+    /// gone.</summary>
     internal int CopyPlayed(BusId bus, Span<float> frames)
     {
         lock (_lock)
         {
-            return SlotOf(bus) is var slot && _busPlayed[slot] is { } played ? played.CopyTo(frames) : 0;
+            TakeReturns();
+            return _buses.Holds(bus.Slot, bus.Generation) && _busPlayed[bus.Slot] is { } played ? played.CopyTo(frames) : 0;
         }
     }
 
     /// <summary>From now on, the frames mixed into <paramref name="bus"/> are kept before its volume, and what plays
-    /// through it is mixed at any volume of its own - silent, but there to be shown.</summary>
+    /// through it is mixed however quiet it is heard - silent, but there to be shown; ranked by how loud it is heard,
+    /// it gives its place up first.</summary>
     internal void KeepPlayed(BusId bus)
     {
         lock (_lock)
@@ -379,7 +376,7 @@ public sealed class AudioEngine : IAudioRenderer, IDisposable
         }
     }
 
-    /// <summary>The most frames <see cref="CopyPlayed(Span{float})"/> gives: 85 ms.</summary>
+    /// <summary>The most frames <see cref="CopyPlayed"/> gives: 85 ms.</summary>
     internal const int PlayedCapacity = PlayedFrames.Capacity;
 
     /// <summary>Stops reading streamed sounds. An output that still plays it plays out what there is.</summary>
