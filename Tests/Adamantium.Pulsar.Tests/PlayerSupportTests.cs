@@ -86,6 +86,42 @@ public class PlayerSupportTests
         Assert.That(decoder.Tags.IsEmpty, Is.True);
     }
 
+    // Of a bus, what came into it: before its volume, and mixed though muted; silent in the output.
+    [Test]
+    public void ABussFramesKept_AreBeforeItsVolumeAndMute()
+    {
+        using var engine = new AudioEngine();
+        var bus = engine.AddBus(BusId.Master);
+        engine.KeepPlayed(bus);
+        engine.SetVolume(bus, 0.5f);
+        var samples = Enumerable.Repeat(0.4f, 2 * 4800).ToArray();
+        engine.Play(engine.AddSound(new SoundData(AudioFormat.Default, samples)), new VoiceSettings { Bus = bus });
+        var block = new float[2 * 480];
+        engine.Render(block, AudioFormat.Default);
+        engine.Render(block, AudioFormat.Default);
+
+        var kept = new float[2 * 100];
+        Assert.That(engine.CopyPlayed(bus, kept), Is.EqualTo(100));
+        Assert.That(kept, Is.All.EqualTo(0.4f).Within(1e-6f));
+        Assert.That(block[^1], Is.EqualTo(0.2f).Within(1e-6f));
+
+        engine.SetMuted(bus, true);
+        engine.Render(block, AudioFormat.Default);
+        engine.Render(block, AudioFormat.Default);
+        engine.CopyPlayed(bus, kept);
+        Assert.That(kept, Is.All.EqualTo(0.4f).Within(1e-6f));
+        Assert.That(block, Is.All.Zero);
+    }
+
+    [Test]
+    public void ABusNotKept_HasNoFrames()
+    {
+        using var engine = new AudioEngine();
+        var bus = engine.AddBus(BusId.Master);
+
+        Assert.That(engine.CopyPlayed(bus, new float[20]), Is.Zero);
+    }
+
     // The last frames mixed, the newest last, across the end of the ring too.
     [Test]
     public void ThePlayedFrames_AreTheLastMixed()

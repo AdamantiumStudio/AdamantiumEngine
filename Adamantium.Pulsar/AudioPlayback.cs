@@ -20,6 +20,9 @@ public sealed class AudioPlayback : IDisposable
     private readonly SynchronizationContext _context;
     private readonly SpectrumAnalyzer _spectrum = new();
     private readonly Timer _endCheck;
+    // Its voices play through it at their full volume: the volume is the bus's, and the spectrum is of what comes into
+    // it, at any volume.
+    private readonly BusId _bus;
     private ISoundStorage _storage;
     private Sound _sound;
     private SoundId _soundId;
@@ -45,18 +48,20 @@ public sealed class AudioPlayback : IDisposable
         ArgumentNullException.ThrowIfNull(output);
     }
 
-    /// <summary>Through the application's <paramref name="engine"/>, played by an output of its own; its spectrum is then
-    /// of all the engine plays.</summary>
+    /// <summary>Through the application's <paramref name="engine"/>, played by an output of its own, on a bus of its own
+    /// under the master.</summary>
+    /// <exception cref="InvalidOperationException">The engine has as many buses as it was made for.</exception>
     public AudioPlayback(AudioEngine engine)
-        : this(engine, null)
+        : this(engine ?? throw new ArgumentNullException(nameof(engine)), null)
     {
-        ArgumentNullException.ThrowIfNull(engine);
     }
 
     private AudioPlayback(AudioEngine engine, IAudioOutput output)
     {
         _engine = engine;
         _output = output;
+        _bus = engine.AddBus(BusId.Master);
+        engine.KeepPlayed(_bus);
         _context = SynchronizationContext.Current;
         _endCheck = new Timer(_ => Refresh(), null, Timeout.Infinite, Timeout.Infinite);
     }
@@ -117,11 +122,9 @@ public sealed class AudioPlayback : IDisposable
 
             lock (_lock)
             {
+                ObjectDisposedException.ThrowIf(_disposed, this);
                 _volume = value;
-                if (_state != AudioPlaybackState.Stopped)
-                {
-                    _engine.SetVolume(_voice, value, Fade);
-                }
+                _engine.SetVolume(_bus, value, Fade);
             }
         }
     }
@@ -295,8 +298,9 @@ public sealed class AudioPlayback : IDisposable
         }
     }
 
-    /// <summary>Of what is heard now, each band 0 (silence) to 1 (full scale), from 40 Hz to 16 kHz spaced as pitch is
-    /// heard; all 0 while it does not play.</summary>
+    /// <summary>Of the sound playing now, at its own loudness whatever the <see cref="Volume"/>, as classic players show
+    /// it: each band 0 (silence) to 1 (full scale), from 40 Hz to 16 kHz spaced as pitch is heard; all 0 while it does
+    /// not play. Of this playback's sound only, in an engine that plays others too.</summary>
     public void ReadSpectrum(Span<float> bands)
     {
         lock (_lock)
@@ -307,7 +311,7 @@ public sealed class AudioPlayback : IDisposable
                 return;
             }
 
-            _spectrum.Analyze(_engine, bands);
+            _spectrum.Analyze(_engine, _bus, bands);
         }
     }
 
@@ -350,6 +354,11 @@ public sealed class AudioPlayback : IDisposable
             _output.Dispose();
             _engine.Dispose();
         }
+        else
+        {
+            // The application's engine lives on: its bus is given back.
+            _engine.RemoveBus(_bus);
+        }
     }
 
     private static void ReadWaveform(ISoundStorage storage, SoundWaveform waveform, CancellationToken cancellation)
@@ -374,7 +383,7 @@ public sealed class AudioPlayback : IDisposable
         // The time that is that frame again: of 44.1 kHz a frame is not whole ticks, and both ways cut down.
         var rate = _sound.Format.SampleRate;
         var from = TimeSpan.FromTicks((long)(((Int128)frame * TimeSpan.TicksPerSecond + rate - 1) / rate));
-        return _engine.Play(_soundId, new VoiceSettings { From = from, FadeIn = fadeIn, Volume = _volume });
+        return _engine.Play(_soundId, new VoiceSettings { From = from, FadeIn = fadeIn, Bus = _bus });
     }
 
     // Stops, and lets the sound go; whether it was playing or paused.

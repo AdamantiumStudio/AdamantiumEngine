@@ -120,6 +120,9 @@ internal sealed class Mixer
             case CommandKind.SetBusPaused:
                 _buses[command.Slot].Paused = command.Flag;
                 break;
+            case CommandKind.KeepBusPlayed:
+                _buses[command.Slot].Played = command.Played;
+                break;
         }
     }
 
@@ -224,7 +227,9 @@ internal sealed class Mixer
         for (var index = 0; index < _busCount; index++)
         {
             ref var bus = ref _buses[_busOrder[index]];
-            bus.Loudness = bus.Volume.Highest;
+            // One that keeps its frames is mixed into at any volume of its own, to be shown.
+            var keeps = bus.Played != null;
+            bus.Loudness = keeps ? 1 : bus.Volume.Highest;
             bus.IsPaused = bus.Paused;
             bus.IsSolo = bus.Solo || !anySolo;
             if (bus.Parent >= 0)
@@ -236,7 +241,7 @@ internal sealed class Mixer
                 bus.Removing |= parent.Removing;
             }
 
-            if (bus.Muted || bus.Removing)
+            if (bus.Removing || bus.Muted && !keeps)
             {
                 bus.Loudness = 0;
             }
@@ -445,6 +450,8 @@ internal sealed class Mixer
         for (var index = _busCount - 1; index >= 0; index--)
         {
             ref var bus = ref _buses[_busOrder[index]];
+            // What went into it before its gain: its children were added into it before it.
+            bus.Played?.Keep(bus.HasSamples ? bus.Samples : default, BlockFrames);
             var gain = bus.Muted || bus.Removing ? 0 : bus.Volume.Value;
             if (!bus.HadSamples)
             {

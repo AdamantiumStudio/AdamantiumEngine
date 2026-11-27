@@ -16,4 +16,5 @@ internal enum CommandKind
     SetBusMuted,
     SetBusSolo,
     SetBusPaused,
+    KeepBusPlayed,
 }

@@ -29,4 +29,8 @@ internal struct Bus
 
     /// <summary>It or a parent is, or none at all.</summary>
     public bool IsSolo;
+
+    /// <summary>Where its frames are kept before its volume; null where they are not. What plays through a bus that
+    /// keeps them is mixed whatever its volume or mute.</summary>
+    public PlayedFrames Played;
 }

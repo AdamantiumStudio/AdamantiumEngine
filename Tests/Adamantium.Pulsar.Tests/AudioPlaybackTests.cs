@@ -276,6 +276,40 @@ public class AudioPlaybackTests
         Assert.That(bands[^1], Is.LessThan(0.2f));
     }
 
+    // As classic players show it: the sound's own, whatever the volume, while nothing is heard of it.
+    [Test]
+    public void TheSpectrum_IsOfTheSound_AtAnyVolume()
+    {
+        _playback.Open(Storage(Sine(1000, 2)));
+        _playback.Volume = 0;
+        _playback.Play();
+        RenderUntil(() => _playback.Position > TimeSpan.FromMilliseconds(200));
+        var bands = new float[32];
+
+        _playback.ReadSpectrum(bands);
+
+        Assert.That(bands.Max(), Is.EqualTo(1 - 6.02f / 72).Within(0.02f));
+        Assert.That(Render(1).Max(sample => Math.Abs(sample)), Is.Zero);
+    }
+
+    // Another sound of the engine, 8 kHz, is not in it.
+    [Test]
+    public void TheSpectrum_IsOfThisPlaybacksSoundOnly()
+    {
+        var other = _engine.AddSound(SoundFile.Read(Sine(8000, 2)));
+        _engine.Play(other);
+        _playback.Open(Storage(Sine(1000, 2)));
+        _playback.Play();
+        RenderUntil(() => _playback.Position > TimeSpan.FromMilliseconds(200));
+        var bands = new float[32];
+
+        _playback.ReadSpectrum(bands);
+
+        var high = (int)(bands.Length * Math.Log(8000.0 / 40) / Math.Log(400));
+        Assert.That(bands[high], Is.LessThan(0.2f));
+        Assert.That(bands.Max(), Is.GreaterThan(0.8f));
+    }
+
     [Test]
     public void TheWaveform_IsReadInTheBackground()
     {
